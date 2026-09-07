@@ -6,7 +6,7 @@
 // permit this kind of derivative use, and it doesn't expose queryable building
 // footprints anyway. OSM gives the geometry and the tags for free.
 
-import { LOTS } from './constants.js';
+import { LOTS, MARKET_PROPERTY } from './constants.js';
 import { haversineKm } from './geo.js';
 import { clamp, clamp01, lerp, hashUnit } from './rng.js';
 
@@ -111,9 +111,32 @@ export function lotPrice(kind, areaM2, district) {
   return priceBreakdown(kind, areaM2, district).price;
 }
 
-/** What you'd get back walking away from a property. */
-export function lotResale(lot) {
-  return Math.round(lot.price * LOTS.resaleRate);
+/**
+ * What a property is worth today. `lot.price` is the standing assessment; the
+ * block's market index is what actually moves.
+ */
+export function marketValue(lot, district) {
+  const idx = district && district.marketIndex ? district.marketIndex : 1;
+  return Math.round(lot.price * idx / 10) * 10;
+}
+
+/** What a sale nets you, after the agent takes their cut. */
+export function lotResale(lot, district) {
+  return Math.round(marketValue(lot, district) * (1 - MARKET_PROPERTY.agentFee));
+}
+
+/** What a tenant would pay per day for this building. */
+export function rentPerDay(lot, district) {
+  const wealth = district ? district.wealth : 0.5;
+  const pull = 1 + (wealth - 0.5) * 2 * MARKET_PROPERTY.rentWealthSwing;
+  return Math.round(marketValue(lot, district) * MARKET_PROPERTY.rentYieldPerDay * pull);
+}
+
+/** Profit or loss against what you actually paid. */
+export function lotPnL(lot, district) {
+  if (!lot.owned || lot.paidPrice == null) return null;
+  const now = lotResale(lot, district);
+  return { paid: lot.paidPrice, now, delta: now - lot.paidPrice };
 }
 
 function addressOf(tags) {
@@ -159,6 +182,8 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
       name: address || `${KIND_LABEL[kind]} · ${Math.round(areaM2)} m²`,
       price: lotPrice(kind, areaM2, district),
       owned: false,
+      paidPrice: null,
+      rented: false,
       buildingId: null,
     });
   }

@@ -9,6 +9,7 @@ import {
   PRODUCTS,
   PRODUCT_IDS,
   RIVALS,
+  MARKET_PROPERTY,
   LEGIT_WEALTH_SWING,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
@@ -16,6 +17,7 @@ import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { effectsFor, upkeepFor } from './upgrades.js';
+import { rentPerDay } from './lots.js';
 import {
   buildingById,
   districtById,
@@ -75,6 +77,8 @@ export function stepSim(state, dtHours, hooks = {}) {
   stepCouriers(state, dtHours, hooks);
   stepMarkets(state, dtHours);
   stepLegit(state, dtHours);
+  stepPropertyMarket(state, dtHours);
+  stepRents(state, dtHours);
   stepTurf(state, dtHours);
   stepHeat(state, dtHours);
   stepEnforcement(state, dtHours);
@@ -402,6 +406,51 @@ function stepLegit(state, dt) {
     state.cash.clean += amount * (1 - def.cut);
     state.stats.laundered += amount;
     b.launderedToday += amount;
+  }
+}
+
+// --- Property market --------------------------------------------------------
+
+/**
+ * Block values drift toward what the block deserves. Legitimate business and
+ * occupied buildings lift a street; police pressure and rival control sink it.
+ * Clean a place up and the property you already hold is worth more.
+ */
+function stepPropertyMarket(state, dt) {
+  const days = dt / 24;
+  for (const d of state.districts) {
+    const legit = state.buildings.filter(
+      (b) => b.districtId === d.id && b.kind === 'front' && b.active
+    ).length;
+    const rented = (state.lots || []).filter((l) => l.districtId === d.id && l.rented).length;
+
+    const target = 1
+      + legit * MARKET_PROPERTY.legitLift
+      + rented * MARKET_PROPERTY.rentedMarketLift
+      + clamp01(d.rep) * MARKET_PROPERTY.repLift
+      - (d.heat / 100) * MARKET_PROPERTY.heatDrag
+      - clamp01(d.rivalControl || 0) * MARKET_PROPERTY.rivalDrag;
+
+    const previous = d.marketIndex || 1;
+    const drift = (target - previous) * MARKET_PROPERTY.driftPerDay * days;
+    const noise = (rng() - 0.5) * 2 * MARKET_PROPERTY.noisePerDay * days;
+    d.marketIndex = clamp(previous + drift + noise, MARKET_PROPERTY.min, MARKET_PROPERTY.max);
+    // Remembered so the UI can show which way a block is heading.
+    d.marketTrend = d.marketIndex - previous;
+  }
+}
+
+/** Rent from anything you've let out. Clean money, no heat, no risk. */
+function stepRents(state, dt) {
+  const days = dt / 24;
+  for (const lot of state.lots || []) {
+    if (!lot.owned || !lot.rented) continue;
+    const d = districtById(state, lot.districtId);
+    const daily = rentPerDay(lot, d);
+    const amount = daily * days;
+    state.cash.clean += amount;
+    state.stats.rentCollected = (state.stats.rentCollected || 0) + amount;
+    state.stats.legalRevenue = (state.stats.legalRevenue || 0) + amount;
   }
 }
 

@@ -127,8 +127,8 @@ button, input, select { font-family: inherit; color: inherit; }
 }
 .bmark__chip svg { width: 17px; height: 17px; fill: var(--text-dim); }
 .bmark:hover .bmark__chip { transform: scale(1.12); }
-.bmark--grow_house .bmark__chip { border-color: #37613a; }
-.bmark--grow_house svg { fill: var(--weed); }
+.bmark--grow_house .bmark__chip, .bmark--closet_grow .bmark__chip { border-color: #37613a; }
+.bmark--grow_house svg, .bmark--closet_grow svg { fill: var(--weed); }
 .bmark--press_room .bmark__chip { border-color: #6b4f30; }
 .bmark--press_room svg { fill: #c98f4a; }
 .bmark--pill_press .bmark__chip { border-color: #2f5a68; }
@@ -139,12 +139,14 @@ button, input, select { font-family: inherit; color: inherit; }
 .bmark--fungi_room svg { fill: var(--shroom); }
 .bmark--lab .bmark__chip { border-color: #2f5a68; }
 .bmark--lab svg { fill: #63b9d4; }
-.bmark--stash .bmark__chip { border-color: #4a4a52; }
-.bmark--stash svg { fill: #9aa7b5; }
+.bmark--stash .bmark__chip, .bmark--lockup .bmark__chip { border-color: #4a4a52; }
+.bmark--stash svg, .bmark--lockup svg { fill: #9aa7b5; }
+.bmark--phoneshop .bmark__chip, .bmark--checkcashing .bmark__chip,
 .bmark--bodega .bmark__chip, .bmark--laundromat .bmark__chip,
 .bmark--autoshop .bmark__chip, .bmark--cafe .bmark__chip,
 .bmark--barbershop .bmark__chip, .bmark--carwash .bmark__chip,
 .bmark--gym .bmark__chip, .bmark--nightclub .bmark__chip { border-color: #6b5a2c; }
+.bmark--phoneshop svg, .bmark--checkcashing svg,
 .bmark--bodega svg, .bmark--laundromat svg, .bmark--autoshop svg,
 .bmark--cafe svg, .bmark--barbershop svg, .bmark--carwash svg,
 .bmark--gym svg, .bmark--nightclub svg { fill: var(--money); }

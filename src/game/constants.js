@@ -133,6 +133,25 @@ export const BUILDINGS = {
     heatPerDay: 0.5,
     capacity: 80,
   },
+  closet_grow: {
+    id: 'closet_grow',
+    kind: 'production',
+    name: 'Closet Grow',
+    blurb: 'A few lights in a back room. Tiny output, almost no footprint, and nobody notices.',
+    icon: 'leaf',
+    product: 'weed',
+    cost: 700,
+    minAreaM2: 13,
+    referenceAreaM2: 40,
+    upkeepPerDay: 45,
+    slots: 2,
+    cycleHours: 7,
+    rawPerSlot: 1.1,
+    supplyCostPerSlot: 60,
+    baseQuality: 0.42,
+    heatPerDay: 0.15,
+    capacity: 30,
+  },
   press_room: {
     id: 'press_room',
     kind: 'production',
@@ -227,6 +246,19 @@ export const BUILDINGS = {
   // street cash on the side. They're never raided and they cool a block down.
   // Legal income is the patient way to afford property; the chain is the fast
   // way, and it costs you heat.
+  lockup: {
+    id: 'lockup',
+    kind: 'storage',
+    name: 'Lockup Garage',
+    blurb: 'A roller door and four walls. The cheapest place to park product near a buyer.',
+    icon: 'box',
+    cost: 600,
+    minAreaM2: 11,
+    referenceAreaM2: 45,
+    upkeepPerDay: 28,
+    heatPerDay: 0.08,
+    capacity: 150,
+  },
   bodega: {
     id: 'bodega',
     kind: 'front',
@@ -291,6 +323,38 @@ export const BUILDINGS = {
     launderPerDay: 3400,
     cut: 0.26,
     heatPerDay: -0.35,
+    capacity: 0,
+  },
+  phoneshop: {
+    id: 'phoneshop',
+    kind: 'front',
+    name: 'Phone Shop',
+    blurb: 'Unlocks, screens and top-ups out of a unit the size of a hallway.',
+    icon: 'phone',
+    cost: 1900,
+    minAreaM2: 20,
+    referenceAreaM2: 55,
+    upkeepPerDay: 130,
+    revenuePerDay: 400,
+    launderPerDay: 2200,
+    cut: 0.23,
+    heatPerDay: -0.15,
+    capacity: 0,
+  },
+  checkcashing: {
+    id: 'checkcashing',
+    kind: 'front',
+    name: 'Check Cashing',
+    blurb: 'Barely earns a thing, but moving cash is the entire business. Washes far above its size.',
+    icon: 'note',
+    cost: 4200,
+    minAreaM2: 26,
+    referenceAreaM2: 60,
+    upkeepPerDay: 210,
+    revenuePerDay: 330,
+    launderPerDay: 8600,
+    cut: 0.14,
+    heatPerDay: 0.1,
     capacity: 0,
   },
   barbershop: {
@@ -472,7 +536,7 @@ export const LOTS = {
   minPrice: 1200,
   maxPrice: 400000,
   resaleRate: 0.62,
-  minAreaM2: 25,
+  minAreaM2: 11,
   maxAreaM2: 40000,
   industrialAreaM2: 1400,
 
@@ -485,6 +549,30 @@ export const LOTS = {
   tileFetchCap: 4000,
   minZoomForFetch: 16,
   maxTilesPerSweep: 2,
+};
+
+// --- Property market --------------------------------------------------------
+// Every block has a market index that drifts over time. It responds to what
+// you do there: legitimate business and a quiet street lift values, heat and
+// rival control sink them. Buy low, clean a block up, sell high.
+export const MARKET_PROPERTY = {
+  driftPerDay: 0.10,      // how fast the index chases its target
+  noisePerDay: 0.018,     // random walk on top
+  min: 0.55,
+  max: 1.95,
+  legitLift: 0.075,       // per legitimate business you run on the block
+  heatDrag: 0.45,         // at maximum heat
+  rivalDrag: 0.22,        // at full rival control
+  repLift: 0.06,          // being known there is mildly good for values
+  agentFee: 0.055,        // what a sale costs you
+  fitOutScrap: 0.4,       // recovered from equipment when you sell up
+
+  // Letting a building out: quiet, legal, and far less than running something
+  // in it yourself — but it costs you nothing and risks nothing.
+  rentYieldPerDay: 0.0062,   // share of market value, per day
+  rentWealthSwing: 0.5,      // richer blocks pay proportionally more
+  tenancyBuyout: 0.35,       // share of a month's rent to end a tenancy early
+  rentedMarketLift: 0.03,    // an occupied building helps the block a little
 };
 
 // --- Rival crews ------------------------------------------------------------

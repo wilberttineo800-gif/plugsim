@@ -21,6 +21,8 @@ const ICONS = {
   press: '<path d="M4 3h16v4H4Z"/><path d="M10 7h4v6h-4Z" opacity="0.6"/><path d="M3 13h18v3H3Z"/><path d="M5 18h14v3H5Z" opacity="0.6"/>',
   pill: '<path d="M15.5 3a5.5 5.5 0 0 1 3.9 9.4l-7 7A5.5 5.5 0 0 1 4.6 11.6l7-7A5.5 5.5 0 0 1 15.5 3Z" opacity="0.55"/><path d="m8.1 8.1 7.8 7.8-2.5 2.5-7.8-7.8Z"/>',
   gun: '<path d="M3 7h12l1.5 3H20a1 1 0 0 1 1 1v1h-6l-1 3h-3l1-3H8v4H5v-4a2 2 0 0 1-2-2Z"/>',
+  phone: '<path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Z" opacity="0.55"/><path d="M9.5 4.6h5v1.2h-5Z"/><circle cx="12" cy="19" r="1.2"/>',
+  note: '<path d="M2 6h20v12H2Z" opacity="0.5"/><circle cx="12" cy="12" r="3.2"/><path d="M4.5 8.5h2v7h-2Zm13 0h2v7h-2Z"/>',
 };
 
 const VEHICLE_GLYPH = { bike: '◈', sedan: '▰', van: '▮' };
@@ -181,6 +183,10 @@ export class LotLayer {
     if (lot.buildingId) {
       return { color: '#ff8a3d', weight: selected ? 2.4 : 1.6, opacity: 0.95,
                fillColor: '#ff8a3d', fillOpacity: 0.34 };
+    }
+    if (lot.rented) {
+      return { color: '#8f8ce0', weight: selected ? 2.4 : 1.4, opacity: 0.9,
+               fillColor: '#8f8ce0', fillOpacity: 0.24 };
     }
     if (lot.owned) {
       return { color: '#e7c56a', weight: selected ? 2.4 : 1.4, opacity: 0.9,

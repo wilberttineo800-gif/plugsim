@@ -1,8 +1,10 @@
 // Player actions. Each one validates, charges, mutates state and returns
 // { ok, error } so the UI can report a reason without knowing the rules.
 
-import { BUILDINGS, BUILDING_IDS, COURIERS, FIXER, RIVALS } from './constants.js';
-import { lotById, areaScale, areaCapacityScale, lotResale } from './lots.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, FIXER, RIVALS, MARKET_PROPERTY } from './constants.js';
+import {
+  lotById, areaScale, areaCapacityScale, lotResale, marketValue, rentPerDay, lotPnL,
+} from './lots.js';
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
@@ -25,20 +27,88 @@ export function buyLot(state, lotId) {
   const lot = lotById(state, lotId);
   if (!lot) return { ok: false, error: 'No such property.' };
   if (lot.owned) return { ok: false, error: 'You already own that one.' };
-  if (!canAfford(state, lot.price)) {
-    return { ok: false, error: `Need $${lot.price.toLocaleString()} clean for that property.` };
+
+  const district = districtById(state, lot.districtId);
+  const price = marketValue(lot, district);
+  if (!canAfford(state, price)) {
+    return { ok: false, error: `Need $${price.toLocaleString()} clean for that property.` };
   }
 
-  spendClean(state, lot.price);
+  spendClean(state, price);
   lot.owned = true;
-  const district = districtById(state, lot.districtId);
+  // What you actually paid, so profit or loss on the way out is real.
+  lot.paidPrice = price;
   if (district) district.discovered = true;
   logEvent(
     state,
-    `Bought ${lot.name} in ${district ? district.name : 'the city'} for $${lot.price.toLocaleString()}.`,
+    `Bought ${lot.name} in ${district ? district.name : 'the city'} for $${price.toLocaleString()}.`,
     'good'
   );
-  return { ok: true, lot };
+  return { ok: true, lot, price };
+}
+
+/**
+ * Sell a property you own but aren't running anything in. You get today's
+ * market value less the agent's cut, which may be more or less than you paid.
+ */
+export function sellLot(state, lotId) {
+  const lot = lotById(state, lotId);
+  if (!lot) return { ok: false, error: 'No such property.' };
+  if (!lot.owned) return { ok: false, error: 'You don’t own that.' };
+  if (lot.buildingId) {
+    return { ok: false, error: 'Shut the operation down first — sell it from the building.' };
+  }
+
+  const district = districtById(state, lot.districtId);
+  const proceeds = lotResale(lot, district);
+  const pnl = lotPnL(lot, district);
+
+  state.cash.clean += proceeds;
+  state.stats.propertyPnL = (state.stats.propertyPnL || 0) + (pnl ? pnl.delta : 0);
+  lot.owned = false;
+  lot.rented = false;
+  lot.paidPrice = null;
+
+  const verdict = pnl
+    ? (pnl.delta >= 0
+      ? `up $${Math.abs(pnl.delta).toLocaleString()} on what you paid`
+      : `down $${Math.abs(pnl.delta).toLocaleString()} on what you paid`)
+    : '';
+  logEvent(state, `Sold ${lot.name} for $${proceeds.toLocaleString()} — ${verdict}.`,
+    pnl && pnl.delta >= 0 ? 'good' : 'bad');
+  return { ok: true, proceeds, pnl };
+}
+
+/** Put a tenant in. Quiet, legal, and it pays every day without you touching it. */
+export function rentOut(state, lotId) {
+  const lot = lotById(state, lotId);
+  if (!lot) return { ok: false, error: 'No such property.' };
+  if (!lot.owned) return { ok: false, error: 'Buy it first.' };
+  if (lot.buildingId) return { ok: false, error: 'Something is already running there.' };
+  if (lot.rented) return { ok: false, error: 'Already let out.' };
+
+  lot.rented = true;
+  lot.tenantSince = state.minutes;
+  const d = districtById(state, lot.districtId);
+  logEvent(state, `${lot.name} let out at $${rentPerDay(lot, d).toLocaleString()}/day.`, 'good');
+  return { ok: true, rent: rentPerDay(lot, d) };
+}
+
+/** End a tenancy so the building is yours to use again. Costs a settlement. */
+export function endTenancy(state, lotId) {
+  const lot = lotById(state, lotId);
+  if (!lot) return { ok: false, error: 'No such property.' };
+  if (!lot.rented) return { ok: false, error: 'Nobody is renting it.' };
+
+  const d = districtById(state, lot.districtId);
+  const fee = Math.round(rentPerDay(lot, d) * 30 * MARKET_PROPERTY.tenancyBuyout);
+  if (!canAfford(state, fee)) {
+    return { ok: false, error: `Settling with the tenant costs $${fee.toLocaleString()} clean.` };
+  }
+  spendClean(state, fee);
+  lot.rented = false;
+  logEvent(state, `Tenant out of ${lot.name}. Settlement cost $${fee.toLocaleString()}.`, 'info');
+  return { ok: true, fee };
 }
 
 /** What can legally go into a building you own, and why not. */
@@ -138,11 +208,19 @@ export function sellBuilding(state, buildingId) {
   if (idx < 0) return { ok: false, error: 'Property is gone.' };
   const b = state.buildings[idx];
   const lot = b.lotId ? lotById(state, b.lotId) : null;
-  // You get the property back plus scrap value on the fit-out.
-  const refund = Math.round(
-    (lot ? lotResale(lot) : 0) + BUILDINGS[b.type].cost * 0.4 * (1 + (b.level - 1) * 0.4)
-  );
-  if (lot) { lot.owned = false; lot.buildingId = null; }
+  const district = districtById(state, b.districtId);
+  // Today's market value for the property, plus scrap on the equipment.
+  const propertyValue = lot ? lotResale(lot, district) : 0;
+  const scrap = Math.round(BUILDINGS[b.type].cost * MARKET_PROPERTY.fitOutScrap);
+  const pnl = lot ? lotPnL(lot, district) : null;
+  const refund = propertyValue + scrap;
+  if (lot) {
+    state.stats.propertyPnL = (state.stats.propertyPnL || 0) + (pnl ? pnl.delta : 0);
+    lot.owned = false;
+    lot.rented = false;
+    lot.paidPrice = null;
+    lot.buildingId = null;
+  }
 
   state.buildings.splice(idx, 1);
   state.routes = state.routes.filter((r) => r.fromId !== b.id && r.toId !== b.id);

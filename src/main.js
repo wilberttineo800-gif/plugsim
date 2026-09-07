@@ -374,6 +374,32 @@ game.buyLot = (lotId) => {
   game.ui.render();
 };
 
+game.sellLot = (lotId) => {
+  const r = A.sellLot(game.state, lotId);
+  if (!r.ok) return toast(r.error, 'bad');
+  const d = r.pnl ? (r.pnl.delta >= 0 ? `+${Math.round(r.pnl.delta).toLocaleString()}` : `${Math.round(r.pnl.delta).toLocaleString()}`) : '';
+  toast(`Sold for ${Math.round(r.proceeds).toLocaleString()} (${d} on what you paid).`,
+    r.pnl && r.pnl.delta >= 0 ? 'good' : 'warn', 4600);
+  game.select(null);
+  game.lotLayer.refresh();
+  game.ui.render();
+};
+
+game.rentOut = (lotId) => {
+  const r = A.rentOut(game.state, lotId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Let out at ${r.rent.toLocaleString()}/day, clean.`, 'good');
+  game.lotLayer.refresh();
+  game.ui.render();
+};
+
+game.endTenancy = (lotId) => {
+  const r = A.endTenancy(game.state, lotId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Tenant settled for ${r.fee.toLocaleString()}. The building is yours again.`, 'info');
+  game.ui.render();
+};
+
 game.developLot = (lotId, typeId) => {
   const r = A.developLot(game.state, lotId, typeId);
   if (!r.ok) return toast(r.error, 'bad');

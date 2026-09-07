@@ -8,7 +8,9 @@ import {
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions } from '../game/actions.js';
-import { KIND_LABEL, lotById, lotResale, priceBreakdown, sqft } from '../game/lots.js';
+import {
+  KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
+} from '../game/lots.js';
 import { crewById } from '../game/crews.js';
 import { unlockStatus, regionNote } from '../game/progression.js';
 import { availableUpgrades, describeEffects, effectsFor, upkeepFor } from '../game/upgrades.js';
@@ -171,6 +173,9 @@ export class GameUI {
 
     switch (action) {
       case 'buy-lot': g.buyLot(id); break;
+      case 'sell-lot': g.sellLot(id); break;
+      case 'rent-out': g.rentOut(id); break;
+      case 'end-tenancy': g.endTenancy(id); break;
       case 'develop': g.developLot(id, type); break;
       case 'select-lot': g.select('lot', id); break;
       case 'hire': g.hireCourier(type); break;
@@ -665,6 +670,9 @@ export class GameUI {
         <div class="rows">
           <div class="row"><span>Street revenue</span><span class="money">${money(st.grossRevenue)}</span></div>
           <div class="row"><span>Legal takings</span><span class="good">${money(st.legalRevenue || 0)}</span></div>
+          <div class="row"><span>Rent collected</span><span class="good">${money(st.rentCollected || 0)}</span></div>
+          <div class="row"><span>Property gains</span>
+            <span class="${(st.propertyPnL || 0) >= 0 ? 'good' : 'bad'}">${(st.propertyPnL || 0) >= 0 ? '+' : '−'}${money(Math.abs(st.propertyPnL || 0))}</span></div>
           <div class="row"><span>Washed clean</span><span class="money">${money(st.laundered)}</span></div>
           <div class="row"><span>Spent on the empire</span><span>${money(st.spent)}</span></div>
           <div class="row"><span>Projected net / day</span><span class="${this.dailyNet() >= 0 ? 'good' : 'bad'}">${moneyShort(this.dailyNet())}</span></div>
@@ -878,23 +886,41 @@ export class GameUI {
     const s = this.game.state;
     const d = districtById(s, lot.districtId);
     const running = lot.buildingId ? buildingById(s, lot.buildingId) : null;
-    const affordable = s.cash.clean >= lot.price;
+    const value = marketValue(lot, d);
+    const affordable = s.cash.clean >= value;
+    const idx = d ? (d.marketIndex || 1) : 1;
+    const rising = d ? (d.marketTrend || 0) >= 0 : true;
 
-    const pb = priceBreakdown(lot.kind, lot.areaM2, d);
     const facts =
       `<div class="rows">
         <div class="row"><span>Type</span><span>${esc(KIND_LABEL[lot.kind] || lot.kind)}</span></div>
         <div class="row"><span>Footprint</span><span>${Math.round(sqft(lot.areaM2)).toLocaleString()} ft²</span></div>
         <div class="row"><span></span><span style="color:var(--text-faint)">${Math.round(lot.areaM2).toLocaleString()} m²</span></div>
         <div class="row"><span>Block</span><span>${esc(d ? d.name : '—')}</span></div>
-        ${d ? `<div class="row"><span>Rent level</span><span>${pct(d.rentIndex)}</span></div>` : ''}
+        <div class="row"><span>Local market</span>
+          <span class="${idx >= 1 ? 'good' : 'bad'}">${(idx * 100).toFixed(0)}% ${rising ? '▲' : '▼'}</span></div>
       </div>`;
+
+    // What you're up or down, if you own it.
+    const pnl = lotPnL(lot, d);
+    const position = pnl
+      ? `<div class="rows" style="margin-bottom:9px">
+          <div class="row"><span>You paid</span><span>${money(pnl.paid)}</span></div>
+          <div class="row"><span>Sells for now</span><span class="money">${money(pnl.now)}</span></div>
+          <div class="row"><span>Position</span>
+            <span class="${pnl.delta >= 0 ? 'good' : 'bad'}">${pnl.delta >= 0 ? '+' : '−'}${money(Math.abs(pnl.delta))}</span></div>
+        </div>`
+      : '';
 
     if (running) {
       return (
         `<h2 class="ttl">${esc(lot.name)}</h2>
         <p class="subttl">Yours · ${esc(BUILDINGS[running.type].name)}</p>
         ${facts}
+        <div class="sect" style="margin-top:14px">
+          <div class="sect__title"><span>As property</span></div>
+          ${position}
+        </div>
         <div class="btnrow">
           <button class="primarybtn" data-action="select-building" data-id="${running.id}">Open the operation</button>
         </div>`
@@ -902,14 +928,33 @@ export class GameUI {
     }
 
     if (lot.owned) {
+      const rent = rentPerDay(lot, d);
       return (
         `<h2 class="ttl">${esc(lot.name)}</h2>
-        <p class="subttl">Yours · standing empty</p>
+        <p class="subttl">Yours · ${lot.rented ? 'let to a tenant' : 'standing empty'}</p>
         ${facts}
         <div class="sect" style="margin-top:14px">
+          <div class="sect__title"><span>As property</span>
+            <span class="money">${money(lotResale(lot, d))}</span></div>
+          ${position}
+          <div class="btnrow">
+            <button class="ghostbtn" data-action="sell-lot" data-id="${lot.id}">
+              Sell for ${moneyShort(lotResale(lot, d))}
+            </button>
+            ${lot.rented
+              ? `<button class="ghostbtn" data-action="end-tenancy" data-id="${lot.id}">End tenancy</button>`
+              : `<button class="ghostbtn" data-action="rent-out" data-id="${lot.id}">Let for ${money(rent)}/day</button>`}
+          </div>
+          <p class="card__blurb" style="margin-top:8px">
+            ${lot.rented
+              ? `Paying <b>${money(rent)}/day</b> in clean money. Nothing to run, nothing to raid — but you can't use the building until the tenancy ends.`
+              : 'Let it out for quiet, legal income, or put an operation in it. Values move with the block, so a place you clean up is worth more later.'}
+          </p>
+        </div>
+        ${lot.rented ? '' : `<div class="sect">
           <div class="sect__title"><span>Put it to work</span></div>
           ${this.lotDevelopBlock(lot)}
-        </div>`
+        </div>`}`
       );
     }
 
@@ -919,22 +964,19 @@ export class GameUI {
       ${facts}
       <div class="sect" style="margin-top:14px">
         <div class="sect__title"><span>Asking price</span>
-          <span class="money" style="font-size:15px">${money(lot.price)}</span></div>
+          <span class="money" style="font-size:15px">${money(value)}</span></div>
         <div class="rows" style="margin-bottom:9px">
-          <div class="row"><span>Rate</span><span>${money(pb.ratePerSqft)}/ft²</span></div>
-          <div class="row"><span>Premises type</span>
-            <span class="${pb.kindMult > 1 ? 'warn' : 'good'}">×${pb.kindMult.toFixed(2)}</span></div>
-          <div class="row"><span>Block</span>
-            <span class="${pb.blockMult > 1 ? 'warn' : 'good'}">×${pb.blockMult.toFixed(2)}</span></div>
-          ${pb.discounted ? '<div class="row"><span>Bulk floor space</span><span class="good">discounted</span></div>' : ''}
+          <div class="row"><span>Rate</span><span>${money(value / Math.max(1, sqft(lot.areaM2)))}/ft²</span></div>
+          <div class="row"><span>Would let for</span><span>${money(rentPerDay(lot, d))}/day</span></div>
         </div>
         <button class="primarybtn" style="width:100%" data-action="buy-lot" data-id="${lot.id}"
           ${affordable ? '' : 'disabled'}>
-          ${affordable ? 'Buy this building' : `Need ${moneyShort(lot.price)} clean`}
+          ${affordable ? 'Buy this building' : `Need ${moneyShort(value)} clean`}
         </button>
         <p class="card__blurb" style="margin-top:8px">
-          Priced on floor area, what sort of premises it is, and how expensive the
-          block is. Buying gets you the building; you choose what runs inside after.
+          Priced on floor area, premises type and what the block is doing. Run
+          something in it, let it to a tenant, or hold it and sell when the
+          street is worth more.
         </p>
       </div>`
     );

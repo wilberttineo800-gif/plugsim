@@ -93,6 +93,8 @@ export function generateDistricts(origin, placeNames = [], countryCode = null) {
       rentIndex,
       demandPerHour: demand,
       // Live state
+      marketIndex: 1,
+      marketTrend: 0,
       heat: 0,
       rep: 0,
       supply: Object.fromEntries(PRODUCT_IDS.map((p) => [p, 0])),

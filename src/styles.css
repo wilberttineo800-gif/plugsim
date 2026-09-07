@@ -122,18 +122,39 @@ button, input, select { font-family: inherit; color: inherit; }
 .bmark:hover .bmark__chip { transform: scale(1.12); }
 .bmark--grow_house .bmark__chip { border-color: #37613a; }
 .bmark--grow_house svg { fill: var(--weed); }
+.bmark--press_room .bmark__chip { border-color: #6b4f30; }
+.bmark--press_room svg { fill: #c98f4a; }
+.bmark--pill_press .bmark__chip { border-color: #2f5a68; }
+.bmark--pill_press svg { fill: #63b9d4; }
+.bmark--machine_shop .bmark__chip { border-color: #55606d; }
+.bmark--machine_shop svg { fill: #9aa7b5; }
 .bmark--fungi_room .bmark__chip { border-color: #4d3b63; }
 .bmark--fungi_room svg { fill: var(--shroom); }
 .bmark--lab .bmark__chip { border-color: #2f5a68; }
 .bmark--lab svg { fill: #63b9d4; }
 .bmark--stash .bmark__chip { border-color: #4a4a52; }
 .bmark--stash svg { fill: #9aa7b5; }
-.bmark--bodega .bmark__chip,
-.bmark--laundromat .bmark__chip,
-.bmark--autoshop .bmark__chip,
-.bmark--cafe .bmark__chip { border-color: #6b5a2c; }
-.bmark--bodega svg, .bmark--laundromat svg,
-.bmark--autoshop svg, .bmark--cafe svg { fill: var(--money); }
+.bmark--bodega .bmark__chip, .bmark--laundromat .bmark__chip,
+.bmark--autoshop .bmark__chip, .bmark--cafe .bmark__chip,
+.bmark--barbershop .bmark__chip, .bmark--carwash .bmark__chip,
+.bmark--gym .bmark__chip, .bmark--nightclub .bmark__chip { border-color: #6b5a2c; }
+.bmark--bodega svg, .bmark--laundromat svg, .bmark--autoshop svg,
+.bmark--cafe svg, .bmark--barbershop svg, .bmark--carwash svg,
+.bmark--gym svg, .bmark--nightclub svg { fill: var(--money); }
+
+/* Streaming survey indicator */
+.loading {
+  position: absolute; top: 68px; left: 50%; transform: translateX(-50%);
+  z-index: 720;
+  padding: 6px 14px;
+  background: rgba(15, 22, 32, .95);
+  border: 1px solid var(--sodium-dim);
+  border-radius: 999px;
+  font-family: var(--font-mono); font-size: 11.5px; color: var(--sodium);
+  box-shadow: var(--shadow);
+  pointer-events: none;
+}
+.loading[hidden] { display: none; }
 
 .bmark.is-selected .bmark__chip {
   border-color: var(--sodium);

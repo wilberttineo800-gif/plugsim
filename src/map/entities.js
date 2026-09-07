@@ -14,6 +14,13 @@ const ICONS = {
   washer: '<path d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" opacity="0.5"/><circle cx="12" cy="14" r="5"/><circle cx="8" cy="6" r="1.2"/><circle cx="11.5" cy="6" r="1.2"/>',
   wrench: '<path d="M20.3 5.3a5.5 5.5 0 0 1-7.1 7.1L6 19.6 4.4 18l7.2-7.2a5.5 5.5 0 0 1 7.1-7.1l-3 3 2 2 3-3.4Z"/>',
   cup: '<path d="M4 6h12v7a5 5 0 0 1-10 0Z"/><path d="M16 8h2.4a2.6 2.6 0 0 1 0 5.2H16Z" opacity="0.55"/><path d="M4 20h13v2H4Z" opacity="0.55"/>',
+  scissors: '<circle cx="6" cy="18" r="2.6"/><circle cx="18" cy="18" r="2.6"/><path d="M8 16.4 18.6 3.4l1.6 1.3L9.6 17.8Z"/><path d="M16 16.4 5.4 3.4 3.8 4.7l10.6 13.1Z"/>',
+  droplet: '<path d="M12 2.5c4 5 7 8.3 7 11.6a7 7 0 0 1-14 0c0-3.3 3-6.6 7-11.6Z"/>',
+  dumbbell: '<path d="M3 9h2.5v6H3Zm3.5-1.5H9v9H6.5Zm8 0H17v9h-2.5ZM18.5 9H21v6h-2.5Z"/><path d="M9 10.6h6v2.8H9Z" opacity="0.6"/>',
+  disc: '<circle cx="12" cy="12" r="9" opacity="0.5"/><circle cx="12" cy="12" r="3"/>',
+  press: '<path d="M4 3h16v4H4Z"/><path d="M10 7h4v6h-4Z" opacity="0.6"/><path d="M3 13h18v3H3Z"/><path d="M5 18h14v3H5Z" opacity="0.6"/>',
+  pill: '<path d="M15.5 3a5.5 5.5 0 0 1 3.9 9.4l-7 7A5.5 5.5 0 0 1 4.6 11.6l7-7A5.5 5.5 0 0 1 15.5 3Z" opacity="0.55"/><path d="m8.1 8.1 7.8 7.8-2.5 2.5-7.8-7.8Z"/>',
+  gun: '<path d="M3 7h12l1.5 3H20a1 1 0 0 1 1 1v1h-6l-1 3h-3l1-3H8v4H5v-4a2 2 0 0 1-2-2Z"/>',
 };
 
 const VEHICLE_GLYPH = { bike: '◈', sedan: '▰', van: '▮' };
@@ -104,26 +111,46 @@ export class LotLayer {
     this.group = L.layerGroup().addTo(map);
     this.shapes = new Map();
     this.selectedId = null;
-    this.minZoom = 15;
-    // With the hex grid gone, the buildings carry the data overlay themselves.
+    this.minZoom = 16;
     this.overlay = 'demand_weed';
     this.districts = new Map();
-    map.on('zoomend', () => this.applyZoom());
+    this.lots = [];
+    map.on('moveend zoomend', () => this.render());
   }
 
   setDistricts(districts) {
     this.districts = new Map(districts.map((d) => [d.id, d]));
   }
 
-  setOverlay(id, lots) {
+  setOverlay(id) {
     this.overlay = id;
-    if (lots) this.refresh(lots);
+    this.restyle();
   }
 
-  build(lots) {
-    this.group.clearLayers();
-    this.shapes.clear();
-    for (const lot of lots) {
+  /** The full catalogue; only the part on screen is ever drawn. */
+  setAll(lots) {
+    this.lots = lots;
+    this.render();
+  }
+
+  /**
+   * Draw the buildings currently in view. A city holds tens of thousands of
+   * them, so the layer is rebuilt from the viewport rather than holding every
+   * polygon alive at once.
+   */
+  render() {
+    if (this.map.getZoom() < this.minZoom) {
+      if (this.shapes.size) { this.group.clearLayers(); this.shapes.clear(); }
+      return;
+    }
+    const bounds = this.map.getBounds().pad(0.25);
+    const wanted = new Set();
+
+    for (const lot of this.lots) {
+      if (!bounds.contains([lot.center.lat, lot.center.lng])) continue;
+      wanted.add(lot.id);
+      if (this.shapes.has(lot.id)) continue;
+
       const poly = L.polygon(
         lot.polygon.map((p) => [p.lat, p.lng]),
         this.styleFor(lot)
@@ -134,15 +161,19 @@ export class LotLayer {
         this.onSelect?.(lot, e.latlng);
       });
       if (!LotLayer.isTouch()) {
-        poly.bindTooltip(
-          `${lot.name} · ${Math.round(lot.areaM2)} m²`,
-          { direction: 'top', opacity: 0.9, className: 'lot-tip' }
-        );
+        poly.bindTooltip(`${lot.name} · ${Math.round(lot.areaM2)} m²`,
+          { direction: 'top', opacity: 0.9, className: 'lot-tip' });
       }
       poly.addTo(this.group);
       this.shapes.set(lot.id, poly);
     }
-    this.applyZoom();
+
+    for (const [id, poly] of this.shapes) {
+      if (!wanted.has(id)) {
+        this.group.removeLayer(poly);
+        this.shapes.delete(id);
+      }
+    }
   }
 
   styleFor(lot) {
@@ -164,28 +195,21 @@ export class LotLayer {
              fillOpacity: selected ? 0.55 : 0.42 };
   }
 
-  refresh(lots) {
-    for (const lot of lots) {
-      const poly = this.shapes.get(lot.id);
-      if (poly) poly.setStyle(this.styleFor(lot));
+  /** Repaint what's drawn without rebuilding it. */
+  restyle() {
+    for (const [id, poly] of this.shapes) {
+      const lot = this.lots.find((l) => l.id === id);
+      if (lot) poly.setStyle(this.styleFor(lot));
     }
   }
 
-  setSelected(id, lots) {
-    this.selectedId = id;
-    if (lots) this.refresh(lots);
+  refresh() {
+    this.restyle();
   }
 
-  /**
-   * Hundreds of footprints are noise when zoomed out to the whole territory.
-   * The layer is detached wholesale rather than hidden per-shape, because the
-   * canvas renderer gives individual polygons no DOM node to hide.
-   */
-  applyZoom() {
-    const show = this.map.getZoom() >= this.minZoom;
-    if (show && !this.map.hasLayer(this.group)) this.group.addTo(this.map);
-    else if (!show && this.map.hasLayer(this.group)) this.map.removeLayer(this.group);
-    this.visible = show;
+  setSelected(id) {
+    this.selectedId = id;
+    this.restyle();
   }
 }
 

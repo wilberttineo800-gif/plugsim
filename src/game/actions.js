@@ -2,9 +2,10 @@
 // { ok, error } so the UI can report a reason without knowing the rules.
 
 import { BUILDINGS, BUILDING_IDS, COURIERS, FIXER, RIVALS } from './constants.js';
-import { lotById, areaScale, lotResale } from './lots.js';
+import { lotById, areaScale, areaCapacityScale, lotResale } from './lots.js';
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
+import { unlockStatus } from './progression.js';
 import { upgradeCost } from './sim.js';
 import {
   buildingById,
@@ -41,16 +42,23 @@ export function buyLot(state, lotId) {
 }
 
 /** What can legally go into a building you own, and why not. */
-export function operationOptions(lot) {
+export function operationOptions(lot, state = null) {
   return BUILDING_IDS.map((id) => {
     const def = BUILDINGS[id];
     const fits = lot.areaM2 >= def.minAreaM2;
+    const gate = state ? unlockStatus(state, id) : null;
+    const locked = !!(gate && gate.locked);
     return {
       id,
       def,
       fits,
-      reason: fits ? null : `Needs ${def.minAreaM2} m² — this is ${Math.round(lot.areaM2)} m²`,
+      locked,
+      gate,
+      reason: locked
+        ? gate.reason
+        : fits ? null : `Needs ${def.minAreaM2} m² — this is ${Math.round(lot.areaM2)} m²`,
       scale: areaScale(lot, def.referenceAreaM2),
+      capScale: areaCapacityScale(lot, def.referenceAreaM2),
     };
   });
 }
@@ -63,6 +71,8 @@ export function developLot(state, lotId, typeId) {
   if (!def) return { ok: false, error: 'Unknown operation.' };
   if (!lot.owned) return { ok: false, error: 'Buy the property first.' };
   if (lot.buildingId) return { ok: false, error: 'Something is already running there.' };
+  const gate = unlockStatus(state, typeId);
+  if (gate && gate.locked) return { ok: false, error: gate.reason };
   if (lot.areaM2 < def.minAreaM2) {
     return {
       ok: false,
@@ -78,6 +88,7 @@ export function developLot(state, lotId, typeId) {
   b.lotId = lot.id;
   b.areaM2 = lot.areaM2;
   b.scale = areaScale(lot, def.referenceAreaM2);
+  b.capScale = areaCapacityScale(lot, def.referenceAreaM2);
   b.name = `${def.name} · ${lot.name}`;
   b.builtAtMinute = state.minutes;
   state.buildings.push(b);

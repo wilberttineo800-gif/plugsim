@@ -115,6 +115,9 @@ export class DistrictLayer {
     this.onSelect = onSelect;
     this.group = L.layerGroup().addTo(map);
     this.labels = new Map();
+    // The grid isn't drawn any more, so the selected block gets a temporary
+    // outline — otherwise a name on a map tells you nothing about its extent.
+    this.highlight = null;
 
     for (const d of districts) {
       const label = L.marker([d.center.lat, d.center.lng], {
@@ -151,6 +154,38 @@ export class DistrictLayer {
   setSelected(id) {
     this.selectedId = id;
     this.refresh();
+    this.drawHighlight(id);
+  }
+
+  /** Outline the selected block so you can see the ground it covers. */
+  drawHighlight(id) {
+    if (this.highlight) {
+      this.map.removeLayer(this.highlight);
+      this.highlight = null;
+    }
+    if (!id) return;
+    const d = this.districts.find((x) => x.id === id);
+    if (!d) return;
+    this.highlight = L.polygon(d.corners.map((c) => [c.lat, c.lng]), {
+      color: '#ff8a3d',
+      weight: 2,
+      opacity: 0.9,
+      dashArray: '7,6',
+      fill: true,
+      fillColor: '#ff8a3d',
+      fillOpacity: 0.06,
+      interactive: false,
+    }).addTo(this.map);
+  }
+
+  /** Frame a block without losing the buildings inside it. */
+  frame(id) {
+    const d = this.districts.find((x) => x.id === id);
+    if (!d) return;
+    this.map.fitBounds(
+      L.latLngBounds(d.corners.map((c) => [c.lat, c.lng])),
+      { padding: [60, 60], maxZoom: 16 }
+    );
   }
 
   refresh() {

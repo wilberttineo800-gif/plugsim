@@ -5,10 +5,10 @@
 import { classify, lotPrice } from '../src/game/lots.js';
 import { offsetKm } from '../src/game/geo.js';
 
-const SIZES = [70, 95, 140, 260, 480, 900, 2200];
+const SIZES = [70, 95, 140, 260, 340, 480, 700, 900, 2200];
 
 /** A believable set of buildings for every district. */
-export function syntheticLots(districts, perDistrict = 7) {
+export function syntheticLots(districts, perDistrict = 9) {
   const lots = [];
   let n = 0;
   for (const d of districts) {

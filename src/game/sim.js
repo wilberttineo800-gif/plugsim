@@ -14,6 +14,7 @@ import {
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
+import { checkUnlocks } from './progression.js';
 import {
   buildingById,
   districtById,
@@ -42,9 +43,18 @@ function buildingDef(b) {
   return BUILDINGS[b.type];
 }
 
-/** Footprint scaling: a bigger real building genuinely holds a bigger operation. */
+/** How much a building's floorplate lifts its throughput. */
 export function sizeScale(b) {
   return b && b.scale ? b.scale : 1;
+}
+
+/**
+ * How much it lifts its storage. Kept separate from throughput because floor
+ * space translates almost directly into how much product fits, while output
+ * is limited by equipment and hands.
+ */
+export function sizeCapacity(b) {
+  return b && b.capScale ? b.capScale : sizeScale(b);
 }
 
 /** Level scaling: each upgrade adds throughput, capacity and product quality. */
@@ -95,7 +105,7 @@ function stepProduction(state, dt) {
 
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
 
-    const cap = def.capacity * levelCapacity(b.level) * sizeScale(b);
+    const cap = def.capacity * levelCapacity(b.level) * sizeCapacity(b);
     if (b.raw[def.product] >= cap) {
       b.stalledReason = 'Storage full — move the harvest out';
       continue;
@@ -139,7 +149,7 @@ function stepLabs(state, dt) {
     b.stalledReason = null;
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
 
-    const packCap = def.capacity * levelCapacity(b.level) * sizeScale(b);
+    const packCap = def.capacity * levelCapacity(b.level) * sizeCapacity(b);
     if (totalPacks(b.packs) >= packCap) {
       b.stalledReason = 'Packaged stock full — ship it out';
       continue;
@@ -281,7 +291,7 @@ function unloadCargo(state, c, route, hooks = {}) {
     const def = BUILDINGS[target.type];
     const pool = route.cargo === 'raw' ? target.raw : target.packs;
     const qualityPool = route.cargo === 'raw' ? target.rawQuality : target.packQuality;
-    const cap = def.capacity * levelCapacity(target.level) * sizeScale(target);
+    const cap = def.capacity * levelCapacity(target.level) * sizeCapacity(target);
     for (const pid of PRODUCT_IDS) {
       const amount = c.cargo[pid];
       if (amount <= 0) continue;
@@ -577,6 +587,7 @@ function stepEnforcement(state, dt, hooks = {}) {
 
 function settleDay(state) {
   state.fixerUsedToday = 0;
+  checkUnlocks(state);
 
   let upkeep = 0;
   for (const b of state.buildings) {

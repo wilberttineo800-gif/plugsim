@@ -125,6 +125,17 @@ export async function geocode(query) {
   }
 }
 
+/** Which country a point is in, as a lowercase ISO code. Shapes what sells. */
+export async function fetchCountryCode(lat, lng) {
+  const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=5&lat=${lat}&lon=${lng}`;
+  try {
+    const r = await fetchJson(url, 9000, { headers: { Accept: 'application/json' } });
+    return (r.address && r.address.country_code) ? r.address.country_code.toLowerCase() : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Reverse geocode a point to a rough place label. */
 export async function reverseGeocode(lat, lng) {
   const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=12&lat=${lat}&lon=${lng}`;
@@ -174,32 +185,44 @@ export async function fetchPlaceNames(south, west, north, east) {
  * Every building footprint in the play area, with its tags. This is what makes
  * the properties real — actual traced outlines and actual street addresses.
  */
-export async function fetchBuildings(south, west, north, east, cap = 2600) {
+export async function fetchBuildings(south, west, north, east, cap = 2600, onRetry) {
   const bbox = `${south},${west},${north},${east}`;
   const query =
     `[out:json][timeout:60];(way["building"](${bbox}););out geom ${cap};`;
-  const endpoints = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
+
+  // Overpass grants two query slots per IP. When they're busy it refuses
+  // outright, so a transient refusal has to back off and try again rather than
+  // fail the whole survey.
+  const attempts = [
+    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 0 },
+    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 800 },
+    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 4000 },
+    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 9000 },
   ];
-  for (const endpoint of endpoints) {
+
+  let lastError = null;
+  for (let i = 0; i < attempts.length; i++) {
+    const { endpoint, waitMs } = attempts[i];
+    if (waitMs) {
+      onRetry?.(i, waitMs);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
     try {
-      const data = await fetchJson(
-        endpoint,
-        70000,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: 'data=' + encodeURIComponent(query),
-        }
-      );
+      const data = await fetchJson(endpoint, 45000, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
       const ways = (data.elements || []).filter((e) => e.geometry && e.geometry.length >= 3);
-      if (ways.length) return ways;
+      // An empty result is legitimate for water or parkland — only a thrown
+      // error means we should try somewhere else.
+      return ways;
     } catch (err) {
+      lastError = err;
       console.warn('[geo] building fetch failed at', endpoint, err.message);
     }
   }
-  return [];
+  throw lastError || new Error('building survey unavailable');
 }
 
 /** Rejects empty values and bare numbers like "36" or "1200". */

@@ -5,6 +5,7 @@
 
 import { DISTRICT_RADIUS_KM, DISTRICT_RINGS, PRODUCTS, PRODUCT_IDS } from './constants.js';
 import { fbm, hashUnit, clamp01, lerp } from './rng.js';
+import { regionMultiplier } from './progression.js';
 import {
   hexRing,
   hexCenterKm,
@@ -40,7 +41,7 @@ function proceduralName(lat, lng, i) {
  * places; each is claimed by its nearest district so real neighbourhood names
  * land where they actually belong.
  */
-export function generateDistricts(origin, placeNames = []) {
+export function generateDistricts(origin, placeNames = [], countryCode = null) {
   const cells = hexRing(DISTRICT_RINGS);
   const districts = cells.map((cell, i) => {
     const { x, y } = hexCenterKm(cell.q, cell.r, DISTRICT_RADIUS_KM);
@@ -72,7 +73,8 @@ export function generateDistricts(origin, placeNames = []) {
         ? density * 0.65 + field * 0.35
         : wealth * 0.5 + field * 0.5;
       const [lo, hi] = p.demandBase;
-      demand[pid] = lerp(lo, hi, clamp01(skew * 0.85 + 0.1)) * lerp(0.55, 1.35, density);
+      demand[pid] = lerp(lo, hi, clamp01(skew * 0.85 + 0.1)) * lerp(0.55, 1.35, density)
+        * regionMultiplier(countryCode, pid);
     }
 
     return {

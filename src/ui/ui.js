@@ -8,8 +8,9 @@ import {
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { levelCapacity, levelYield, upgradeCost, sizeScale } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions } from '../game/actions.js';
-import { KIND_LABEL, lotById, lotResale } from '../game/lots.js';
+import { KIND_LABEL, lotById, lotResale, priceBreakdown, sqft } from '../game/lots.js';
 import { crewById } from '../game/crews.js';
+import { unlockStatus, regionNote } from '../game/progression.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import { buildingById, courierById, districtById, clockOf } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
@@ -40,6 +41,7 @@ export class GameUI {
       speedGroup: document.getElementById('speedGroup'),
       overlaySelect: document.getElementById('overlaySelect'),
       mobileNav: document.getElementById('mobileNav'),
+      loading: document.getElementById('loading'),
     };
     this.phone = window.matchMedia('(max-width: 780px)');
 
@@ -391,8 +393,11 @@ export class GameUI {
 
     const card = (o) => {
       const short = s.cash.clean < o.def.cost;
-      const blocked = !o.fits || short;
-      const note = !o.fits ? o.reason : short ? `Need ${moneyShort(o.def.cost)} clean` : null;
+      const blocked = o.locked || !o.fits || short;
+      const note = o.locked ? o.reason
+        : !o.fits ? o.reason
+        : short ? `Need ${moneyShort(o.def.cost)} clean` : null;
+      const region = o.def.product ? regionNote(s.countryCode, o.def.product) : null;
       return `
         <button class="card ${blocked ? 'is-locked' : ''}"
           data-action="develop" data-id="${lot.id}" data-type="${o.id}" ${blocked ? 'disabled' : ''}>
@@ -402,14 +407,16 @@ export class GameUI {
           </div>
           <div class="card__blurb">${esc(o.def.blurb)}</div>
           <div class="card__meta">
-            ${o.fits ? `<span style="color:var(--good)">×${o.scale.toFixed(2)} at ${Math.round(lot.areaM2)} m²</span>` : ''}
-            ${note ? `<span style="color:var(--warn)">${esc(note)}</span>` : ''}
+            ${o.locked ? '' : o.fits ? `<span style="color:var(--good)">×${o.scale.toFixed(2)} output · ×${o.capScale.toFixed(1)} storage</span>` : ''}
+            ${note ? `<span style="color:${o.locked ? 'var(--text-faint)' : 'var(--warn)'}">${esc(note)}</span>` : ''}
+            ${region && !o.locked ? `<span style="color:var(--money)">${esc(region)}</span>` : ''}
           </div>
+          ${o.locked && o.gate ? `<div class="meter" style="margin-top:6px"><i style="width:${Math.round(o.gate.progress * 100)}%"></i></div>` : ''}
         </button>`;
     };
 
     // The two money paths are the central choice, so they're shown as such.
-    const opts = operationOptions(lot);
+    const opts = operationOptions(lot, s);
     const illegal = opts.filter((o) => o.def.kind !== 'front');
     const legal = opts.filter((o) => o.def.kind === 'front');
 
@@ -470,6 +477,7 @@ export class GameUI {
             <span class="card__name">${esc(def.name)}</span>
             <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(def.cost)}</span>
           </div>
+          ${def.blurb ? `<div class="card__blurb">${esc(def.blurb)}</div>` : ''}
           <div class="card__meta">
             <span>${def.capacity} cap</span><span>${def.speedKph} km/h</span>
             <span>${pct(def.stealth)} slick</span><span>${money(def.wagePerDay)}/day</span>
@@ -860,10 +868,12 @@ export class GameUI {
     const running = lot.buildingId ? buildingById(s, lot.buildingId) : null;
     const affordable = s.cash.clean >= lot.price;
 
+    const pb = priceBreakdown(lot.kind, lot.areaM2, d);
     const facts =
       `<div class="rows">
         <div class="row"><span>Type</span><span>${esc(KIND_LABEL[lot.kind] || lot.kind)}</span></div>
-        <div class="row"><span>Footprint</span><span>${Math.round(lot.areaM2).toLocaleString()} m²</span></div>
+        <div class="row"><span>Footprint</span><span>${Math.round(sqft(lot.areaM2)).toLocaleString()} ft²</span></div>
+        <div class="row"><span></span><span style="color:var(--text-faint)">${Math.round(lot.areaM2).toLocaleString()} m²</span></div>
         <div class="row"><span>Block</span><span>${esc(d ? d.name : '—')}</span></div>
         ${d ? `<div class="row"><span>Rent level</span><span>${pct(d.rentIndex)}</span></div>` : ''}
       </div>`;
@@ -898,13 +908,21 @@ export class GameUI {
       <div class="sect" style="margin-top:14px">
         <div class="sect__title"><span>Asking price</span>
           <span class="money" style="font-size:15px">${money(lot.price)}</span></div>
+        <div class="rows" style="margin-bottom:9px">
+          <div class="row"><span>Rate</span><span>${money(pb.ratePerSqft)}/ft²</span></div>
+          <div class="row"><span>Premises type</span>
+            <span class="${pb.kindMult > 1 ? 'warn' : 'good'}">×${pb.kindMult.toFixed(2)}</span></div>
+          <div class="row"><span>Block</span>
+            <span class="${pb.blockMult > 1 ? 'warn' : 'good'}">×${pb.blockMult.toFixed(2)}</span></div>
+          ${pb.discounted ? '<div class="row"><span>Bulk floor space</span><span class="good">discounted</span></div>' : ''}
+        </div>
         <button class="primarybtn" style="width:100%" data-action="buy-lot" data-id="${lot.id}"
           ${affordable ? '' : 'disabled'}>
           ${affordable ? 'Buy this building' : `Need ${moneyShort(lot.price)} clean`}
         </button>
         <p class="card__blurb" style="margin-top:8px">
-          Buying gets you the premises. You choose what runs inside after that —
-          bigger floorplates carry bigger operations.
+          Priced on floor area, what sort of premises it is, and how expensive the
+          block is. Buying gets you the building; you choose what runs inside after.
         </p>
       </div>`
     );
@@ -1067,6 +1085,13 @@ export class GameUI {
   // --- Placement banner -----------------------------------------------------
 
   setPlacing() { /* property is bought, not placed — nothing to show */ }
+
+  /** Buildings stream in as you explore; this says when that's happening. */
+  setLoading(text) {
+    if (!this.dom.loading) return;
+    this.dom.loading.hidden = !text;
+    if (text) this.dom.loading.textContent = text;
+  }
 }
 
 export { SPEEDS };

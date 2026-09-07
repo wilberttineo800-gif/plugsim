@@ -44,6 +44,50 @@ export const PRODUCTS = {
     // Narrower customer base, but each sale is worth far more.
     demandBase: [0.25, 2.0],
   },
+  hash: {
+    id: 'hash',
+    name: 'Hash',
+    short: 'HASH',
+    color: '#c98f4a',
+    rawName: 'Pressed Slab',
+    packName: 'Cut Bars',
+    packsPerRaw: 5,
+    basePrice: 88,
+    heatPerPackSold: 0.14,
+    demandBase: [0.4, 2.6],
+    // Long-established markets pay more and buy more of it.
+    regionBoost: { ma: 1.8, es: 1.5, nl: 1.45, gb: 1.3, fr: 1.3, de: 1.2, be: 1.2 },
+  },
+  pills: {
+    id: 'pills',
+    name: 'Pills',
+    short: 'PILL',
+    color: '#63b9d4',
+    rawName: 'Raw Batch',
+    packName: 'Baggies',
+    packsPerRaw: 9,
+    basePrice: 62,
+    heatPerPackSold: 0.2,
+    demandBase: [0.3, 2.2],
+    // Nightlife cities move far more of these.
+    regionBoost: { nl: 1.9, be: 1.6, de: 1.5, gb: 1.4, es: 1.3, pt: 1.2 },
+  },
+  iron: {
+    id: 'iron',
+    name: 'Firearms',
+    short: 'IRON',
+    color: '#9aa7b5',
+    rawName: 'Machined Parts',
+    packName: 'Finished Units',
+    packsPerRaw: 2,
+    basePrice: 640,
+    // By far the hottest thing you can move.
+    heatPerPackSold: 0.85,
+    demandBase: [0.05, 0.5],
+    // Demand tracks how armed a society already is.
+    regionBoost: { us: 2.4, br: 1.7, za: 1.6, mx: 1.6, ph: 1.4 },
+    regionPenalty: 0.35, // everywhere else: a thin, dangerous trade
+  },
 };
 
 export const PRODUCT_IDS = Object.keys(PRODUCTS);
@@ -76,6 +120,7 @@ export const BUILDINGS = {
     blurb: 'Slower cycles, smaller flushes, but the product is worth three times as much.',
     icon: 'spore',
     product: 'shrooms',
+    unlock: { properties: 2 },
     cost: 3300,
     minAreaM2: 55,
     referenceAreaM2: 130,
@@ -87,6 +132,66 @@ export const BUILDINGS = {
     baseQuality: 0.5,
     heatPerDay: 0.5,
     capacity: 80,
+  },
+  press_room: {
+    id: 'press_room',
+    kind: 'production',
+    name: 'Hash Press',
+    blurb: 'Presses trim and resin into slabs. Steady, dense, and worth twice raw flower.',
+    icon: 'press',
+    product: 'hash',
+    unlock: { properties: 3, cash: 30000 },
+    cost: 5400,
+    minAreaM2: 70,
+    referenceAreaM2: 160,
+    upkeepPerDay: 240,
+    slots: 3,
+    cycleHours: 7,
+    rawPerSlot: 2.0,
+    supplyCostPerSlot: 190,
+    baseQuality: 0.55,
+    heatPerDay: 0.55,
+    capacity: 100,
+  },
+  pill_press: {
+    id: 'pill_press',
+    kind: 'production',
+    name: 'Pill Press',
+    blurb: 'High volume, low unit value, and a smell that carries. Needs a quiet block.',
+    icon: 'pill',
+    product: 'pills',
+    unlock: { properties: 6, cash: 120000 },
+    cost: 14500,
+    minAreaM2: 120,
+    referenceAreaM2: 260,
+    upkeepPerDay: 520,
+    slots: 4,
+    cycleHours: 5,
+    rawPerSlot: 2.4,
+    supplyCostPerSlot: 260,
+    baseQuality: 0.5,
+    heatPerDay: 1.1,
+    capacity: 150,
+  },
+  machine_shop: {
+    id: 'machine_shop',
+    kind: 'production',
+    name: 'Machine Shop',
+    blurb: 'Turns out untraceable iron. The most valuable thing you can make, and the fastest way to bring the wrong attention.',
+    icon: 'gun',
+    product: 'iron',
+    unlock: { properties: 9, cash: 260000 },
+    cost: 38000,
+    minAreaM2: 260,
+    referenceAreaM2: 520,
+    upkeepPerDay: 1250,
+    slots: 3,
+    cycleHours: 12,
+    rawPerSlot: 1.1,
+    supplyCostPerSlot: 1400,
+    baseQuality: 0.6,
+    heatPerDay: 2.6,
+    capacity: 60,
   },
   lab: {
     id: 'lab',
@@ -188,40 +293,152 @@ export const BUILDINGS = {
     heatPerDay: -0.35,
     capacity: 0,
   },
+  barbershop: {
+    id: 'barbershop',
+    kind: 'front',
+    name: 'Barbershop',
+    blurb: 'Cash in, cash out, all day. Small money but the books never look odd.',
+    icon: 'scissors',
+    cost: 3900,
+    minAreaM2: 40,
+    referenceAreaM2: 110,
+    upkeepPerDay: 230,
+    revenuePerDay: 700,
+    launderPerDay: 4200,
+    cut: 0.21,
+    heatPerDay: -0.3,
+    capacity: 0,
+  },
+  carwash: {
+    id: 'carwash',
+    kind: 'front',
+    name: 'Car Wash',
+    blurb: 'Needs a forecourt. Enormous laundry capacity for what it costs to run.',
+    icon: 'droplet',
+    cost: 9400,
+    minAreaM2: 260,
+    referenceAreaM2: 520,
+    upkeepPerDay: 420,
+    revenuePerDay: 1180,
+    launderPerDay: 12500,
+    cut: 0.15,
+    heatPerDay: -0.5,
+    capacity: 0,
+  },
+  gym: {
+    id: 'gym',
+    kind: 'front',
+    name: 'Boxing Gym',
+    blurb: 'Memberships paid in cash, and the neighbourhood likes having you there.',
+    icon: 'dumbbell',
+    cost: 11500,
+    minAreaM2: 300,
+    referenceAreaM2: 600,
+    upkeepPerDay: 520,
+    revenuePerDay: 1620,
+    launderPerDay: 7800,
+    cut: 0.2,
+    // The best cooling effect in the game: goodwill buys quiet.
+    heatPerDay: -1.1,
+    capacity: 0,
+  },
+  nightclub: {
+    id: 'nightclub',
+    kind: 'front',
+    name: 'Nightclub',
+    blurb: 'The biggest legal earner there is, on the right street. Draws attention.',
+    icon: 'disc',
+    cost: 26000,
+    minAreaM2: 340,
+    referenceAreaM2: 700,
+    upkeepPerDay: 1150,
+    revenuePerDay: 4200,
+    wealthSensitivity: 1.8,
+    launderPerDay: 18000,
+    cut: 0.16,
+    // A club full of people is the one legitimate business police watch.
+    heatPerDay: 0.35,
+    capacity: 0,
+  },
 };
 
 export const BUILDING_IDS = Object.keys(BUILDINGS);
 
 // --- Couriers ---------------------------------------------------------------
 export const COURIERS = {
+  runner: {
+    id: 'runner',
+    name: 'Foot Runner',
+    blurb: 'A kid on a corner. Carries almost nothing, but nobody looks twice.',
+    cost: 350,
+    wagePerDay: 55,
+    capacity: 14,
+    speedKph: 6,
+    stealth: 0.94,
+  },
   bike: {
     id: 'bike',
     name: 'Bike Courier',
+    blurb: 'Quick through traffic, slips down alleys, barely worth pulling over.',
     cost: 900,
     wagePerDay: 90,
     capacity: 40,
     speedKph: 18,
-    stealth: 0.85, // higher = less likely to be stopped
+    stealth: 0.85,
+  },
+  scooter: {
+    id: 'scooter',
+    name: 'Delivery Scooter',
+    blurb: 'A food-delivery box on the back. Fast, plausible, and hard to tail.',
+    cost: 1900,
+    wagePerDay: 120,
+    capacity: 65,
+    speedKph: 34,
+    stealth: 0.78,
   },
   sedan: {
     id: 'sedan',
     name: 'Beater Sedan',
+    blurb: 'Anonymous and cheap. The honest workhorse of a growing operation.',
     cost: 3400,
     wagePerDay: 165,
     capacity: 140,
     speedKph: 38,
     stealth: 0.62,
   },
+  cab: {
+    id: 'cab',
+    name: 'Livery Cab',
+    blurb: 'Belongs everywhere at any hour. Costs a fortune in wages.',
+    cost: 6800,
+    wagePerDay: 300,
+    capacity: 160,
+    speedKph: 44,
+    stealth: 0.8,
+  },
   van: {
     id: 'van',
     name: 'Panel Van',
+    blurb: 'Serious capacity, and exactly what police expect to search.',
     cost: 9200,
     wagePerDay: 260,
     capacity: 480,
     speedKph: 32,
     stealth: 0.45,
   },
+  boxtruck: {
+    id: 'boxtruck',
+    name: 'Box Truck',
+    blurb: 'Moves a warehouse in one run. Slow, thirsty, impossible to hide.',
+    cost: 21000,
+    wagePerDay: 430,
+    capacity: 1400,
+    speedKph: 28,
+    stealth: 0.3,
+  },
 };
+
+
 
 export const COURIER_IDS = Object.keys(COURIERS);
 
@@ -247,15 +464,27 @@ export const HEAT = {
 // Properties are real OSM buildings. Price comes from footprint area, the
 // block's rent level, and what sort of premises it is.
 export const LOTS = {
+  // Price = area x rate-for-that-kind x block rent, with a mild economy of
+  // scale so a warehouse doesn't cost twenty rowhouses per square metre.
   pricePerM2: 21,
-  minPrice: 1400,
-  maxPrice: 140000,
+  scaleBreakM2: 400,   // above this, each extra m² is cheaper
+  scaleExponent: 0.88, // <1 = economy of scale
+  minPrice: 1200,
+  maxPrice: 400000,
   resaleRate: 0.62,
-  minAreaM2: 30,
-  maxAreaM2: 26000,
+  minAreaM2: 25,
+  maxAreaM2: 40000,
   industrialAreaM2: 1400,
-  perDistrict: 34,
-  fetchCap: 2600,
+
+  // Buildings stream in by area as you explore — a whole territory is ~50k of
+  // them, which is far too much to fetch, draw or save at once.
+  // Overpass allows only two concurrent queries per IP, so one large request
+  // beats six small ones. These tiles are ~1.3 km across: roughly 1200
+  // buildings and a couple of seconds each.
+  tileDeg: 0.012,
+  tileFetchCap: 4000,
+  minZoomForFetch: 16,
+  maxTilesPerSweep: 2,
 };
 
 // --- Rival crews ------------------------------------------------------------

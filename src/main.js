@@ -3,8 +3,8 @@
 import { GAME_MINUTES_PER_REAL_SECOND, LOTS, SPEEDS, TICK_MS } from './game/constants.js';
 import { generateDistricts, districtAt } from './game/districts.js';
 import { generateCrews, applyInitialControl, rehydrateCrews } from './game/crews.js';
-import { fetchPlaceNames, geocode, reverseGeocode, fetchRoute, fetchBuildings } from './game/geo.js';
-import { buildLots, territoryBbox, lotById } from './game/lots.js';
+import { fetchPlaceNames, geocode, reverseGeocode, fetchRoute, fetchBuildings, fetchCountryCode } from './game/geo.js';
+import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
@@ -138,35 +138,44 @@ async function startNewGame(origin, cityName) {
   if (places.length) setStatus(`Found ${places.length} real neighbourhoods. Carving up the map…`);
   else setStatus('Couldn’t reach the name service — using generated district names.');
 
-  const districts = generateDistricts(origin, places);
+  // What sells here depends on where "here" is.
+  const countryCode = await fetchCountryCode(origin.lat, origin.lng);
+  const districts = generateDistricts(origin, places, countryCode);
   const crews = generateCrews(districts, origin);
   applyInitialControl(districts, crews);
 
-  setStatus('Surveying every building on these blocks…');
-  const box = territoryBbox(districts);
-  let lots = [];
+  // A whole territory holds tens of thousands of buildings, so they stream in
+  // by area as you explore. Only the blocks around the start are loaded now.
+  setStatus('Surveying the buildings around you…');
+  const state = createState({ origin, cityName, countryCode, districts, crews, lots: [] });
+
+  const startPad = 0.001; // one tile is plenty to open on
+  const startTiles = tilesForBounds(
+    origin.lat - startPad, origin.lng - startPad,
+    origin.lat + startPad, origin.lng + startPad
+  );
+  const survey = (s2, w2, n2, e2, cap) => fetchBuildings(s2, w2, n2, e2, cap, (attempt, waitMs) => {
+    setStatus(`Survey office is busy — retrying in ${Math.round(waitMs / 1000)}s…`);
+  });
   try {
-    const ways = await fetchBuildings(box.south, box.west, box.north, box.east, LOTS.fetchCap);
-    lots = buildLots(ways, districts);
+    await loadTiles(state, startTiles, survey);
   } catch (err) {
     console.warn('[start] building survey failed', err);
   }
-  if (!lots.length) {
-    setStatus('Couldn’t reach the building survey. Try again in a moment.', true);
+  if (!state.lots.length) {
+    setStatus('The building survey is rate-limited right now. Give it a minute and try again.', true);
     document.querySelectorAll('.start__actions button, .start__searchrow button')
       .forEach((b) => { b.disabled = false; });
     return;
   }
-  setStatus(`${lots.length} buildings on the market. Opening up…`);
-
-  const state = createState({ origin, cityName, districts, crews, lots });
+  setStatus(`${state.lots.length} buildings surveyed. Opening up…`);
   logEvent(state, `Set up shop in ${cityName}. ${districts.length} blocks in reach.`, 'good');
   logEvent(
     state,
     `${crews.map((c) => c.name).join(' and ')} already work this side of town.`,
     'info'
   );
-  logEvent(state, `${lots.length} buildings are up for sale. Zoom in and pick one.`, 'info');
+  logEvent(state, 'Every building here can be bought. Zoom in and pick one.', 'info');
   bootGame(state);
 }
 
@@ -190,11 +199,12 @@ function bootGame(state) {
     onSelect: (lot) => game.select('lot', lot.id),
   });
   game.lotLayer.setDistricts(state.districts);
-  game.lotLayer.build(state.lots || []);
+  game.lotLayer.setAll(state.lots || []);
   game.ghost = new PlacementGhost(game.map);
   fitToDistricts(game.map, state.districts);
 
   game.map.on('click', () => game.select(null));
+  game.map.on('moveend zoomend', () => scheduleTileSweep());
 
   // Saved routes have geometry already; only refetch ones that never resolved.
   for (const r of state.routes) {
@@ -219,10 +229,56 @@ function bootGame(state) {
 
   startLoop();
   wireKeys();
+  scheduleTileSweep();
   setInterval(() => { if (game.state) saveGame(game.state); }, 60000);
 
   if (!state.buildings.length) {
     toast('Zoom in, click a building you like, and buy it. Press ? for the rundown.', 'info', 8000);
+  }
+}
+
+// --- Streaming buildings ----------------------------------------------------
+
+let sweepTimer = null;
+let sweeping = false;
+
+/** Debounced: pull in any unloaded buildings under the current view. */
+function scheduleTileSweep() {
+  clearTimeout(sweepTimer);
+  sweepTimer = setTimeout(runTileSweep, 550);
+}
+
+async function runTileSweep() {
+  if (sweeping || !game.state) return;
+  if (game.map.getZoom() < LOTS.minZoomForFetch) return;
+
+  const b = game.map.getBounds();
+  const keys = tilesForBounds(b.getSouth(), b.getWest(), b.getNorth(), b.getEast());
+  const pending = keys.filter((k) => !(game.state.loadedTiles || []).includes(k));
+  if (!pending.length) return;
+
+  sweeping = true;
+  game.ui.setLoading(`Surveying ${pending.length} more block${pending.length === 1 ? '' : 's'}…`);
+  try {
+    const fresh = await loadTiles(game.state, keys, fetchBuildings);
+    if (fresh.length) {
+      game.lotLayer.setAll(game.state.lots);
+      game.ui.renderRail();
+      logEvent(game.state, `${fresh.length} more buildings surveyed.`, 'info');
+    }
+  } catch (err) {
+    console.warn('[sweep] failed', err);
+  } finally {
+    sweeping = false;
+    game.ui.setLoading(null);
+    // More tiles may remain if this sweep hit its cap.
+    if ((game.state.loadedTiles || []).length && game.map.getZoom() >= LOTS.minZoomForFetch) {
+      const after = tilesForBounds(
+        game.map.getBounds().getSouth(), game.map.getBounds().getWest(),
+        game.map.getBounds().getNorth(), game.map.getBounds().getEast()
+      ).filter((k) => !game.state.loadedTiles.includes(k));
+      if (after.length) scheduleTileSweep();
+    }
   }
 }
 
@@ -288,10 +344,12 @@ game.setOverlay = (id) => {
 };
 
 game.focusOn = (kind, id) => {
-  const target = kind === 'district'
-    ? districtById(game.state, id)?.center
-    : buildingById(game.state, id)?.latlng;
-  if (target) game.map.setView([target.lat, target.lng], Math.max(game.map.getZoom(), 15));
+  if (kind === 'district') {
+    game.districtLayer.frame(id);
+    return;
+  }
+  const target = buildingById(game.state, id)?.latlng;
+  if (target) game.map.setView([target.lat, target.lng], Math.max(game.map.getZoom(), 17));
 };
 
 game.setSpeed = (i) => {

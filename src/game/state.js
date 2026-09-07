@@ -10,7 +10,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 6;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -21,12 +21,13 @@ function emptyProductMap(value = 0) {
   return Object.fromEntries(PRODUCT_IDS.map((p) => [p, value]));
 }
 
-export function createState({ origin, cityName, districts, crews = [], lots = [] }) {
+export function createState({ origin, cityName, countryCode = null, districts, crews = [], lots = [] }) {
   return {
     version: SAVE_VERSION,
     createdAt: Date.now(),
     origin,
     cityName,
+    countryCode,
     districts,
     crews,
     lots,
@@ -50,6 +51,7 @@ export function createState({ origin, cityName, districts, crews = [], lots = []
       blocksTaken: 0,
     },
     log: [],
+    unlocked: [],
     selection: null,
   };
 }
@@ -77,6 +79,7 @@ export function createBuilding(typeId, latlng, districtId) {
     lotId: null,
     areaM2: 0,
     scale: 1,
+    capScale: 1,
     // Fronts
     launderedToday: 0,
     earnedToday: 0,
@@ -180,7 +183,15 @@ export function clockOf(minutes) {
 
 export function saveGame(state) {
   try {
-    const snapshot = { ...state, selection: null, idCounter };
+    // Unowned buildings are re-fetched from OSM on demand; storing every one
+    // would blow past the storage quota within a couple of city blocks.
+    const snapshot = {
+      ...state,
+      selection: null,
+      idCounter,
+      lots: (state.lots || []).filter((l) => l.owned),
+      loadedTiles: [],
+    };
     localStorage.setItem(SAVE_KEY, JSON.stringify(snapshot));
     return true;
   } catch (err) {

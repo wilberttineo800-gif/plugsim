@@ -64,7 +64,7 @@ export const KIND_LABEL = {
   garage: 'Garage / outbuilding',
 };
 
-/** Quiet, roomy, cheap blocks are what an operation actually wants. */
+/** What a square metre of each kind of premises costs, before the block. */
 const KIND_PRICE_MULT = {
   industrial: 0.72, // big but unglamorous — cheap per square metre
   commercial: 1.15,
@@ -75,11 +75,40 @@ const KIND_PRICE_MULT = {
   garage: 0.8,
 };
 
-export function lotPrice(kind, areaM2, district) {
+export const SQFT_PER_M2 = 10.7639;
+export const sqft = (m2) => m2 * SQFT_PER_M2;
+
+/**
+ * Effective area for pricing. Floor space gets cheaper per square metre once a
+ * building is genuinely big, the way real commercial space does — otherwise a
+ * 20,000 m² warehouse would be priced like 280 rowhouses.
+ */
+export function pricedArea(areaM2) {
+  if (areaM2 <= LOTS.scaleBreakM2) return areaM2;
+  const over = areaM2 - LOTS.scaleBreakM2;
+  return LOTS.scaleBreakM2 + Math.pow(over, LOTS.scaleExponent);
+}
+
+/** The full breakdown, so the UI can show why a building costs what it does. */
+export function priceBreakdown(kind, areaM2, district) {
   const rent = district ? district.rentIndex : 0.5;
-  const raw =
-    areaM2 * LOTS.pricePerM2 * lerp(0.7, 1.65, rent) * (KIND_PRICE_MULT[kind] || 1);
-  return Math.round(clamp(raw, LOTS.minPrice, LOTS.maxPrice) / 10) * 10;
+  const kindMult = KIND_PRICE_MULT[kind] || 1;
+  const blockMult = lerp(0.7, 1.65, rent);
+  const effective = pricedArea(areaM2);
+  const raw = effective * LOTS.pricePerM2 * kindMult * blockMult;
+  const price = Math.round(clamp(raw, LOTS.minPrice, LOTS.maxPrice) / 10) * 10;
+  return {
+    price,
+    kindMult,
+    blockMult,
+    ratePerM2: price / Math.max(1, areaM2),
+    ratePerSqft: price / Math.max(1, sqft(areaM2)),
+    discounted: effective < areaM2,
+  };
+}
+
+export function lotPrice(kind, areaM2, district) {
+  return priceBreakdown(kind, areaM2, district).price;
 }
 
 /** What you'd get back walking away from a property. */
@@ -100,8 +129,9 @@ function addressOf(tags) {
  * Turn raw Overpass ways into playable lots: classify, price, assign to a
  * district, and thin the crowd down to something a map can actually show.
  */
-export function buildLots(ways, districts, { perDistrict = LOTS.perDistrict } = {}) {
-  const byDistrict = new Map(districts.map((d) => [d.id, []]));
+export function buildLots(ways, districts, { startIndex = 0 } = {}) {
+  const lots = [];
+  let n = startIndex;
 
   for (const w of ways) {
     const geom = w.geometry;
@@ -112,45 +142,89 @@ export function buildLots(ways, districts, { perDistrict = LOTS.perDistrict } = 
 
     const center = centroidOf(polygon);
     const district = nearestDistrict(districts, center);
-    if (!district) continue;
+    if (!district) continue; // outside the play area
 
     const tags = w.tags || {};
     const kind = classify(tags, areaM2);
-    byDistrict.get(district.id).push({
+    const address = addressOf(tags);
+    lots.push({
+      id: `L${n++}`,
       osmId: w.id,
       polygon,
       center,
       areaM2,
       kind,
-      address: addressOf(tags),
+      address,
       districtId: district.id,
+      name: address || `${KIND_LABEL[kind]} · ${Math.round(areaM2)} m²`,
+      price: lotPrice(kind, areaM2, district),
+      owned: false,
+      buildingId: null,
     });
   }
+  return lots;
+}
 
-  const lots = [];
-  let n = 0;
-  for (const [districtId, candidates] of byDistrict) {
-    const district = districts.find((d) => d.id === districtId);
-    // Keep a usable mix: always some big premises, then a spread of the rest,
-    // so every block has something worth buying at both ends of the budget.
-    candidates.sort((a, b) => b.areaM2 - a.areaM2);
-    const big = candidates.slice(0, Math.ceil(perDistrict * 0.35));
-    const rest = candidates.slice(big.length);
-    const stride = Math.max(1, Math.floor(rest.length / Math.max(1, perDistrict - big.length)));
-    const spread = rest.filter((_, i) => i % stride === 0).slice(0, perDistrict - big.length);
+// --- Streaming buildings in by area -----------------------------------------
 
-    for (const c of big.concat(spread)) {
-      lots.push({
-        id: `L${n++}`,
-        ...c,
-        name: c.address || `${KIND_LABEL[c.kind]} · ${Math.round(c.areaM2)} m²`,
-        price: lotPrice(c.kind, c.areaM2, district),
-        owned: false,
-        buildingId: null,
-      });
+/** Tile key for a coordinate, on a fixed lat/lng grid. */
+export function tileKey(lat, lng) {
+  const t = LOTS.tileDeg;
+  return `${Math.floor(lat / t)}:${Math.floor(lng / t)}`;
+}
+
+export function tileBounds(key) {
+  const t = LOTS.tileDeg;
+  const [y, x] = key.split(':').map(Number);
+  return { south: y * t, west: x * t, north: (y + 1) * t, east: (x + 1) * t };
+}
+
+/** Every tile overlapping a lat/lng bounds box. */
+export function tilesForBounds(south, west, north, east) {
+  const t = LOTS.tileDeg;
+  const keys = [];
+  for (let y = Math.floor(south / t); y <= Math.floor(north / t); y++) {
+    for (let x = Math.floor(west / t); x <= Math.floor(east / t); x++) {
+      keys.push(`${y}:${x}`);
     }
   }
-  return lots;
+  return keys;
+}
+
+/**
+ * Load every building in the given tiles that hasn't been loaded yet. Fetches
+ * are sequential and capped per sweep so panning around doesn't hammer
+ * Overpass. Returns the newly created lots.
+ */
+export async function loadTiles(state, keys, fetchBuildings, onProgress) {
+  state.loadedTiles = state.loadedTiles || [];
+  const done = new Set(state.loadedTiles);
+  const todo = keys.filter((k) => !done.has(k)).slice(0, LOTS.maxTilesPerSweep);
+  if (!todo.length) return [];
+
+  const seen = new Set((state.lots || []).map((l) => l.osmId));
+  const fresh = [];
+
+  for (const key of todo) {
+    const b = tileBounds(key);
+    let ways = [];
+    try {
+      ways = await fetchBuildings(b.south, b.west, b.north, b.east, LOTS.tileFetchCap);
+    } catch (err) {
+      console.warn('[lots] tile fetch failed', key, err);
+      continue; // leave it unmarked so it retries later
+    }
+    state.loadedTiles.push(key);
+
+    const built = buildLots(ways, state.districts, { startIndex: state.lotSeq || 0 })
+      .filter((l) => !seen.has(l.osmId));
+    for (const l of built) seen.add(l.osmId);
+    state.lotSeq = (state.lotSeq || 0) + built.length;
+    state.lots.push(...built);
+    fresh.push(...built);
+    onProgress?.(fresh.length, todo.length);
+  }
+  return fresh;
 }
 
 function nearestDistrict(districts, point) {
@@ -186,12 +260,23 @@ export function lotsInDistrict(state, districtId) {
 }
 
 /**
- * How much a building's footprint amplifies whatever you run inside it. A
- * warehouse genuinely outproduces a rowhouse.
+ * Throughput scaling. Output rises with the square root of floor area: more
+ * room means more benches and more hands, but not proportionally — you're
+ * limited by equipment and people, not by space alone.
  */
 export function areaScale(lot, referenceM2) {
   if (!lot) return 1;
   return clamp(Math.sqrt(lot.areaM2 / referenceM2), 0.65, 2.6);
+}
+
+/**
+ * Storage scaling. How much you can hold really is a function of floor space,
+ * so this tracks area almost directly — which is what makes a warehouse a
+ * warehouse rather than just a slightly better rowhouse.
+ */
+export function areaCapacityScale(lot, referenceM2) {
+  if (!lot) return 1;
+  return clamp(lot.areaM2 / referenceM2, 0.45, 8);
 }
 
 export { clamp01, hashUnit };

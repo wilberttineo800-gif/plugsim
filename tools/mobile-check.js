@@ -63,7 +63,13 @@ if (!g || !g.state) {
     if (!s.lots.some((l) => l.rented)) { g.buyLot(spare[1].id); g.rentOut(spare[1].id); }
     if (!s.lots.some((l) => l.owned && !l.buildingId && !l.rented)) g.buyLot(spare[2].id);
   }
-  if (!s.couriers.length) g.buyVehicle('bike');
+  if (!s.couriers.length) {
+    // A vehicle needs a bay now, so the panel has something to render.
+    const park = s.lots.filter((l) => l.kind === 'parking' && !l.owned)
+      .sort((a, b) => a.price - b.price)[0];
+    if (park) { g.buyLot(park.id); g.developLot(park.id, 'depot'); }
+    g.buyVehicle('bike');
+  }
 
   const body = document.getElementById('inspectorBody');
   const panels = [

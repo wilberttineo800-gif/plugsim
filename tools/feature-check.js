@@ -97,9 +97,35 @@
   window.__featureTarget = target.id;
   g.createRouteFromDraft({ fromId: growB.id, toKey: 'building:' + labB.id, cargo: 'raw', product: 'any' });
   g.createRouteFromDraft({ fromId: labB.id, toKey: 'district:' + target.id, cargo: 'packs', product: 'any' });
+  // Nothing moves without somewhere to keep it — that's the point of a depot.
+  const noBay = g.buyVehicle('scooter');
+  ok('a vehicle is refused with no depot', s.couriers.length === 0,
+    'game says: ' + (noBay && noBay.error ? noBay.error : 'it let it through'));
+
+  const carParks = s.lots.filter((l) => l.kind === 'parking' && !l.owned);
+  ok('real car parks came back from the map', carParks.length > 0,
+    carParks.length + ' on the map, ' +
+    (carParks[0] ? carParks[0].spaces + ' spaces at the first' : ''));
+
+  if (carParks.length) {
+    const park = carParks.sort((a, b) => a.price - b.price)[0];
+    g.buyLot(park.id);
+    g.developLot(park.id, 'depot');
+    const depot = s.buildings.find((b) => b.lotId === park.id);
+    ok('a depot opens on a car park', !!depot && depot.kind === 'depot',
+      depot && (park.spaces + ' bays for ' + money(park.price)));
+    ok('premises are refused on a car park',
+      g.developLot(park.id, 'grow_house') && !s.buildings.some(
+        (b) => b.lotId === park.id && b.kind === 'grow_house'));
+  }
+
   g.buyVehicle('scooter');
   g.buyVehicle('scooter');
-  ok('couriers can be hired', s.couriers.length >= 2, s.couriers.length + ' on the payroll');
+  ok('vehicles can be bought once there are bays', s.couriers.length >= 2,
+    s.couriers.length + ' in the yard');
+  ok('parked vehicles sit in their own bay',
+    s.couriers.length < 2 || s.couriers[0].parkSlot !== s.couriers[1].parkSlot,
+    'slots ' + s.couriers.map((c) => c.parkSlot).join(', '));
 
   out.push('');
   out.push('=== market ===');

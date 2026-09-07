@@ -186,6 +186,55 @@ happened to click that panel.
 
 Saves go to `localStorage` and autosave every 60s.
 
+## Picking this back up
+
+Everything needed to resume is in this repo — no hidden state.
+
+```sh
+cd ~/Developer/plugsim
+./run.sh                 # http://localhost:5173
+./run.sh 5173 lan        # also reachable from a phone on the same Wi-Fi
+./tools/publish.sh       # push + GitHub Pages rebuild
+```
+
+Live at **https://wilberttineo800-gif.github.io/plugsim/** — plain static files
+calling public APIs, so it runs with nothing switched on at home.
+
+### Verify both widths, every time
+
+The UI is one codebase with a single responsive breakpoint at 780px; there is no
+separate mobile build. Both checks are needed because neither sees what the
+other does:
+
+```sh
+# Simulation + every panel's markup, headless (no browser, no Node)
+jsc -m tools/simtest.js
+jsc -m tools/rendertest.js
+
+# Real layout at phone width — catches overflow the headless run cannot see
+./tools/mobile-check.sh          # needs a game running in Safari's front tab
+```
+
+`jsc` lives at
+`/System/Library/Frameworks/JavaScriptCore.framework/Versions/A/Helpers/jsc`.
+
+`tools/safari-eval.sh <file.js>` evaluates JavaScript in the front Safari tab,
+which is how the game gets driven and inspected without a browser extension. It
+needs Safari → Develop → *Allow JavaScript from Apple Events*.
+
+### Things that will bite you
+
+- **No Node and no Homebrew on this machine.** The build-free setup is
+  deliberate, not a shortcut. Don't introduce a bundler.
+- **Overpass allows two query slots per IP.** Buildings stream as ~1.3 km
+  tiles; lots of small requests get rate-limited and fail a survey. Fetches
+  retry with backoff — if a start fails, wait a minute.
+- **Saves keep only property you own.** A territory is ~50,000 buildings;
+  storing them all would blow the storage quota. Everything else re-streams.
+- Bumping `SAVE_VERSION` invalidates existing saves. It's at 8.
+- Balance lives entirely in `src/game/constants.js`. Change a number, re-run
+  `simtest.js`, read the 30-day curve.
+
 ## Not done yet
 
 - Buildings that already have a use, so taking one has consequences

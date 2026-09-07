@@ -17,7 +17,7 @@ import { availableUpgrades, describeEffects, effectsFor, upkeepFor } from '../ga
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import { buildingById, courierById, districtById, clockOf } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
-import { esc, money, moneyShort, units, pct, km, duration, qualityLabel } from './format.js';
+import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip } from './format.js';
 import { clamp01 } from '../game/rng.js';
 
 export class GameUI {
@@ -516,7 +516,7 @@ export class GameUI {
     const options = ['<option value="">— unassigned —</option>']
       .concat(s.routes.map((r) => {
         const info = routeLabel(s, r);
-        return `<option value="${r.id}" ${c.routeId === r.id ? 'selected' : ''}>${esc(info.from)} → ${esc(info.to)}</option>`;
+        return `<option value="${r.id}" ${c.routeId === r.id ? 'selected' : ''}>${esc(clip(info.from, 16))} → ${esc(clip(info.to, 16))}</option>`;
       }))
       .join('');
 
@@ -561,17 +561,17 @@ export class GameUI {
     }
 
     const fromOpts = sources.map((b) =>
-      `<option value="${b.id}" ${d.fromId === b.id ? 'selected' : ''}>${esc(b.name)} — ${esc(districtById(s, b.districtId)?.name || '')}</option>`
+      `<option value="${b.id}" ${d.fromId === b.id ? 'selected' : ''}>${esc(clip(b.name, 30))}</option>`
     ).join('');
 
     const buildingOpts = s.buildings
       .filter((b) => b.id !== d.fromId && b.kind !== 'front')
-      .map((b) => `<option value="building:${b.id}" ${d.toKey === `building:${b.id}` ? 'selected' : ''}>▸ ${esc(b.name)}</option>`)
+      .map((b) => `<option value="building:${b.id}" ${d.toKey === `building:${b.id}` ? 'selected' : ''}>▸ ${esc(clip(b.name, 30))}</option>`)
       .join('');
 
     const districtOpts = [...s.districts]
       .sort((a, b) => b.demandPerHour.weed - a.demandPerHour.weed)
-      .map((dd) => `<option value="district:${dd.id}" ${d.toKey === `district:${dd.id}` ? 'selected' : ''}>◆ ${esc(dd.name)} — sells ${units(dd.demandPerHour.weed + dd.demandPerHour.shrooms)}/h</option>`)
+      .map((dd) => `<option value="district:${dd.id}" ${d.toKey === `district:${dd.id}` ? 'selected' : ''}>◆ ${esc(clip(dd.name, 22))} · ${units(dd.demandPerHour.weed + dd.demandPerHour.shrooms)}/h</option>`)
       .join('');
 
     const list = s.routes.length

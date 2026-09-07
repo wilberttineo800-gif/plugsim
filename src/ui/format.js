@@ -50,6 +50,12 @@ export function el(tag, className, html) {
   return node;
 }
 
+/** Clip a label to fit a control, since a <select> is sized by its widest option. */
+export function clip(text, max = 34) {
+  const t = String(text);
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
+}
+
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, (ch) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',

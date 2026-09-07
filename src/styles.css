@@ -330,7 +330,7 @@ button, input, select { font-family: inherit; color: inherit; }
 }
 .rail__tabs button:hover { color: var(--text-dim); background: rgba(255, 255, 255, .03); }
 .rail__tabs button.is-on { color: var(--sodium); border-bottom-color: var(--sodium); }
-.rail__body { flex: 1; overflow-y: auto; padding: 12px 12px 20px; }
+.rail__body { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 12px 12px 20px; }
 
 /* ── Inspector ─────────────────────────────────────────────────────────── */
 
@@ -343,6 +343,7 @@ button, input, select { font-family: inherit; color: inherit; }
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 14px 14px 22px;
 }
 .inspector__close {
@@ -455,7 +456,9 @@ button, input, select { font-family: inherit; color: inherit; }
   letter-spacing: .09em; font-size: 10.5px; color: var(--text-faint); font-weight: 600;
 }
 .field select, .field input {
-  width: 100%; padding: 7px 8px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0; padding: 7px 8px;
   background: var(--panel-2); border: 1px solid var(--line);
   color: var(--text); font-size: 12.5px; border-radius: var(--radius);
 }

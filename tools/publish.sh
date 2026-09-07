@@ -11,10 +11,20 @@ GH="${GH:-$HOME/.local/bin/gh}"
 REPO="${1:-plugsim}"
 [ -x "$GH" ] || GH=gh
 
+# Two ways in: an interactive login, or a token dropped in a file / env var.
 if ! "$GH" auth status >/dev/null 2>&1; then
-  echo "Not logged in. Run:  $GH auth login" >&2
-  exit 1
+  TOKEN="${GH_TOKEN:-}"
+  [ -z "$TOKEN" ] && [ -f "$HOME/.plugsim-token" ] && TOKEN=$(tr -d '[:space:]' < "$HOME/.plugsim-token")
+  if [ -n "$TOKEN" ]; then
+    echo "$TOKEN" | "$GH" auth login --hostname github.com --git-protocol https --with-token
+  else
+    echo "Not logged in. Either:" >&2
+    echo "  $GH auth login                              (interactive)" >&2
+    echo "  echo YOUR_TOKEN > ~/.plugsim-token          (then re-run this)" >&2
+    exit 1
+  fi
 fi
+"$GH" auth setup-git >/dev/null 2>&1 || true
 
 USER=$("$GH" api user --jq .login)
 

@@ -129,8 +129,8 @@ function playTurn() {
     }
   }
   // Buy a Front the moment it's affordable — it replaces the fixer.
-  if (!state.buildings.some((b) => b.type === 'front') && state.cash.clean >= 13000) {
-    build('front', cheap);
+  if (!state.buildings.some((b) => b.kind === 'front') && state.cash.clean >= 9000) {
+    build('laundromat', cheap);
   }
   // Keep scaling production once the money is there.
   if (state.cash.clean >= 16000 && state.buildings.filter((b) => b.type === 'grow_house').length < 4) {
@@ -149,7 +149,7 @@ function playTurn() {
     }
   }
   // Then diversify into the high-margin product.
-  if (state.buildings.some((b) => b.type === 'front')
+  if (state.buildings.some((b) => b.kind === 'front')
       && !state.buildings.some((b) => b.type === 'fungi_room')
       && state.cash.clean >= 12000) {
     const fungi = build('fungi_room', cheap);
@@ -232,6 +232,7 @@ log(`grows the city supports: ${(totalDemand / (rawPerDay * PRODUCTS.weed.packsP
 log('');
 log('=== FINAL ===');
 log(`clean ${fmt(state.cash.clean)}  street ${fmt(state.cash.dirty)}  gross ${fmt(state.stats.grossRevenue)}`);
+log(`legal takings: ${fmt(state.stats.legalRevenue || 0)}  (${((state.stats.legalRevenue||0)/((state.stats.legalRevenue||0)+state.stats.grossRevenue)*100).toFixed(1)}% of all income)`);
 log(`net worth change: ${fmt(state.cash.clean + state.cash.dirty - 16000)} over ${DAYS} days`);
 log(`raids ${state.stats.raids} stops ${state.stats.stops} seized ${u(state.stats.seized)}`);
 log(`tribute paid to crews: ${u(state.stats.tributePaid || 0)} packs; blocks taken by force: ${state.stats.blocksTaken || 0}`);

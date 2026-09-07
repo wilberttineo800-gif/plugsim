@@ -11,6 +11,9 @@ const ICONS = {
   flask: '<path d="M9 3h6v2h-1v4.2l4.4 8A2 2 0 0 1 16.6 20H7.4a2 2 0 0 1-1.8-2.8L10 9.2V5H9Z"/>',
   box: '<path d="M12 2 3 6.2V17L12 22l9-5V6.2Zm0 2.3 6.2 2.9L12 10.2 5.8 7.2Z"/>',
   store: '<path d="M4 4h16l1.4 4.6A3 3 0 0 1 18.5 12a3 3 0 0 1-2.5-1.3A3 3 0 0 1 13.5 12 3 3 0 0 1 12 11a3 3 0 0 1-1.5 1A3 3 0 0 1 8 10.7 3 3 0 0 1 5.5 12a3 3 0 0 1-2.9-3.4Z"/><path d="M5 13h14v7H5Z" opacity="0.55"/>',
+  washer: '<path d="M5 2h14a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z" opacity="0.5"/><circle cx="12" cy="14" r="5"/><circle cx="8" cy="6" r="1.2"/><circle cx="11.5" cy="6" r="1.2"/>',
+  wrench: '<path d="M20.3 5.3a5.5 5.5 0 0 1-7.1 7.1L6 19.6 4.4 18l7.2-7.2a5.5 5.5 0 0 1 7.1-7.1l-3 3 2 2 3-3.4Z"/>',
+  cup: '<path d="M4 6h12v7a5 5 0 0 1-10 0Z"/><path d="M16 8h2.4a2.6 2.6 0 0 1 0 5.2H16Z" opacity="0.55"/><path d="M4 20h13v2H4Z" opacity="0.55"/>',
 };
 
 const VEHICLE_GLYPH = { bike: '◈', sedan: '▰', van: '▮' };

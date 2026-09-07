@@ -6,11 +6,11 @@ import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, PRODUCTS, PRODUCT_IDS, SPEEDS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
-import { levelCapacity, levelYield, upgradeCost } from '../game/sim.js';
+import { levelCapacity, levelYield, upgradeCost, sizeScale } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions } from '../game/actions.js';
 import { KIND_LABEL, lotById, lotResale } from '../game/lots.js';
 import { crewById } from '../game/crews.js';
-import { FIXER } from '../game/constants.js';
+import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import { buildingById, courierById, districtById, clockOf } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
 import { esc, money, moneyShort, units, pct, km, duration, qualityLabel } from './format.js';
@@ -220,6 +220,24 @@ export class GameUI {
     }
   }
 
+  /** How much the wealth of a block multiplies a legal business's takings. */
+  legitPull(b) {
+    const def = BUILDINGS[b.type];
+    const d = districtById(this.game.state, b.districtId);
+    const swing = LEGIT_WEALTH_SWING * (def.wealthSensitivity || 1);
+    return Math.max(0.25, Math.min(2.2, 1 + ((d ? d.wealth : 0.5) - 0.5) * 2 * swing));
+  }
+
+  legitTakings(b) {
+    const def = BUILDINGS[b.type];
+    return def.revenuePerDay * this.legitPull(b) * levelYield(b.level) * sizeScale(b);
+  }
+
+  legitProfit(b) {
+    const def = BUILDINGS[b.type];
+    return this.legitTakings(b) - def.upkeepPerDay * (1 + (b.level - 1) * 0.35);
+  }
+
   /** Rough daily P&L: what the streets pay in, minus every fixed cost. */
   dailyNet() {
     const s = this.game.state;
@@ -235,6 +253,7 @@ export class GameUI {
       if (!b.active) continue;
       const def = BUILDINGS[b.type];
       costs += def.upkeepPerDay * (1 + (b.level - 1) * 0.35);
+      if (def.kind === 'front') income += this.legitTakings(b);
       if (def.kind === 'production') {
         costs += (def.supplyCostPerSlot * def.slots * 24) / def.cycleHours;
       }
@@ -369,7 +388,8 @@ export class GameUI {
   lotDevelopBlock(lot) {
     const s = this.game.state;
     if (lot.buildingId) return '';
-    const opts = operationOptions(lot).map((o) => {
+
+    const card = (o) => {
       const short = s.cash.clean < o.def.cost;
       const blocked = !o.fits || short;
       const note = !o.fits ? o.reason : short ? `Need ${moneyShort(o.def.cost)} clean` : null;
@@ -380,13 +400,34 @@ export class GameUI {
             <span class="card__name">${esc(o.def.name)}</span>
             <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(o.def.cost)}</span>
           </div>
+          <div class="card__blurb">${esc(o.def.blurb)}</div>
           <div class="card__meta">
-            ${o.fits ? `<span style="color:var(--good)">×${o.scale.toFixed(2)} output at ${Math.round(lot.areaM2)} m²</span>` : ''}
+            ${o.fits ? `<span style="color:var(--good)">×${o.scale.toFixed(2)} at ${Math.round(lot.areaM2)} m²</span>` : ''}
             ${note ? `<span style="color:var(--warn)">${esc(note)}</span>` : ''}
           </div>
         </button>`;
-    }).join('');
-    return `<div class="sect__title" style="margin-top:4px"><span>Fit out ${esc(lot.name)}</span></div>${opts}`;
+    };
+
+    // The two money paths are the central choice, so they're shown as such.
+    const opts = operationOptions(lot);
+    const illegal = opts.filter((o) => o.def.kind !== 'front');
+    const legal = opts.filter((o) => o.def.kind === 'front');
+
+    return (
+      `<div class="sect__title" style="margin-top:4px">
+        <span>The chain</span><span style="color:var(--text-faint)">street money</span>
+      </div>
+      ${illegal.map(card).join('')}
+      <div class="sect__title" style="margin-top:12px">
+        <span>Legitimate business</span><span style="color:var(--good)">clean money</span>
+      </div>
+      <p class="card__blurb" style="margin:0 0 8px">
+        Earns clean money on its own — slower than the chain, but spendable the
+        moment it lands, never raided, and it cools the block down. Washes
+        street cash on the side.
+      </p>
+      ${legal.map(card).join('')}`
+    );
   }
 
   ownedList() {
@@ -606,7 +647,8 @@ export class GameUI {
       <div class="sect">
         <div class="sect__title"><span>Books</span><span>Day ${clock.day}</span></div>
         <div class="rows">
-          <div class="row"><span>Gross revenue</span><span class="money">${money(st.grossRevenue)}</span></div>
+          <div class="row"><span>Street revenue</span><span class="money">${money(st.grossRevenue)}</span></div>
+          <div class="row"><span>Legal takings</span><span class="good">${money(st.legalRevenue || 0)}</span></div>
           <div class="row"><span>Washed clean</span><span class="money">${money(st.laundered)}</span></div>
           <div class="row"><span>Spent on the empire</span><span>${money(st.spent)}</span></div>
           <div class="row"><span>Projected net / day</span><span class="${this.dailyNet() >= 0 ? 'good' : 'bad'}">${moneyShort(this.dailyNet())}</span></div>
@@ -928,9 +970,23 @@ export class GameUI {
     } else {
       body =
         `<div class="sect">
+          <div class="sect__title"><span>Legal trade</span>
+            <span class="${this.legitProfit(b) >= 0 ? 'good' : 'bad'}">${this.legitProfit(b) >= 0 ? '+' : ''}${money(this.legitProfit(b))}/day</span></div>
+          <div class="rows">
+            <div class="row"><span>Takings</span><span class="money">${money(this.legitTakings(b))}/day</span></div>
+            <div class="row"><span>Costs</span><span>${money(def.upkeepPerDay * (1 + (b.level - 1) * 0.35))}/day</span></div>
+            <div class="row"><span>Block wealth</span>
+              <span class="${this.legitPull(b) >= 1 ? 'good' : 'warn'}">${pct(districtById(s, b.districtId)?.wealth ?? 0.5)} · ×${this.legitPull(b).toFixed(2)}</span></div>
+            <div class="row"><span>Earned today</span><span class="money">${money(b.earnedToday || 0)}</span></div>
+          </div>
+          <p class="card__blurb" style="margin:7px 0 0">
+            This lands as <b>clean</b> money — spendable straight away, and nothing here can be raided.
+          </p>
+        </div>
+        <div class="sect">
           <div class="sect__title"><span>Laundry</span></div>
           <div class="rows">
-            <div class="row"><span>Capacity</span><span>${money(def.launderPerDay * levelYield(b.level))}/day</span></div>
+            <div class="row"><span>Capacity</span><span>${money(def.launderPerDay * levelYield(b.level) * sizeScale(b))}/day</span></div>
             <div class="row"><span>Their cut</span><span>${pct(def.cut)}</span></div>
             <div class="row"><span>Washed today</span><span class="money">${money(b.launderedToday)}</span></div>
           </div>

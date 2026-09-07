@@ -10,7 +10,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -40,6 +40,7 @@ export function createState({ origin, cityName, districts, crews = [], lots = []
     stats: {
       packsSold: emptyProductMap(),
       grossRevenue: 0,
+      legalRevenue: 0,
       laundered: 0,
       seized: 0,
       raids: 0,
@@ -78,6 +79,7 @@ export function createBuilding(typeId, latlng, districtId) {
     scale: 1,
     // Fronts
     launderedToday: 0,
+    earnedToday: 0,
     stalledReason: null,
     builtAtMinute: 0,
   };

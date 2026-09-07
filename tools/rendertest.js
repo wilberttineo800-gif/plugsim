@@ -32,7 +32,7 @@ function openSite(type) {
 const grow = openSite('grow_house');
 const lab = openSite('lab');
 openSite('stash');
-openSite('front');
+const shop = openSite('laundromat');
 openSite('fungi_room');
 const courier = A.hireCourier(state, 'sedan').courier;
 
@@ -68,7 +68,7 @@ const cases = [
   ['buildingPanel grow', () => ui.buildingPanel(state.buildings[0])],
   ['buildingPanel lab', () => ui.buildingPanel(state.buildings[1])],
   ['buildingPanel stash', () => ui.buildingPanel(state.buildings[2])],
-  ['buildingPanel front', () => ui.buildingPanel(state.buildings[3])],
+  ['buildingPanel laundromat', () => ui.buildingPanel(shop)],
   ['buildingPanel fungi', () => ui.buildingPanel(state.buildings[4])],
   ['courierPanel', () => ui.courierPanel(courier)],
   ['lotPanel (for sale)', () => ui.lotPanel(state.lots.find((l) => !l.owned))],

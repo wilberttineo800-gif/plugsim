@@ -117,19 +117,75 @@ export const BUILDINGS = {
     heatPerDay: 0.15,
     capacity: 600,
   },
-  front: {
-    id: 'front',
+  // --- Legitimate businesses ------------------------------------------------
+  // These earn CLEAN money on their own, slowly and safely, and they wash
+  // street cash on the side. They're never raided and they cool a block down.
+  // Legal income is the patient way to afford property; the chain is the fast
+  // way, and it costs you heat.
+  bodega: {
+    id: 'bodega',
     kind: 'front',
-    name: 'Legit Front',
-    blurb: 'Washes street cash into clean money you can actually spend on property.',
+    name: 'Corner Store',
+    blurb: 'Small, legal, boring. Turns a modest clean profit and quietly washes street cash.',
     icon: 'store',
-    cost: 6200,
-    minAreaM2: 80,
-    referenceAreaM2: 210,
-    upkeepPerDay: 280,
-    launderPerDay: 6000,
-    cut: 0.22, // the laundry keeps this much
-    heatPerDay: -0.5, // a legitimate business cools the block down
+    cost: 3200,
+    minAreaM2: 45,
+    referenceAreaM2: 120,
+    upkeepPerDay: 210,
+    revenuePerDay: 640,
+    launderPerDay: 2600,
+    cut: 0.24,
+    heatPerDay: -0.25,
+    capacity: 0,
+  },
+  laundromat: {
+    id: 'laundromat',
+    kind: 'front',
+    name: 'Laundromat',
+    blurb: 'Thin margins, but nobody blinks at a cash business. Washes far more than it earns.',
+    icon: 'washer',
+    cost: 5200,
+    minAreaM2: 90,
+    referenceAreaM2: 200,
+    upkeepPerDay: 290,
+    revenuePerDay: 810,
+    launderPerDay: 6200,
+    cut: 0.19,
+    heatPerDay: -0.45,
+    capacity: 0,
+  },
+  autoshop: {
+    id: 'autoshop',
+    kind: 'front',
+    name: 'Auto Shop',
+    blurb: 'Needs real space. The best earner you can run legally, and the best laundry.',
+    icon: 'wrench',
+    cost: 7800,
+    minAreaM2: 200,
+    referenceAreaM2: 430,
+    upkeepPerDay: 390,
+    revenuePerDay: 1320,
+    launderPerDay: 9200,
+    cut: 0.17,
+    heatPerDay: -0.55,
+    capacity: 0,
+  },
+  cafe: {
+    id: 'cafe',
+    kind: 'front',
+    name: 'Coffee Bar',
+    blurb: 'Lives or dies on the block around it. Excellent on money streets, pointless on poor ones.',
+    icon: 'cup',
+    cost: 6400,
+    minAreaM2: 60,
+    referenceAreaM2: 150,
+    upkeepPerDay: 350,
+    revenuePerDay: 980,
+    // Twice as sensitive to how much money lives on the block as the others.
+    wealthSensitivity: 2,
+    launderPerDay: 3400,
+    cut: 0.26,
+    heatPerDay: -0.35,
     capacity: 0,
   },
 };
@@ -238,6 +294,9 @@ export const FIXER = {
   dailyLimit: 2500,
   cut: 0.4,
 };
+
+// How hard a legitimate business leans on the wealth of its block.
+export const LEGIT_WEALTH_SWING = 0.55;
 
 // --- Market -----------------------------------------------------------------
 export const MARKET = {

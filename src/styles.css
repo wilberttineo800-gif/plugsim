@@ -128,8 +128,12 @@ button, input, select { font-family: inherit; color: inherit; }
 .bmark--lab svg { fill: #63b9d4; }
 .bmark--stash .bmark__chip { border-color: #4a4a52; }
 .bmark--stash svg { fill: #9aa7b5; }
-.bmark--front .bmark__chip { border-color: #6b5a2c; }
-.bmark--front svg { fill: var(--money); }
+.bmark--bodega .bmark__chip,
+.bmark--laundromat .bmark__chip,
+.bmark--autoshop .bmark__chip,
+.bmark--cafe .bmark__chip { border-color: #6b5a2c; }
+.bmark--bodega svg, .bmark--laundromat svg,
+.bmark--autoshop svg, .bmark--cafe svg { fill: var(--money); }
 
 .bmark.is-selected .bmark__chip {
   border-color: var(--sodium);

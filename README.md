@@ -69,8 +69,15 @@ Room                 └──► packaged product, quality-graded
    the thing you click. Block names sit on the map, the **Blocks** tab ranks
    every district by whatever the map is showing, and the overlay (demand,
    price, rival turf) tints the buildings themselves.
-6. **Legit Front** converts street cash to clean. Only clean money buys
-   property; street cash covers supplies, wages and upkeep.
+6. **Legitimate business** — a corner store, laundromat, auto shop or coffee
+   bar. These earn **clean money on their own**, slowly and safely: never
+   raided, cooling the block, with takings driven by how wealthy the street is
+   and how big the floorplate. They also wash street cash for a cut.
+
+Two currencies, and the split is the whole strategic tension: **street cash**
+is fast and large but only pays supplies, wages and upkeep, while **clean
+money** buys everything — property, fit-outs, vehicles, muscle. You either
+grind it out legally or run the chain and launder.
 
 ## What makes it a game
 

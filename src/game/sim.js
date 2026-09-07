@@ -9,6 +9,7 @@ import {
   PRODUCTS,
   PRODUCT_IDS,
   RIVALS,
+  LEGIT_WEALTH_SWING,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -74,7 +75,7 @@ export function stepSim(state, dtHours, hooks = {}) {
   stepLabs(state, dtHours);
   stepCouriers(state, dtHours, hooks);
   stepMarkets(state, dtHours);
-  stepFronts(state, dtHours);
+  stepLegit(state, dtHours);
   stepTurf(state, dtHours);
   stepHeat(state, dtHours);
   stepEnforcement(state, dtHours);
@@ -366,14 +367,35 @@ function stepMarkets(state, dt) {
 
 // --- Laundering -------------------------------------------------------------
 
-function stepFronts(state, dt) {
+/**
+ * Legitimate trade. A real business earns clean money on its own — slower than
+ * the chain, but it's spendable the moment it lands and nothing can be seized
+ * for it. Whatever capacity is left over washes street cash.
+ */
+function stepLegit(state, dt) {
   for (const b of state.buildings) {
     if (b.kind !== 'front' || !b.active) continue;
     const def = buildingDef(b);
+    const d = districtById(state, b.districtId);
+    b.stalledReason = null;
+
+    // Takings scale with the money on the block, the floorplate and upgrades.
+    const wealth = d ? d.wealth : 0.5;
+    const swing = LEGIT_WEALTH_SWING * (def.wealthSensitivity || 1);
+    const pull = clamp(1 + (wealth - 0.5) * 2 * swing, 0.25, 2.2);
+    const takings = def.revenuePerDay * pull * levelYield(b.level) * sizeScale(b) * (dt / 24);
+
+    state.cash.clean += takings;
+    b.earnedToday = (b.earnedToday || 0) + takings;
+    state.stats.legalRevenue = (state.stats.legalRevenue || 0) + takings;
+
+    // Then wash what the books can absorb.
     const capacity = def.launderPerDay * levelYield(b.level) * sizeScale(b) * (dt / 24);
     const amount = Math.min(state.cash.dirty, capacity);
-    if (amount <= 0) { b.stalledReason = 'No street cash to wash'; continue; }
-    b.stalledReason = null;
+    if (amount <= 0) {
+      b.stalledReason = 'Trading legally — no street cash to wash';
+      continue;
+    }
     state.cash.dirty -= amount;
     state.cash.clean += amount * (1 - def.cut);
     state.stats.laundered += amount;
@@ -559,6 +581,7 @@ function settleDay(state) {
   let upkeep = 0;
   for (const b of state.buildings) {
     b.launderedToday = 0;
+    b.earnedToday = 0;
     if (!b.active) continue;
     upkeep += BUILDINGS[b.type].upkeepPerDay * (1 + (b.level - 1) * 0.35);
   }

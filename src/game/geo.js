@@ -241,25 +241,39 @@ export async function reverseGeocode(lat, lng) {
  * area, so districts end up with the real names locals use. Falls back to
  * procedural names if Overpass is slow or unreachable.
  */
-export async function fetchPlaceNames(south, west, north, east) {
+export async function fetchPlaceNames(south, west, north, east, onRetry) {
   const bbox = `${south},${west},${north},${east}`;
   const query =
-    `[out:json][timeout:20];(` +
+    `[out:json][timeout:25];(` +
     `node["place"~"^(suburb|neighbourhood|quarter|borough|city_district|town|village|hamlet)$"](${bbox});` +
     `);out body 220;`;
-  const endpoints = [
-    'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter',
+
+  // Real block names are most of what makes a city feel like itself, so this is
+  // worth retrying rather than silently falling back to invented ones the first
+  // time Overpass is busy.
+  const attempts = [
+    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 0 },
+    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 900 },
+    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 4500 },
   ];
-  for (const endpoint of endpoints) {
+  for (let i = 0; i < attempts.length; i++) {
+    const { endpoint, waitMs } = attempts[i];
+    if (waitMs) {
+      onRetry?.(i, waitMs);
+      await new Promise((r) => setTimeout(r, waitMs));
+    }
     try {
-      const data = await fetchJson(endpoint + '?data=' + encodeURIComponent(query), 22000);
+      const data = await fetchJson(endpoint, 25000, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'data=' + encodeURIComponent(query),
+      });
       const out = (data.elements || [])
         .filter((e) => e.tags && e.tags.name && Number.isFinite(e.lat))
         .map((e) => ({ name: e.tags.name, lat: e.lat, lng: e.lon, rank: placeRank(e.tags.place) }));
       if (out.length) return out;
     } catch (err) {
-      console.warn('[geo] overpass failed at', endpoint, err.message);
+      console.warn('[geo] place names failed at', endpoint, err.message);
     }
   }
   return [];

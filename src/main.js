@@ -165,7 +165,10 @@ async function startNewGame(origin, cityName) {
   const pad = 0.035;
   let places = [];
   try {
-    places = await fetchPlaceNames(origin.lat - pad, origin.lng - pad, origin.lat + pad, origin.lng + pad);
+    places = await fetchPlaceNames(
+      origin.lat - pad, origin.lng - pad, origin.lat + pad, origin.lng + pad,
+      (attempt, waitMs) => setStatus(`Name service is busy — retrying in ${Math.round(waitMs / 1000)}s…`)
+    );
   } catch { /* handled by fallback below */ }
 
   if (places.length) setStatus(`Found ${places.length} real neighbourhoods. Carving up the map…`);

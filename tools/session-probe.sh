@@ -7,6 +7,12 @@
 #
 # Finds the Safari tab showing the game by URL, in any window, so the player's
 # window can be left alone and in front.
+# Which session to talk to. Default is the published game — the one the player
+# is actually using — so a local dev tab open at the same time is never hit by
+# accident. That mix-up silently split a test across two tabs once.
+TARGET="${PLUGSIM_TARGET:-github.io/plugsim}"
+[ "$1" = "--local" ] && { TARGET="localhost:5173"; shift; }
+
 MODE="${1:-report}"
 case "$MODE" in
   report) JS="window.plugsimDiag ? window.plugsimDiag.report() : 'diagnostics not loaded'" ;;
@@ -14,22 +20,23 @@ case "$MODE" in
   *)      JS="$MODE" ;;
 esac
 
-python3 - "$JS" <<'PY'
+python3 - "$JS" "$TARGET" <<'PY'
 import subprocess, sys
-js = sys.argv[1]
+js, target = sys.argv[1], sys.argv[2]
 esc = js.replace('\\', '\\\\').replace('"', '\\"')
 script = f'''
 tell application "Safari"
   repeat with w in windows
     repeat with t in tabs of w
-      if (URL of t as string) contains "plugsim" or (URL of t as string) contains "localhost:5173" then
+      if (URL of t as string) contains "TARGET_PLACEHOLDER" then
         return (do JavaScript "{esc}" in t)
       end if
     end repeat
   end repeat
-  return "no game tab open"
+  return "no tab matching TARGET_PLACEHOLDER"
 end tell
 '''
+script = script.replace('TARGET_PLACEHOLDER', target)
 r = subprocess.run(['osascript', '-e', script], capture_output=True, text=True)
 sys.stdout.write(r.stdout or r.stderr)
 PY

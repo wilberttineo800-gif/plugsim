@@ -3,7 +3,10 @@
 import { GAME_MINUTES_PER_REAL_SECOND, LOTS, SPEEDS, TICK_MS } from './game/constants.js';
 import { generateDistricts, districtAt } from './game/districts.js';
 import { generateCrews, applyInitialControl, rehydrateCrews } from './game/crews.js';
-import { fetchPlaceNames, geocode, reverseGeocode, fetchRoute, fetchBuildings, fetchCountryCode } from './game/geo.js';
+import {
+  fetchPlaceNames, geocode, reverseGeocode, fetchRoute, fetchBuildings, fetchCountryCode,
+  overpassCoolingDown, overpassCooldownSeconds,
+} from './game/geo.js';
 import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
@@ -137,9 +140,23 @@ if (hasSave()) {
   });
 }
 
+// Once a game is running the start screen is gone; make sure nothing in it can
+// still fire.
+function sealStartScreen() {
+  startEl.querySelectorAll('button, input').forEach((el) => { el.disabled = true; });
+  resultsEl.innerHTML = '';
+}
+
 // --- Game start -------------------------------------------------------------
 
+let starting = false;
+
 async function startNewGame(origin, cityName) {
+  // A second start would replace the state and then fail on the map, leaving a
+  // half-built session with the player's property gone. One double-tap on a
+  // search result was enough.
+  if (starting || game.state) return;
+  starting = true;
   setStatus('Reading the streets around you…');
   document.querySelectorAll('.start__actions button, .start__searchrow button')
     .forEach((b) => { b.disabled = true; });
@@ -182,6 +199,7 @@ async function startNewGame(origin, cityName) {
     setStatus('The building survey is rate-limited right now. Give it a minute and try again.', true);
     document.querySelectorAll('.start__actions button, .start__searchrow button')
       .forEach((b) => { b.disabled = false; });
+    starting = false;
     return;
   }
   setStatus(`${state.lots.length} buildings surveyed. Opening up…`);
@@ -196,6 +214,7 @@ async function startNewGame(origin, cityName) {
 }
 
 function bootGame(state) {
+  if (game.map) return; // already running; a second boot would corrupt it
   rehydrateCrews(state);
   game.state = state;
   startEl.hidden = true;
@@ -239,6 +258,7 @@ function bootGame(state) {
 
   if (!Object.keys(state.priceHistory || {}).length) recordPrices(state);
   game.ui = new GameUI(game);
+  sealStartScreen();
   game.ui.show();
   game.buildingLayer.sync(state);
   game.courierLayer.sync(state);
@@ -270,6 +290,13 @@ function scheduleTileSweep() {
 async function runTileSweep() {
   if (sweeping || !game.state) return;
   if (game.map.getZoom() < LOTS.minZoomForFetch) return;
+  if (overpassCoolingDown()) {
+    // The survey service is refusing; come back when it has recovered rather
+    // than adding to the pile.
+    game.ui.setLoading(`Survey office is swamped — back in ${overpassCooldownSeconds()}s`);
+    setTimeout(() => { game.ui.setLoading(null); scheduleTileSweep(); }, 5000);
+    return;
+  }
 
   const b = game.map.getBounds();
   const keys = tilesForBounds(b.getSouth(), b.getWest(), b.getNorth(), b.getEast());

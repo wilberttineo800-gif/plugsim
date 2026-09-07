@@ -269,6 +269,18 @@ export async function fetchPlaceNames(south, west, north, east) {
  * Every building footprint in the play area, with its tags. This is what makes
  * the properties real — actual traced outlines and actual street addresses.
  */
+// Set when Overpass tells us it is overloaded, so the caller can stop asking
+// for a while instead of hammering a service that is already refusing.
+let overpassCooldownUntil = 0;
+
+export function overpassCoolingDown() {
+  return Date.now() < overpassCooldownUntil;
+}
+
+export function overpassCooldownSeconds() {
+  return Math.max(0, Math.ceil((overpassCooldownUntil - Date.now()) / 1000));
+}
+
 export async function fetchBuildings(south, west, north, east, cap = 2600, onRetry) {
   const bbox = `${south},${west},${north},${east}`;
   const query =
@@ -303,6 +315,11 @@ export async function fetchBuildings(south, west, north, east, cap = 2600, onRet
       return ways;
     } catch (err) {
       lastError = err;
+      // 429 is "too many requests", 504 is the gateway giving up under load.
+      // Both mean back off rather than keep asking.
+      if (/\b(429|504|503)\b/.test(err.message || '')) {
+        overpassCooldownUntil = Date.now() + 90000;
+      }
       console.warn('[geo] building fetch failed at', endpoint, err.message);
     }
   }

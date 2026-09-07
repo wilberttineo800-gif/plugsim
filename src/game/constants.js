@@ -3,11 +3,29 @@
 // game can be re-tuned without touching simulation code.
 // ---------------------------------------------------------------------------
 
-// Time: the sim advances in game-minutes. At 1x, one real second = 2 game
-// minutes, so a full game day takes 12 real minutes.
-export const GAME_MINUTES_PER_REAL_SECOND = 2;
+// Time. The world advances in game-minutes, and 1x is meant to read as real:
+// a courier crossing three kilometres of city should take about twenty seconds
+// on screen, not four. At 2 game-minutes per real second it took 4.7s, which is
+// why traffic looked like it was flying at every speed.
+//
+//   1x   a game day in 48 real minutes   · a 3 km drive in ~19s
+//   3x   16 minutes                      · ~6s
+//   10x  5 minutes                       · ~2s
+//   15x  3 minutes                       · ~1s
+//   30x  1.6 minutes                     · under a second, for long hauls
+export const GAME_MINUTES_PER_REAL_SECOND = 0.5;
 export const TICK_MS = 100;
-export const SPEEDS = [0, 1, 3, 10, 15];
+export const SPEEDS = [0, 1, 3, 10, 15, 30];
+
+/** What each speed means in plain terms, for the button tooltips. */
+export const SPEED_NOTES = {
+  0: 'Paused',
+  1: 'Real pace — a day takes 48 minutes',
+  3: 'A day in 16 minutes',
+  10: 'A day in 5 minutes',
+  15: 'A day in 3 minutes',
+  30: 'A day in 1.6 minutes',
+};
 
 // Enough for a minimum viable chain — one grow, one lab, one courier — with a
 // thin buffer for the first few cycles of supplies. Anything more is earned.

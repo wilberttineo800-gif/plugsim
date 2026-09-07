@@ -4,7 +4,7 @@
 
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
-  PRODUCTS, PRODUCT_IDS, SPEEDS,
+  PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
@@ -250,7 +250,9 @@ export class GameUI {
     this.dom.flow.style.color = flow >= 0 ? 'var(--good)' : 'var(--bad)';
 
     for (const b of this.dom.speedGroup.children) {
-      b.classList.toggle('is-on', Number(b.dataset.speed) === s.speedIndex);
+      const idx = Number(b.dataset.speed);
+      b.classList.toggle('is-on', idx === s.speedIndex);
+      if (!b.title) b.title = SPEED_NOTES[SPEEDS[idx]] || '';
     }
   }
 

@@ -16,6 +16,7 @@ import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, ping
 import { GameUI } from './ui/ui.js';
 import { toast } from './ui/toast.js';
 import { esc } from './ui/format.js';
+import * as diag from './game/diagnostics.js';
 
 const SURPRISE_CITIES = [
   { name: 'Detroit, Michigan', lat: 42.3314, lng: -83.0458 },
@@ -29,6 +30,17 @@ const SURPRISE_CITIES = [
   { name: 'Rotterdam, Netherlands', lat: 51.9244, lng: 4.4777 },
   { name: 'Baltimore, Maryland', lat: 39.2904, lng: -76.6122 },
 ];
+
+// Record faults from the very first line, with enough game state attached to
+// make a report actionable.
+diag.install(() => {
+  const s = game.state;
+  if (!s) return 'no game running';
+  return `day ${Math.floor(s.minutes / 1440) + 1} · ${s.cityName} · ` +
+    `${s.buildings.length} buildings · ${s.couriers.length} couriers · ` +
+    `${(s.lots || []).length} lots · clean $${Math.round(s.cash.clean)} · ` +
+    `speed ${s.speedIndex} · sel ${s.selection ? s.selection.kind : 'none'}`;
+});
 
 const game = {
   state: null,
@@ -407,6 +419,7 @@ game.toggleHelp = (open) => {
 };
 
 game.buyLot = (lotId) => {
+  diag.trace('buy lot');
   const r = A.buyLot(game.state, lotId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(`${r.lot.name} is yours. Now decide what runs there.`, 'good', 4200);
@@ -415,6 +428,7 @@ game.buyLot = (lotId) => {
 };
 
 game.sellLot = (lotId) => {
+  diag.trace('sell lot');
   const r = A.sellLot(game.state, lotId);
   if (!r.ok) return toast(r.error, 'bad');
   const d = r.pnl ? (r.pnl.delta >= 0 ? `+${Math.round(r.pnl.delta).toLocaleString()}` : `${Math.round(r.pnl.delta).toLocaleString()}`) : '';
@@ -426,6 +440,7 @@ game.sellLot = (lotId) => {
 };
 
 game.rentOut = (lotId) => {
+  diag.trace('rent out');
   const r = A.rentOut(game.state, lotId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(`Let out at ${r.rent.toLocaleString()}/day, clean.`, 'good');
@@ -441,6 +456,7 @@ game.endTenancy = (lotId) => {
 };
 
 game.developLot = (lotId, typeId) => {
+  diag.trace('develop lot');
   const r = A.developLot(game.state, lotId, typeId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(`${r.building.name} is up and running.`, 'good');
@@ -455,6 +471,7 @@ game.beginPlacement = () => {};
 game.cancelPlacement = () => { game.ui.setPlacing(null); };
 
 game.hireCourier = (typeId) => {
+  diag.trace('hire courier');
   const r = A.hireCourier(game.state, typeId);
   if (!r.ok) return toast(r.error, 'bad');
   game.ui.renderRail();
@@ -469,6 +486,7 @@ game.fireCourier = (id) => {
 };
 
 game.upgradeBuilding = (id, upgradeId) => {
+  diag.trace('upgrade');
   const r = A.upgradeBuilding(game.state, id, upgradeId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(`${r.upgrade.name} installed.`, 'good', 2600);
@@ -505,6 +523,7 @@ game.washWithFixer = () => {
 };
 
 game.muscleIn = (districtId) => {
+  diag.trace('muscle in');
   const r = A.muscleIn(game.state, districtId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(
@@ -518,6 +537,7 @@ game.muscleIn = (districtId) => {
 };
 
 game.editRoute = (routeId, changes) => {
+  diag.trace('edit route');
   const r = A.editRoute(game.state, routeId, changes, async (route) => {
     const from = buildingById(game.state, route.fromId);
     const to = route.toType === 'district'
@@ -553,6 +573,18 @@ game.adminSkipDay = () => {
   game.ui.render();
   toast('Skipped a day.', 'info');
 };
+game.copyDiagnostics = async () => {
+  const text = diag.report();
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('Diagnostics copied — paste it in a message.', 'good', 4000);
+  } catch {
+    // Clipboard is blocked outside a secure context or without permission.
+    console.log(text);
+    toast('Clipboard blocked. The report is in the browser console.', 'warn', 5000);
+  }
+};
+
 game.adminWipe = () => {
   // Stop the autosave first, or it writes the old state straight back.
   game.saveDisabled = true;
@@ -575,6 +607,7 @@ game.removeRoute = (id) => {
 };
 
 game.createRouteFromDraft = async (draft) => {
+  diag.trace('create route');
   if (!draft.fromId) return toast('Pick where the product is coming from.', 'bad');
   if (!draft.toKey) return toast('Pick a drop-off.', 'bad');
   const [toType, toId] = draft.toKey.split(':');
@@ -618,3 +651,4 @@ function wireKeys() {
 
 // Expose for debugging from the console.
 window.plugsim = game;
+window.plugsimDiag = diag;

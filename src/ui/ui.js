@@ -13,6 +13,7 @@ import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
 import { crewById } from '../game/crews.js';
+import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
 import { unlockStatus, regionNote } from '../game/progression.js';
 import { availableUpgrades, describeEffects, effectsFor, upkeepFor } from '../game/upgrades.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
@@ -204,6 +205,8 @@ export class GameUI {
       case 'admin-day': g.adminSkipDay(); break;
       case 'admin-wipe': g.adminWipe(); break;
       case 'admin-block': g.adminBlock(id); break;
+      case 'diag-copy': g.copyDiagnostics(); break;
+      case 'diag-clear': diagnosticsClear(); this.renderRail(true); break;
       case 'create-route': g.createRouteFromDraft(this.routeDraft); break;
       case 'route-from':
         this.routeDraft.fromId = id;
@@ -790,6 +793,7 @@ export class GameUI {
   /** Testing controls. Not reachable through ordinary play. */
   tabAdmin() {
     const s = this.game.state;
+    const diagSummary = diagnosticsSummary();
     const blocks = [...s.districts]
       .sort((a, b) => (b.rivalControl || 0) - (a.rivalControl || 0))
       .slice(0, 8)
@@ -815,6 +819,23 @@ export class GameUI {
       <div class="btnrow">
         <button class="ghostbtn" data-action="admin-day">Skip a day</button>
         <button class="ghostbtn" data-action="admin-wipe">Wipe save</button>
+      </div>
+    </div>
+    <div class="sect">
+      <div class="sect__title"><span>Diagnostics</span>
+        <span class="${diagSummary.faults ? 'bad' : 'good'}">${diagSummary.faults} fault${diagSummary.faults === 1 ? '' : 's'}</span></div>
+      <p class="card__blurb" style="margin:0 0 8px">
+        This session has been recording its own errors. Copy the report and send
+        it over if something goes wrong — it carries what you were doing at the time.
+      </p>
+      <div class="btnrow">
+        <button class="primarybtn" data-action="diag-copy">Copy report</button>
+        <button class="ghostbtn" data-action="diag-clear">Clear</button>
+      </div>
+      <div class="rows" style="margin-top:9px">
+        <div class="row"><span>Session</span><span>${esc(diagSummary.session)}</span></div>
+        <div class="row"><span>Open for</span><span>${diagSummary.minutesOpen} min</span></div>
+        <div class="row"><span>Events recorded</span><span>${diagSummary.events}</span></div>
       </div>
     </div>
     <div class="sect">

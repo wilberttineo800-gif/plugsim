@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Plugsim — Supply Line</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="src/styles.css">
+</head>
+<body>
+
+<div id="map"></div>
+
+<!-- ── Top bar ──────────────────────────────────────────────────────────── -->
+<header class="hud" id="hud" hidden>
+  <div class="hud__block hud__brand">
+    <div class="hud__city" id="hudCity">—</div>
+    <div class="hud__clock"><span id="hudDay">Day 1</span><span class="dot">·</span><span id="hudTime">06:00</span></div>
+  </div>
+
+  <div class="hud__block hud__cash">
+    <div class="cash">
+      <span class="cash__label">Clean</span>
+      <span class="cash__value cash__value--clean" id="hudClean">$0</span>
+    </div>
+    <div class="cash">
+      <span class="cash__label">Street</span>
+      <span class="cash__value cash__value--dirty" id="hudDirty">$0</span>
+    </div>
+    <div class="cash">
+      <span class="cash__label">Net / day</span>
+      <span class="cash__value" id="hudFlow">—</span>
+    </div>
+  </div>
+
+  <div class="hud__block hud__speed" id="speedGroup">
+    <button class="spd" data-speed="0" title="Pause (space)">❙❙</button>
+    <button class="spd is-on" data-speed="1">1×</button>
+    <button class="spd" data-speed="2">3×</button>
+    <button class="spd" data-speed="3">10×</button>
+  </div>
+
+  <div class="hud__block hud__tools">
+    <label class="overlay-pick">
+      <span class="cash__label">Map</span>
+      <select id="overlaySelect"></select>
+    </label>
+    <button class="ghostbtn" id="btnSave" title="Save (S)">Save</button>
+    <button class="ghostbtn" id="btnHelp" title="Help (?)">?</button>
+  </div>
+</header>
+
+<!-- ── Left rail ────────────────────────────────────────────────────────── -->
+<aside class="rail" id="rail" hidden>
+  <button class="sheet__grip" id="railGrip" aria-label="Close panel"></button>
+  <nav class="rail__tabs" id="railTabs">
+    <button data-tab="build" class="is-on">Build</button>
+    <button data-tab="blocks">Blocks</button>
+    <button data-tab="fleet">Fleet</button>
+    <button data-tab="routes">Routes</button>
+    <button data-tab="ledger">Ledger</button>
+  </nav>
+  <div class="rail__body" id="railBody"></div>
+</aside>
+
+<!-- ── Right inspector ──────────────────────────────────────────────────── -->
+<aside class="inspector" id="inspector" hidden>
+  <button class="sheet__grip" id="inspectorGrip" aria-label="Close panel"></button>
+  <button class="inspector__close" id="inspectorClose" aria-label="Close">✕</button>
+  <div id="inspectorBody"></div>
+</aside>
+
+<!-- ── Event ticker ─────────────────────────────────────────────────────── -->
+<footer class="ticker" id="ticker" hidden></footer>
+
+<!-- ── Phone navigation ─────────────────────────────────────────────────── -->
+<nav class="mobilenav" id="mobileNav" hidden>
+  <button data-mtab="map" class="is-on">Map</button>
+  <button data-mtab="build">Build</button>
+  <button data-mtab="blocks">Blocks</button>
+  <button data-mtab="fleet">Fleet</button>
+  <button data-mtab="routes">Routes</button>
+  <button data-mtab="ledger">Ledger</button>
+</nav>
+
+<div id="toasts"></div>
+
+<!-- ── Start screen ─────────────────────────────────────────────────────── -->
+<div class="start" id="startScreen">
+  <div class="start__panel">
+    <div class="start__mark">
+      <span class="start__kicker">Supply-chain crime sim</span>
+      <h1>PLUGSIM</h1>
+      <p class="start__tag">Grow it. Cure it. Move it. Sell it before the block gets hot.</p>
+    </div>
+
+    <div class="start__field">
+      <label for="citySearch">Where are you setting up?</label>
+      <div class="start__searchrow">
+        <input id="citySearch" type="text" placeholder="Any city on Earth — Detroit, Lagos, Osaka…" autocomplete="off">
+        <button class="primarybtn" id="citySearchBtn">Search</button>
+      </div>
+      <div class="start__results" id="cityResults"></div>
+      <p class="start__hint">Real map, real streets, real distances. Districts are generated from the actual neighbourhoods around you.</p>
+    </div>
+
+    <div class="start__actions">
+      <button class="ghostbtn" id="btnLocate">Use my location</button>
+      <button class="ghostbtn" id="btnRandomCity">Surprise me</button>
+      <button class="ghostbtn" id="btnContinue" hidden>Continue saved run</button>
+    </div>
+
+    <div class="start__status" id="startStatus"></div>
+  </div>
+</div>
+
+<!-- ── Help ─────────────────────────────────────────────────────────────── -->
+<div class="modal" id="helpModal" hidden>
+  <div class="modal__panel">
+    <button class="inspector__close" id="helpClose" aria-label="Close">✕</button>
+    <h2>How the chain works</h2>
+    <ol class="chain">
+      <li><b>Grow House / Fruiting Room</b> — runs cycles on its own and fills up with <i>raw</i> harvest. Raw sells to nobody.</li>
+      <li><b>Processing Lab</b> — turns raw into packaged product. This is usually your bottleneck.</li>
+      <li><b>Stash House</b> — optional buffer near your customers, so couriers drive shorter legs.</li>
+      <li><b>Routes + couriers</b> — nothing moves by itself. Draw a route, put a courier on it, and they'll run it forever.</li>
+      <li><b>Districts</b> — drop packs into a block and they sell down over game-hours at the street price.</li>
+      <li><b>Legit Front</b> — street cash can pay supplies and wages, but only <i>clean</i> money buys property. Fronts wash it for a cut.</li>
+    </ol>
+    <h3>Somebody's already here</h3>
+    <ul class="chain">
+      <li><b>Rival crews</b> hold most of the good blocks and serve those customers first, so a block at 70% grip barely buys from you at all.</li>
+      <li><b>Selling steadily</b> on their turf wears their grip down for nothing but time — your reputation is the weapon.</li>
+      <li><b>Muscling in</b> is faster and costs clean money. Your rep on the block sets the odds, and losing costs you half the money anyway.</li>
+      <li>Drop product on turf they still hold and they'll <b>tax the load</b>.</li>
+    </ul>
+
+    <h3>What'll kill you</h3>
+    <ul class="chain">
+      <li><b>Police pressure</b> builds where you sell and where you build — there's no meter for it, so watch the radio. When a block gets named, take it seriously: hot blocks get raided and couriers get pulled over.</li>
+      <li><b>Contested blocks</b> run hot on their own. Two crews on one corner is what brings police.</li>
+      <li><b>Flooding a block</b> tanks the price. Spread the load across districts.</li>
+      <li><b>Payroll</b> is due every game-day. Miss it and sites stall until product moves.</li>
+    </ul>
+    <h3>Keys</h3>
+    <p class="keys"><kbd>Space</kbd> pause · <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> speed · <kbd>S</kbd> save · <kbd>Esc</kbd> cancel · <kbd>?</kbd> this panel</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script type="module" src="src/main.js"></script>
+</body>
+</html>

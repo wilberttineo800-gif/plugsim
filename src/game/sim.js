@@ -65,8 +65,25 @@ export function sizeCapacity(b) {
 
 // ---------------------------------------------------------------------------
 
+const MAX_STEP_HOURS = 0.25;
+
+/**
+ * Advance the world. Large jumps are sliced: a courier only advances one phase
+ * per tick, probabilities are computed per-tick, and capacity is checked at the
+ * top of a tick — so a single 24-hour step would stall logistics, overshoot
+ * storage and turn per-hour risks into certainties.
+ */
 export function stepSim(state, dtHours, hooks = {}) {
   if (dtHours <= 0) return;
+  let left = dtHours;
+  while (left > 0) {
+    const slice = Math.min(left, MAX_STEP_HOURS);
+    stepOnce(state, slice, hooks);
+    left -= slice;
+  }
+}
+
+function stepOnce(state, dtHours, hooks = {}) {
 
   const prevDay = Math.floor(state.minutes / 1440);
   state.minutes += dtHours * 60;
@@ -209,8 +226,15 @@ function stepCouriers(state, dt, hooks) {
       case 'idle':
       case 'loading': {
         c.position = source.latlng;
-        const loaded = loadCargo(state, c, def, route, source);
-        if (loaded > 0) {
+        // Nothing to pick up yet — wait at the source rather than leaving empty.
+        if (!c.dwellLeft) {
+          const loaded = loadCargo(state, c, def, route, source);
+          if (loaded <= 0) break;
+          c.dwellLeft = (def.loadMinutes || 0) / 60;
+        }
+        c.dwellLeft -= dt;
+        if (c.dwellLeft <= 0) {
+          c.dwellLeft = 0;
           c.phase = 'outbound';
           c.progress = 0;
         }
@@ -221,6 +245,16 @@ function stepCouriers(state, dt, hooks) {
         c.position = pointAlongPath(route.points, clamp01(c.progress));
         maybeGetStopped(state, c, def, dt, hooks);
         if (c.progress >= 1) {
+          c.phase = 'unloading';
+          c.dwellLeft = (def.unloadMinutes || 0) / 60;
+        }
+        break;
+      }
+      case 'unloading': {
+        c.position = pointAlongPath(route.points, 1);
+        c.dwellLeft -= dt;
+        if (c.dwellLeft <= 0) {
+          c.dwellLeft = 0;
           unloadCargo(state, c, route, hooks);
           c.phase = 'returning';
           c.progress = 0;
@@ -248,9 +282,12 @@ function loadCargo(state, c, def, route, source) {
   const qualityPool = route.cargo === 'raw' ? source.rawQuality : source.packQuality;
   const wanted = route.product === 'any' ? PRODUCT_IDS : [route.product];
 
-  let space = def.capacity;
+  // Whatever is already on board still takes up room — without this,
+  // rerouting a laden courier let it load a second full payload.
+  const aboard = totalPacks(c.cargo);
+  let space = Math.max(0, def.capacity - aboard);
   let loaded = 0;
-  c.cargoKind = route.cargo;
+  if (aboard <= 0.0001) c.cargoKind = route.cargo;
 
   for (const pid of wanted) {
     if (space <= 0) break;
@@ -272,6 +309,16 @@ function unloadCargo(state, c, route, hooks = {}) {
   if (route.toType === 'district') {
     const d = districtById(state, route.toId);
     if (!d) return;
+    // Raw harvest has no street value — it goes back rather than being sold
+    // at packaged prices.
+    if (c.cargoKind === 'raw') {
+      const source = buildingById(state, route.fromId);
+      for (const pid of PRODUCT_IDS) {
+        if (source) source.raw[pid] += c.cargo[pid];
+        c.cargo[pid] = 0;
+      }
+      return;
+    }
     // Whoever holds the block gets their cut before the customers see any of it.
     maybeShakedown(state, c, d, hooks);
     for (const pid of PRODUCT_IDS) {
@@ -372,14 +419,31 @@ function stepStorefronts(state, dt) {
       const move = Math.min(have, budget, room);
       if (move <= 0.0001) continue;
 
-      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], move, b.packQuality[pid]);
-      d.supply[pid] += move;
+      // Selling off your own premises is still selling on someone's block.
+      const tribute = crewCut(state, d);
+      const taken = move * tribute;
+      const reaching = move - taken;
+      if (taken > 0.01) {
+        state.stats.tributePaid = (state.stats.tributePaid || 0) + taken;
+      }
+
+      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], reaching, b.packQuality[pid]);
+      d.supply[pid] += reaching;
       b.packs[pid] -= move;
-      b.soldFromHere = (b.soldFromHere || 0) + move;
+      b.soldToday = (b.soldToday || 0) + move;
       budget -= move;
+      d.discovered = true;
     }
-    d.discovered = true;
   }
+}
+
+/** The share a crew skims off anything moved on turf they hold. */
+function crewCut(state, district) {
+  const control = district.rivalControl || 0;
+  if (control < RIVALS.shakedownFloor) return 0;
+  const crew = (state.crews || []).find((c) => c.id === district.crewId);
+  if (!crew) return 0;
+  return Math.min(0.6, control * crew.aggression * RIVALS.tributeRate);
 }
 
 // --- Street sales -----------------------------------------------------------
@@ -667,11 +731,26 @@ function stepEnforcement(state, dt, hooks = {}) {
 }
 
 /**
- * One price sample per game-day, city-wide, weighted by how much each block
- * actually absorbs — so the chart reflects what you could really sell at, not
- * an average over blocks nobody buys from.
+ * A price reading for the whole city, weighted by how much each block actually
+ * absorbs, so it reflects what you could really sell at rather than an average
+ * over blocks nobody buys from. Exported so the UI compares like with like.
  */
-const PRICE_SAMPLE_HOURS = 6;
+export function cityPrice(state, pid) {
+  let weighted = 0;
+  let weight = 0;
+  let best = 0;
+  for (const d of state.districts) {
+    const w = d.demandPerHour[pid] || 0;
+    if (w <= 0) continue;
+    const price = streetPrice(d, pid);
+    weighted += price * w;
+    weight += w;
+    if (price > best) best = price;
+  }
+  return { avg: weight ? weighted / weight : 0, best };
+}
+
+export const PRICE_SAMPLE_HOURS = 6;
 
 /** Sample on a fixed cadence rather than once a day, so a chart fills in fast. */
 function maybeRecordPrices(state) {
@@ -684,25 +763,15 @@ function maybeRecordPrices(state) {
 export function recordPrices(state) {
   state.priceHistory = state.priceHistory || {};
   for (const pid of PRODUCT_IDS) {
-    let weighted = 0;
-    let weight = 0;
-    let best = 0;
-    for (const d of state.districts) {
-      const w = d.demandPerHour[pid] || 0;
-      if (w <= 0) continue;
-      const price = streetPrice(d, pid);
-      weighted += price * w;
-      weight += w;
-      if (price > best) best = price;
-    }
+    const { avg, best } = cityPrice(state, pid);
     const series = state.priceHistory[pid] || (state.priceHistory[pid] = []);
     series.push({
       day: Math.floor(state.minutes / 1440) + 1,
       hour: Math.floor((state.minutes % 1440) / 60),
-      avg: weight ? weighted / weight : 0,
+      avg,
       best,
     });
-    if (series.length > 60) series.shift();
+    if (series.length > 120) series.shift();
   }
 }
 
@@ -716,6 +785,7 @@ function settleDay(state) {
   for (const b of state.buildings) {
     b.launderedToday = 0;
     b.earnedToday = 0;
+    b.soldToday = 0;
     if (!b.active) continue;
     upkeep += upkeepFor(b);
   }

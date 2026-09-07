@@ -6,6 +6,7 @@ import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, PRODUCTS, PRODUCT_IDS, SPEEDS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
+import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions } from '../game/actions.js';
 import {
@@ -186,6 +187,7 @@ export class GameUI {
       case 'fire': g.fireCourier(id); break;
       case 'upgrade': g.upgradeBuilding(id, type); break;
       case 'toggle': g.toggleBuilding(id); break;
+      case 'toggle-selling': g.toggleSelling(id); break;
       case 'sell-building': g.sellBuilding(id); break;
       case 'select-building': g.select('building', id); break;
       case 'select-district': g.select('district', id); break;
@@ -277,7 +279,7 @@ export class GameUI {
     for (const b of s.buildings) {
       if (!b.active) continue;
       const def = BUILDINGS[b.type];
-      costs += def.upkeepPerDay * (1 + (b.level - 1) * 0.35);
+      costs += upkeepFor(b);
       if (def.kind === 'front') income += this.legitTakings(b);
       if (def.kind === 'production') {
         costs += (def.supplyCostPerSlot * def.slots * 24) / def.cycleHours;
@@ -390,7 +392,7 @@ export class GameUI {
     });
     return (
       `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
-            aria-label="price over the last ${vals.length} days">
+            aria-label="price over the last ${Math.max(1, Math.round((vals.length - 1) * 6 / 24))} days">
         <polyline points="${pts.join(' ')}" fill="none" stroke="${esc(color)}"
           stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
         <circle cx="${W}" cy="${pts[pts.length - 1].split(',')[1]}" r="2.6" fill="${esc(color)}"/>
@@ -416,7 +418,8 @@ export class GameUI {
         .map((d) => ({ d, price: streetPrice(d, pid), rate: sellRatePerHour(d, pid) }))
         .sort((a, b) => b.price - a.price);
       const top = ranked.slice(0, 3);
-      const avg = ranked.reduce((n, r) => n + r.price, 0) / Math.max(1, ranked.length);
+      // Demand-weighted, matching how the history series is recorded.
+      const avg = cityPrice(s, pid).avg;
 
       // What you're holding, everywhere.
       const held = s.buildings.reduce((n, b) => n + (b.packs[pid] || 0), 0);
@@ -426,6 +429,9 @@ export class GameUI {
       const series = (s.priceHistory || {})[pid];
       const first = series && series.length > 1 ? series[0].avg : null;
       const move = first ? (avg - first) / first : 0;
+      const spanDays = series && series.length > 1
+        ? Math.max(1, Math.round((series.length - 1) * PRICE_SAMPLE_HOURS / 24))
+        : 0;
       const region = regionNote(s.countryCode, pid);
 
       return `
@@ -436,7 +442,7 @@ export class GameUI {
           </div>
           ${this.sparkline(series, 'avg', p.color)}
           <div class="rows" style="margin-top:6px">
-            <div class="row"><span>Since day one</span>
+            <div class="row"><span>Last ${spanDays} day${spanDays === 1 ? '' : 's'}</span>
               <span class="${move >= 0 ? 'good' : 'bad'}">${move >= 0 ? '+' : ''}${pct(move)}</span></div>
             <div class="row"><span>Best block</span>
               <span>${top[0] ? `${esc(top[0].d.name)} · ${money(top[0].price)}` : '—'}</span></div>
@@ -825,7 +831,7 @@ export class GameUI {
     const clock = clockOf(s.minutes);
     const room = fixerRemaining(s);
     const washable = Math.min(room, s.cash.dirty);
-    const hasFront = s.buildings.some((b) => b.type === 'front' && b.active);
+    const hasFront = s.buildings.some((b) => b.kind === 'front' && b.active);
 
     const top = [...s.districts]
       .filter((d) => d.revenueTotal > 0)
@@ -1216,7 +1222,26 @@ export class GameUI {
     } else if (def.kind === 'storage') {
       const cap = def.capacity * effectsFor(b).capacityMult * sizeCapacity(b);
       const held = PRODUCT_IDS.reduce((n, p) => n + b.packs[p], 0);
+      const selling = b.selling !== false;
+      const rate = (def.sellsPerHour || 0) * effectsFor(b).yieldMult * Math.sqrt(sizeCapacity(b));
       body =
+        (def.sellsPerHour ? `<div class="sect">
+          <div class="sect__title"><span>Street sales</span>
+            <span class="${selling ? 'good' : 'bad'}">${selling ? 'serving the block' : 'holding only'}</span></div>
+          <div class="rows">
+            <div class="row"><span>Sells up to</span><span>${units(rate)}/h</span></div>
+            <div class="row"><span>Moved today</span><span>${units(b.soldToday || 0)} packs</span></div>
+          </div>
+          <div class="btnrow">
+            <button class="ghostbtn" data-action="toggle-selling" data-id="${b.id}">
+              ${selling ? 'Stop selling here' : 'Start selling here'}
+            </button>
+          </div>
+          <p class="card__blurb" style="margin:6px 0 0">
+            Sells straight onto ${esc(d ? d.name : 'this block')} without a courier.
+            Whoever holds the block still takes their cut.
+          </p>
+        </div>` : '') +
         `<div class="sect">
           <div class="sect__title"><span>Stored</span><span>${units(held)} / ${units(cap)}</span></div>
           <div class="meter"><i style="width:${Math.min(100, (held / cap) * 100)}%"></i></div>

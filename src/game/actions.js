@@ -403,24 +403,62 @@ export function editRoute(state, routeId, changes, refetch) {
   if (!route) return { ok: false, error: 'Route is gone.' };
 
   const nextTo = changes.toKey ? changes.toKey.split(':') : null;
-  const movedEnd = nextTo && (nextTo[0] !== route.toType || nextTo[1] !== route.toId);
-  const movedStart = changes.fromId && changes.fromId !== route.fromId;
+  const nextFrom = changes.fromId || route.fromId;
+  const nextToType = nextTo ? nextTo[0] : route.toType;
+  const nextToId = nextTo ? nextTo[1] : route.toId;
 
-  if (changes.cargo) route.cargo = changes.cargo;
-  if (changes.product) route.product = changes.product;
-  if (movedStart) route.fromId = changes.fromId;
-  if (movedEnd) { route.toType = nextTo[0]; route.toId = nextTo[1]; }
+  // A route from a building to itself spins at tick rate and exposes your own
+  // stock to seizure on a delivery that goes nowhere.
+  if (nextToType === 'building' && nextFrom === nextToId) {
+    return { ok: false, error: 'A route can’t start and end at the same place.' };
+  }
 
+  const movedEnd = nextToType !== route.toType || nextToId !== route.toId;
+  const movedStart = nextFrom !== route.fromId;
+  // Changing what a courier is carrying mid-run would convert whatever is
+  // aboard into the new kind for free, skipping the lab entirely.
+  const changedCargo = changes.cargo && changes.cargo !== route.cargo;
+  const changedProduct = changes.product && changes.product !== route.product;
+
+  if (changedCargo) route.cargo = changes.cargo;
+  if (changedProduct) route.product = changes.product;
+  if (movedStart) route.fromId = nextFrom;
+  if (movedEnd) { route.toType = nextToType; route.toId = nextToId; }
+
+  if (movedStart || movedEnd || changedCargo || changedProduct) {
+    // Anyone mid-run goes back to the source and starts the new job clean,
+    // taking whatever they were carrying with them.
+    for (const c of state.couriers) {
+      if (c.routeId !== route.id) continue;
+      c.phase = 'loading';
+      c.progress = 0;
+      c.dwellLeft = 0;
+      if (changedCargo) {
+        // Put it back rather than letting it change type in transit.
+        returnCargoToSource(state, c, route);
+      }
+    }
+  }
   if (movedStart || movedEnd) {
-    // Geometry has to be refetched, and anyone on it starts the new run fresh.
     route.points = null;
     route.km = null;
-    for (const c of state.couriers) {
-      if (c.routeId === route.id) { c.phase = 'loading'; c.progress = 0; c.dwellLeft = 0; }
-    }
     refetch?.(route);
   }
-  return { ok: true, route, rerouted: movedStart || movedEnd };
+  return { ok: true, route, rerouted: movedStart || movedEnd, cargoReset: changedCargo };
+}
+
+/** Hand a courier's load back to its pickup point, as the kind it actually is. */
+function returnCargoToSource(state, courier, route) {
+  const source = buildingById(state, route.fromId);
+  const pool = source
+    ? (courier.cargoKind === 'raw' ? source.raw : source.packs)
+    : null;
+  for (const pid of Object.keys(courier.cargo)) {
+    const amount = courier.cargo[pid];
+    if (amount <= 0) continue;
+    if (pool) pool[pid] += amount;
+    courier.cargo[pid] = 0;
+  }
 }
 
 // --- Admin -----------------------------------------------------------------
@@ -452,10 +490,10 @@ export function adminCoolOff(state) {
 }
 
 export function adminUnlockAll(state) {
-  state.unlocked = BUILDING_IDS.slice();
-  state.adminUnlockAll = true;
-  logEvent(state, '[admin] every operation unlocked.', 'info');
-  return { ok: true };
+  state.adminUnlockAll = !state.adminUnlockAll;
+  if (state.adminUnlockAll) state.unlocked = BUILDING_IDS.slice();
+  logEvent(state, `[admin] unlock-all ${state.adminUnlockAll ? 'on' : 'off'}.`, 'info');
+  return { ok: true, on: state.adminUnlockAll };
 }
 
 /** Describe a route in the words the player thinks in. */

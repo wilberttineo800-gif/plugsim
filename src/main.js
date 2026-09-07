@@ -234,7 +234,9 @@ function bootGame(state) {
   startLoop();
   wireKeys();
   scheduleTileSweep();
-  setInterval(() => { if (game.state) saveGame(game.state); }, 60000);
+  game.autosave = setInterval(() => {
+    if (game.state && !game.saveDisabled) saveGame(game.state);
+  }, 60000);
 
   if (!state.buildings.length) {
     toast('Zoom in, click a building you like, and buy it. Press ? for the rundown.', 'info', 8000);
@@ -395,6 +397,7 @@ game.setSpeed = (i) => {
 };
 
 game.save = () => {
+  game.saveDisabled = false;
   if (saveGame(game.state)) toast('Saved.', 'good', 1800);
   else toast('Save failed — browser storage is full or blocked.', 'bad');
 };
@@ -538,7 +541,11 @@ game.adminCash = (amount) => {
   game.ui.render();
   toast(`Added ${amount.toLocaleString()} clean.`, 'info');
 };
-game.adminUnlock = () => { A.adminUnlockAll(game.state); game.ui.render(); toast('Everything unlocked.', 'info'); };
+game.adminUnlock = () => {
+  const r = A.adminUnlockAll(game.state);
+  game.ui.render();
+  toast(r.on ? 'Everything unlocked.' : 'Unlocks back to normal.', 'info');
+};
 game.adminCool = () => { A.adminCoolOff(game.state); game.ui.render(); toast('Heat cleared.', 'info'); };
 game.adminBlock = (id) => { A.adminBuyBlock(game.state, id); game.districtLayer.refresh(); game.ui.render(); toast('Block taken.', 'info'); };
 game.adminSkipDay = () => {
@@ -547,8 +554,18 @@ game.adminSkipDay = () => {
   toast('Skipped a day.', 'info');
 };
 game.adminWipe = () => {
+  // Stop the autosave first, or it writes the old state straight back.
+  game.saveDisabled = true;
   clearSave();
-  toast('Save wiped. Reload to start fresh.', 'warn', 5000);
+  toast('Save wiped and autosave paused. Reload to start fresh.', 'warn', 6000);
+};
+
+game.toggleSelling = (id) => {
+  const b = buildingById(game.state, id);
+  if (!b) return;
+  b.selling = b.selling === false;
+  toast(b.selling ? 'Now serving the block.' : 'Holding stock only.', 'info', 2600);
+  game.ui.render();
 };
 
 game.removeRoute = (id) => {

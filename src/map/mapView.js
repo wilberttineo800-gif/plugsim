@@ -38,8 +38,12 @@ export function createMap(elementId, center, zoom = 14) {
 
   L.tileLayer(TILE_URL, {
     attribution: TILE_ATTRIB,
-    subdomains: 'abcd',
     maxZoom: 19,
+    // OSM only serves 256px tiles, which get upscaled on a HiDPI screen and
+    // turn street names to mush. This pulls the next zoom level down and draws
+    // it at half size instead, so labels render at native pixel density.
+    detectRetina: true,
+    crossOrigin: true,
   }).addTo(map);
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);

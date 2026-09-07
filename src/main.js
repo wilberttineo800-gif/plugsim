@@ -486,6 +486,7 @@ function wireKeys() {
       case '1': game.setSpeed(1); break;
       case '2': game.setSpeed(2); break;
       case '3': game.setSpeed(3); break;
+      case '4': game.setSpeed(4); break;
       case 's': case 'S': game.save(); break;
       case '?': game.toggleHelp(document.getElementById('helpModal').hidden); break;
       case 'Escape':

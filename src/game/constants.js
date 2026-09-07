@@ -7,7 +7,7 @@
 // minutes, so a full game day takes 12 real minutes.
 export const GAME_MINUTES_PER_REAL_SECOND = 2;
 export const TICK_MS = 100;
-export const SPEEDS = [0, 1, 3, 10];
+export const SPEEDS = [0, 1, 3, 10, 15];
 
 // Enough for a minimum viable chain — one grow, one lab, one courier — with a
 // thin buffer for the first few cycles of supplies. Anything more is earned.

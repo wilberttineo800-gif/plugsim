@@ -73,9 +73,16 @@ button, input, select { font-family: inherit; color: inherit; }
 /* OSM ships only a light basemap, and every keyless dark provider now stamps
    a watermark across the tiles. Inverting the tile pane gives a proper night
    map for free; the hue-rotate puts water and greenery back to roughly the
-   right side of the wheel after the invert flips them. */
+   right side of the wheel after the invert flips them.
+
+   Contrast is pushed slightly *above* 1 rather than below: dimming the whole
+   pane softened the label edges and was most of why type looked grainy. */
 .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(.86) contrast(.92) saturate(.55);
+  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(1.12) saturate(.5);
+}
+.leaflet-tile {
+  /* Keep upscaled raster from being smeared by the browser's default filter. */
+  image-rendering: -webkit-optimize-contrast;
 }
 .leaflet-control-attribution {
   background: rgba(8, 11, 16, .78) !important;
@@ -731,7 +738,7 @@ kbd {
   .hud__city { font-size: 15px; max-width: 40vw; }
   .hud__clock { font-size: 10px; }
   .hud__speed { order: 4; padding: 4px 8px 6px; gap: 2px; }
-  .spd { min-width: 34px; padding: 7px 4px; font-size: 10px; }
+  .spd { min-width: 28px; padding: 7px 2px; font-size: 9.5px; }
 
   .hud__cash { flex: 1 1 auto; order: 3; justify-content: flex-start; gap: 14px; padding: 4px 10px 6px; }
   .cash { flex-direction: row; align-items: baseline; gap: 5px; }

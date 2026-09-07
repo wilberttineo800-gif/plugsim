@@ -4,13 +4,14 @@
 import {
   BUILDINGS,
   COURIERS,
+  DRIVERS,
   PRODUCT_IDS,
   START_CASH_CLEAN,
   START_CASH_DIRTY,
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 10;
+export const SAVE_VERSION = 12;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -31,6 +32,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     districts,
     crews,
     lots,
+    drivers: [],
     buildings: [],
     couriers: [],
     routes: [],
@@ -98,12 +100,14 @@ export function createBuilding(typeId, latlng, districtId) {
   };
 }
 
-export function createCourier(typeId, homeBuildingId) {
+/** A vehicle you own. It sits parked until a driver is put in it. */
+export function createVehicle(typeId, homeBuildingId) {
   const def = COURIERS[typeId];
   return {
-    id: nextId('c'),
+    id: nextId('v'),
     type: typeId,
-    name: `${def.name} ${idCounter}`,
+    name: def.name,
+    driverId: null,
     routeId: null,
     phase: 'idle', // idle | loading | outbound | unloading | returning
     progress: 0, // 0..1 along the current leg
@@ -112,6 +116,7 @@ export function createCourier(typeId, homeBuildingId) {
     cargoKind: 'packs',
     cargoQuality: emptyProductMap(0.5),
     homeBuildingId,
+    parkSlot: 0, // which bay it sits in, so parked vehicles don't stack up
     upgrades: [],
     tripsCompleted: 0,
     lastEvent: null,
@@ -134,7 +139,63 @@ export function createRoute({ fromId, toType, toId, cargo, product }) {
   };
 }
 
+const FIRST_NAMES = [
+  'Marcus', 'Dee', 'Rashid', 'Yolanda', 'Tavo', 'Kenji', 'Ana', 'Boris',
+  'Femi', 'Luz', 'Sasha', 'Omar', 'Priya', 'Vince', 'Nadia', 'Carlos',
+  'Ida', 'Tobias', 'Rea', 'Milo', 'Zara', 'Hakim', 'June', 'Petra',
+];
+const LAST_NAMES = [
+  'Reyes', 'Okafor', 'Novak', 'Duran', 'Sattar', 'Marsh', 'Vega', 'Lindqvist',
+  'Adeyemi', 'Kowal', 'Bright', 'Serrano', 'Halim', 'Boone', 'Ferro', 'Nash',
+];
+
+/** Someone willing to drive, and to keep quiet about it. */
+export function createDriver(index) {
+  const first = FIRST_NAMES[Math.floor(Math.random() * FIRST_NAMES.length)];
+  const last = LAST_NAMES[Math.floor(Math.random() * LAST_NAMES.length)];
+  return {
+    id: nextId('d'),
+    name: `${first} ${last}`,
+    // What they cost to keep, set when hired and fixed thereafter.
+    wagePerDay: Math.round(DRIVERS.baseWagePerDay * Math.pow(DRIVERS.wageGrowth, index)),
+    hiredAtMinute: 0,
+    vehicleId: null,
+  };
+}
+
+/** What the next driver will want up front. They get scarcer as you hire. */
+export function nextDriverHireFee(state) {
+  return Math.round(DRIVERS.baseHireFee * Math.pow(DRIVERS.hireGrowth, (state.drivers || []).length));
+}
+
+export function driverById(state, id) {
+  return (state.drivers || []).find((d) => d.id === id) || null;
+}
+
 // --- Lookups ----------------------------------------------------------------
+
+/**
+ * Where a parked vehicle actually sits. Bays are laid out on a small grid
+ * inside the car park's own footprint, so a yard with six vehicles in it looks
+ * like a yard with six vehicles in it rather than one marker stacked six deep.
+ */
+export function parkedPosition(state, vehicle) {
+  const home = buildingById(state, vehicle.homeBuildingId);
+  if (!home) return vehicle.position || null;
+  const lot = (state.lots || []).find((l) => l.id === home.lotId);
+  const centre = (lot && lot.center) || home.latlng;
+  if (!centre) return vehicle.position || null;
+
+  const slot = vehicle.parkSlot || 0;
+  const perRow = 4;
+  const gapM = 7;
+  // Centre the grid on the lot rather than growing off one corner.
+  const dx = ((slot % perRow) - (perRow - 1) / 2) * gapM;
+  const dy = (Math.floor(slot / perRow) - 0.5) * gapM;
+  const latPerM = 1 / 111320;
+  const lngPerM = 1 / (111320 * Math.max(0.2, Math.cos(centre.lat * Math.PI / 180)));
+  return { lat: centre.lat + dy * latPerM, lng: centre.lng + dx * lngPerM };
+}
 
 export function buildingById(state, id) {
   return state.buildings.find((b) => b.id === id) || null;
@@ -212,12 +273,37 @@ export function saveGame(state) {
   }
 }
 
+/**
+ * Bring an older save forward rather than throwing a run away. Only additive
+ * changes are handled — anything that would need real reshaping returns false
+ * and the save is dropped, which is the honest outcome.
+ */
+const MIGRATABLE_FROM = 11;
+
+function migrate(data) {
+  if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
+  if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 12) {
+    // Depots and parking arrived in 12. Existing vehicles keep the home they
+    // had, and existing lots simply aren't car parks.
+    for (const l of data.lots || []) {
+      if (l.spaces == null) l.spaces = 0;
+      if (l.parkingType === undefined) l.parkingType = null;
+    }
+    (data.couriers || []).forEach((c, i) => { if (c.parkSlot == null) c.parkSlot = i; });
+  }
+
+  data.version = SAVE_VERSION;
+  return true;
+}
+
 export function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    if (data.version !== SAVE_VERSION) return null;
+    if (data.version !== SAVE_VERSION && !migrate(data)) return null;
     idCounter = data.idCounter || 1;
     delete data.idCounter;
     data.selection = null;

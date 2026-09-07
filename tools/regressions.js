@@ -27,6 +27,10 @@ function world() {
   const lots = syntheticLots(districts);
   const st = createState({ origin, cityName: 'T', countryCode: 'us', districts, crews, lots });
   st.cash.clean = 900000;
+  // Vehicles need a bay before they can be bought at all.
+  const park = cheapestLotFor(st, BUILDINGS.depot);
+  A.buyLot(st, park.id);
+  A.developLot(st, park.id, 'depot');
   return st;
 }
 function open(st, type) {
@@ -61,7 +65,8 @@ print('=== 2. editRoute: a cargo swap cannot convert raw into packs ===');
   const grow = open(st, 'grow_house'), lab = open(st, 'lab');
   grow.raw.weed = 500;
   const r = wire(st, grow.id, 'building', lab.id, 'raw', 'any', 6); // long leg
-  const c = A.hireCourier(st, 'sedan').courier;
+  const c = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, c.id, A.hireDriver(st).driver.id);
   A.assignCourier(st, c.id, r.id);
   let ticks = 0;
   while ((c.phase !== 'outbound' || carried(c) < 1) && ticks < 4000) { stepSim(st, 0.05, {}); ticks++; }
@@ -86,7 +91,8 @@ print('=== 3. loadCargo: a laden courier cannot exceed capacity ===');
   const grow = open(st, 'grow_house'), lab = open(st, 'lab');
   grow.raw.weed = 5000;
   const r = wire(st, grow.id, 'building', lab.id, 'raw', 'any');
-  const c = A.hireCourier(st, 'sedan').courier;
+  const c = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, c.id, A.hireDriver(st).driver.id);
   A.assignCourier(st, c.id, r.id);
   let peak = 0;
   for (let h = 0; h < 120; h += 0.05) {
@@ -105,7 +111,8 @@ print('=== 4. stepSim slices a big jump ===');
     const grow = open(st, 'grow_house'), lab = open(st, 'lab');
     grow.raw.weed = 400;
     const r = wire(st, grow.id, 'building', lab.id, 'raw', 'any');
-    const c = A.hireCourier(st, 'sedan').courier;
+    const c = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, c.id, A.hireDriver(st).driver.id);
     A.assignCourier(st, c.id, r.id);
     if (step >= 24) stepSim(st, 24, {});
     else for (let h = 0; h < 24; h += step) stepSim(st, step, {});
@@ -126,7 +133,8 @@ print('=== 5. couriers have real load/unload time ===');
   grow.raw.weed = 100000;
   const r = wire(st, grow.id, 'building', lab.id, 'raw', 'any');
   r.km = 0.4;
-  const c = A.hireCourier(st, 'sedan').courier;
+  const c = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, c.id, A.hireDriver(st).driver.id);
   A.assignCourier(st, c.id, r.id);
   for (let h = 0; h < 24; h += 0.05) stepSim(st, 0.05, {});
   const def = COURIERS.sedan;
@@ -160,7 +168,8 @@ print('=== 7. raw dropped on a district is conserved, not sold ===');
   grow.active = false; // freeze production so the accounting is exact
   const d = st.districts[10];
   const r = wire(st, grow.id, 'district', d.id, 'raw', 'any', 3);
-  const c = A.hireCourier(st, 'sedan').courier;
+  const c = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, c.id, A.hireDriver(st).driver.id);
   A.assignCourier(st, c.id, r.id);
   const cashBefore = st.cash.dirty;
   for (let h = 0; h < 24; h += 0.05) stepSim(st, 0.05, {});

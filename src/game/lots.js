@@ -37,7 +37,11 @@ export function centroidOf(points) {
  * and the footprint area is the real signal.
  */
 export function classify(tags, areaM2) {
+  // Parking is its own thing entirely — it houses a fleet, not an operation.
+  if (tags.amenity === 'parking') return 'parking';
+
   const b = (tags.building || 'yes').toLowerCase();
+  if (b === 'parking' || b === 'carport') return 'parking';
   if (b === 'warehouse' || b === 'industrial' || b === 'factory') return 'industrial';
   if (b === 'retail' || b === 'shop' || b === 'supermarket') return 'retail';
   if (b === 'commercial' || b === 'office') return 'commercial';
@@ -54,6 +58,25 @@ export function classify(tags, areaM2) {
   return 'garage';
 }
 
+/**
+ * How many vehicles a parking area holds. OSM rarely states a capacity, so it
+ * comes from the footprint: about 25 m² per space once aisles are counted,
+ * multiplied by however many decks the structure has.
+ */
+export function parkingSpaces(tags, areaM2) {
+  const stated = parseInt(tags.capacity, 10);
+  if (Number.isFinite(stated) && stated > 0) return clamp(stated, 2, 900);
+  const type = (tags.parking || 'surface').toLowerCase();
+  const decks = type === 'multi-storey' ? 4 : type === 'underground' ? 2 : 1;
+  return clamp(Math.round((areaM2 / 25) * decks), 2, 900);
+}
+
+export const PARKING_LABEL = {
+  'multi-storey': 'Multi-storey car park',
+  underground: 'Underground car park',
+  surface: 'Surface car park',
+};
+
 export const KIND_LABEL = {
   industrial: 'Warehouse',
   commercial: 'Commercial block',
@@ -62,6 +85,7 @@ export const KIND_LABEL = {
   house: 'Detached house',
   rowhouse: 'Rowhouse',
   garage: 'Garage / outbuilding',
+  parking: 'Car park',
 };
 
 /** What a square metre of each kind of premises costs, before the block. */
@@ -73,6 +97,8 @@ const KIND_PRICE_MULT = {
   house: 1.0,
   rowhouse: 0.9,
   garage: 0.8,
+  // Land, not premises — cheap per square metre and mostly tarmac.
+  parking: 0.42,
 };
 
 export const SQFT_PER_M2 = 10.7639;
@@ -170,6 +196,8 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
     const tags = w.tags || {};
     const kind = classify(tags, areaM2);
     const address = addressOf(tags);
+    const parkingType = kind === 'parking'
+      ? (tags.parking || 'surface').toLowerCase() : null;
     lots.push({
       id: `L${n++}`,
       osmId: w.id,
@@ -179,7 +207,12 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
       kind,
       address,
       districtId: district.id,
-      name: address || `${KIND_LABEL[kind]} · ${Math.round(areaM2)} m²`,
+      parkingType,
+      spaces: kind === 'parking' ? parkingSpaces(tags, areaM2) : 0,
+      name: address
+        || (kind === 'parking'
+          ? `${PARKING_LABEL[parkingType] || 'Car park'} · ${parkingSpaces(tags, areaM2)} spaces`
+          : `${KIND_LABEL[kind]} · ${Math.round(areaM2)} m²`),
       price: lotPrice(kind, areaM2, district),
       owned: false,
       paidPrice: null,

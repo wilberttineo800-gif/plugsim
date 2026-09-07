@@ -23,6 +23,7 @@ import {
   districtById,
   logEvent,
   routeById,
+  parkedPosition,
 } from './state.js';
 
 const rng = makeRng(Date.now() & 0xffffffff);
@@ -211,10 +212,10 @@ function stepCouriers(state, dt, hooks) {
     const def = { ...base, ...vehicleStats(c, base) };
     const route = routeById(state, c.routeId);
 
-    if (!route || !route.active) {
+    // An asset with nobody driving it just sits in its bay.
+    if (!c.driverId || !route || !route.active) {
       c.phase = 'idle';
-      const home = buildingById(state, c.homeBuildingId);
-      c.position = home ? home.latlng : c.position;
+      c.position = parkedPosition(state, c) || c.position;
       continue;
     }
     if (!route.points) continue; // route still being fetched
@@ -815,7 +816,8 @@ function settleDay(state) {
     upkeep += upkeepFor(b);
   }
   let wages = 0;
-  for (const c of state.couriers) wages += COURIERS[c.type].wagePerDay;
+  for (const d of state.drivers || []) wages += d.wagePerDay;
+  for (const v of state.couriers) wages += COURIERS[v.type].upkeepPerDay;
 
   const total = Math.round(upkeep + wages);
   const funded = paySoft(state, total);

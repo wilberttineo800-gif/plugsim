@@ -297,8 +297,13 @@ export function overpassCooldownSeconds() {
 
 export async function fetchBuildings(south, west, north, east, cap = 2600, onRetry) {
   const bbox = `${south},${west},${north},${east}`;
+  // Parking comes back alongside buildings: a fleet has to live somewhere, and
+  // real lots and garages are already on the map.
   const query =
-    `[out:json][timeout:60];(way["building"](${bbox}););out geom ${cap};`;
+    `[out:json][timeout:60];(` +
+    `way["building"](${bbox});` +
+    `way["amenity"="parking"](${bbox});` +
+    `);out geom ${cap};`;
 
   // Overpass grants two query slots per IP. When they're busy it refuses
   // outright, so a transient refusal has to back off and try again rather than

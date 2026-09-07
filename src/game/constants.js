@@ -29,7 +29,7 @@ export const SPEED_NOTES = {
 };
 
 export const START_CASH_DIRTY = 0;
-export const START_CASH_CLEAN = 18000;
+export const START_CASH_CLEAN = 24000;
 
 // --- Products ---------------------------------------------------------------
 // Each product moves through the chain as RAW units (harvested, unsellable)
@@ -272,6 +272,22 @@ export const BUILDINGS = {
   // street cash on the side. They're never raided and they cool a block down.
   // Legal income is the patient way to afford property; the chain is the fast
   // way, and it costs you heat.
+  depot: {
+    id: 'depot',
+    kind: 'depot',
+    name: 'Depot',
+    blurb: 'Somewhere for the fleet to sit. Only goes on a car park, and how many vehicles you can run is however many spaces it has.',
+    icon: 'box',
+    // Only fits on parking; the size of the lot decides the size of the fleet.
+    requiresKind: 'parking',
+    cost: 900,
+    minAreaM2: 40,
+    referenceAreaM2: 400,
+    areaExponent: 1,
+    upkeepPerDay: 90,
+    heatPerDay: 0.2,
+    capacity: 0,
+  },
   lockup: {
     id: 'lockup',
     kind: 'storage',
@@ -477,6 +493,17 @@ export const BUILDING_IDS = Object.keys(BUILDINGS);
 // slower through a city, and a runner is walking.
 //
 // `class` groups vehicles for upgrades, so a truck tier never appears on a bike.
+// Drivers are hired separately from the vehicles they drive. Each one you take
+// on is harder to find than the last — the people willing to do this work, and
+// keep quiet about it, are not an unlimited supply.
+export const DRIVERS = {
+  baseHireFee: 1200,
+  hireGrowth: 1.30,   // each additional driver costs this much more to bring in
+  baseWagePerDay: 130,
+  wageGrowth: 1.06,   // and asks a little more to stay
+  maxRoster: 24,
+};
+
 // Vehicle classes, and what each is for.
 export const COURIER_CLASSES = {
   foot:     { id: 'foot',     name: 'On foot',      note: 'Slow and tiny, but invisible.' },
@@ -497,94 +524,94 @@ export const COURIERS = {
   runner: {
     id: 'runner', name: 'Foot Runner', class: 'foot',
     blurb: 'Walking pace. Carries almost nothing, and nobody looks twice.',
-    cost: 350, wagePerDay: 55, capacity: 14,
+    cost: 350, upkeepPerDay: 4, capacity: 14,
     paceFactor: 7.5, loadMinutes: 6, unloadMinutes: 5, stealth: 0.94,
   },
   jogger: {
     id: 'jogger', name: 'Runner in Lycra', class: 'foot',
     blurb: 'Running gear and a hydration pack. Quicker, and reads as exercise.',
-    cost: 900, wagePerDay: 80, capacity: 22,
+    cost: 900, upkeepPerDay: 6, capacity: 22,
     paceFactor: 5.2, loadMinutes: 7, unloadMinutes: 6, stealth: 0.96,
   },
   // --- Two wheels ----------------------------------------------------------
   bike: {
     id: 'bike', name: 'Bike Courier', class: 'twowheel',
     blurb: 'Through traffic and down alleys. Barely worth pulling over.',
-    cost: 900, wagePerDay: 90, capacity: 40,
+    cost: 900, upkeepPerDay: 8, capacity: 40,
     paceFactor: 1.9, loadMinutes: 12, unloadMinutes: 9, stealth: 0.85,
   },
   ebike: {
     id: 'ebike', name: 'E-Bike', class: 'twowheel',
     blurb: 'A bike that keeps up with traffic and still uses the cycle lane.',
-    cost: 2200, wagePerDay: 110, capacity: 55,
+    cost: 2200, upkeepPerDay: 14, capacity: 55,
     paceFactor: 1.3, loadMinutes: 13, unloadMinutes: 10, stealth: 0.86,
   },
   scooter: {
     id: 'scooter', name: 'Delivery Scooter', class: 'twowheel',
     blurb: 'A food-delivery box on the back. Quick, plausible, hard to tail.',
-    cost: 1900, wagePerDay: 120, capacity: 65,
+    cost: 1900, upkeepPerDay: 18, capacity: 65,
     paceFactor: 1.0, loadMinutes: 15, unloadMinutes: 11, stealth: 0.78,
   },
   motorcycle: {
     id: 'motorcycle', name: 'Motorcycle', class: 'twowheel',
     blurb: 'Nothing in a city is faster. Nothing carries less for the money.',
-    cost: 7800, wagePerDay: 210, capacity: 45,
+    cost: 7800, upkeepPerDay: 40, capacity: 45,
     paceFactor: 0.68, loadMinutes: 11, unloadMinutes: 8, stealth: 0.5,
   },
   // --- Cars ----------------------------------------------------------------
   hatchback: {
     id: 'hatchback', name: 'Compact Hatchback', class: 'car',
     blurb: 'The cheapest four wheels that will do the job. Utterly forgettable.',
-    cost: 2100, wagePerDay: 140, capacity: 95,
+    cost: 2100, upkeepPerDay: 22, capacity: 95,
     paceFactor: 1.05, loadMinutes: 18, unloadMinutes: 13, stealth: 0.7,
   },
   sedan: {
     id: 'sedan', name: 'Beater Sedan', class: 'car',
     blurb: 'Anonymous and cheap. The honest workhorse of a growing operation.',
-    cost: 3400, wagePerDay: 165, capacity: 140,
+    cost: 3400, upkeepPerDay: 30, capacity: 140,
     paceFactor: 1.0, loadMinutes: 22, unloadMinutes: 16, stealth: 0.62,
   },
   cab: {
     id: 'cab', name: 'Livery Cab', class: 'car',
     blurb: 'Belongs anywhere at any hour. Costs a fortune in wages.',
-    cost: 6800, wagePerDay: 300, capacity: 160,
+    cost: 6800, upkeepPerDay: 55, capacity: 160,
     paceFactor: 0.92, loadMinutes: 18, unloadMinutes: 13, stealth: 0.8,
   },
   suv: {
     id: 'suv', name: 'SUV', class: 'car',
     blurb: 'School-run bodywork with a boot you can live out of.',
-    cost: 11500, wagePerDay: 250, capacity: 300,
+    cost: 11500, upkeepPerDay: 48, capacity: 300,
     paceFactor: 1.06, loadMinutes: 24, unloadMinutes: 18, stealth: 0.74,
   },
   luxury: {
     id: 'luxury', name: 'Executive Saloon', class: 'car',
     blurb: 'Tinted, immaculate and expensive. Nobody stops it, and everyone remembers it.',
-    cost: 32000, wagePerDay: 480, capacity: 180,
+    cost: 32000, upkeepPerDay: 120, capacity: 180,
     paceFactor: 0.85, loadMinutes: 16, unloadMinutes: 12, stealth: 0.9,
   },
   sportscar: {
     id: 'sportscar', name: 'Sports Car', class: 'car',
     blurb: 'The fastest thing you own and the least room in it. Remembered by everyone who sees it.',
-    cost: 24000, wagePerDay: 340, capacity: 55,
+    cost: 24000, upkeepPerDay: 95, capacity: 55,
     paceFactor: 0.72, loadMinutes: 10, unloadMinutes: 8, stealth: 0.35,
   },
   // --- Vans ----------------------------------------------------------------
   minivan: {
     id: 'minivan', name: 'Minivan', class: 'van',
     blurb: 'School run camouflage with the seats out. Real capacity, ordinary pace.',
-    cost: 5600, wagePerDay: 200, capacity: 260,
+    cost: 5600, upkeepPerDay: 38, capacity: 260,
     paceFactor: 1.1, loadMinutes: 28, unloadMinutes: 20, stealth: 0.72,
   },
   van: {
     id: 'van', name: 'Panel Van', class: 'van',
     blurb: 'Serious capacity, and exactly what police expect to search.',
-    cost: 9200, wagePerDay: 260, capacity: 480,
+    cost: 9200, upkeepPerDay: 52, capacity: 480,
     paceFactor: 1.25, loadMinutes: 38, unloadMinutes: 28, stealth: 0.45,
   },
   chiller: {
     id: 'chiller', name: 'Refrigerated Van', class: 'van',
     blurb: 'Cold, sealed and nobody wants to stand in it. Keeps product at its best.',
-    cost: 16000, wagePerDay: 330, capacity: 420,
+    cost: 16000, upkeepPerDay: 78, capacity: 420,
     paceFactor: 1.28, loadMinutes: 42, unloadMinutes: 30, stealth: 0.68,
     // A chilled load arrives in the condition it left in.
     preservesQuality: true,
@@ -592,26 +619,26 @@ export const COURIERS = {
   luton: {
     id: 'luton', name: 'Luton Van', class: 'van',
     blurb: 'A box on a van chassis. Removals by day, and by night.',
-    cost: 19000, wagePerDay: 360, capacity: 820,
+    cost: 19000, upkeepPerDay: 84, capacity: 820,
     paceFactor: 1.35, loadMinutes: 48, unloadMinutes: 35, stealth: 0.5,
   },
   // --- Trucks --------------------------------------------------------------
   pickup: {
     id: 'pickup', name: 'Pickup Truck', class: 'truck',
     blurb: 'A trade truck with a covered bed. Belongs on any site in the country.',
-    cost: 8400, wagePerDay: 230, capacity: 340,
+    cost: 8400, upkeepPerDay: 44, capacity: 340,
     paceFactor: 1.1, loadMinutes: 26, unloadMinutes: 19, stealth: 0.66,
   },
   boxtruck: {
     id: 'boxtruck', name: 'Box Truck', class: 'truck',
     blurb: 'Moves a warehouse in one run. Slow, and impossible to hide.',
-    cost: 21000, wagePerDay: 430, capacity: 1700,
+    cost: 21000, upkeepPerDay: 110, capacity: 1700,
     paceFactor: 1.5, loadMinutes: 65, unloadMinutes: 48, stealth: 0.34,
   },
   flatbed: {
     id: 'flatbed', name: 'Flatbed', class: 'truck',
     blurb: 'Strapped pallets under a tarp. Loads and unloads faster than anything its size, and hides nothing at all.',
-    cost: 27000, wagePerDay: 470, capacity: 1250,
+    cost: 27000, upkeepPerDay: 118, capacity: 1250,
     paceFactor: 1.45, loadMinutes: 45, unloadMinutes: 34,
     // The load is literally in open view — the least discreet thing you can run.
     stealth: 0.12,
@@ -619,21 +646,21 @@ export const COURIERS = {
   semi: {
     id: 'semi', name: 'Semi Truck', class: 'truck',
     blurb: 'Everything you own in one trailer. Crawls through a city and can be seen from orbit.',
-    cost: 68000, wagePerDay: 720, capacity: 4200,
+    cost: 68000, upkeepPerDay: 190, capacity: 4200,
     paceFactor: 1.95, loadMinutes: 110, unloadMinutes: 80, stealth: 0.18,
   },
   // --- Air -----------------------------------------------------------------
   drone: {
     id: 'drone', name: 'Delivery Drone', class: 'air',
     blurb: 'Straight over everything. Carries almost nothing and cannot be followed.',
-    cost: 14000, wagePerDay: 90, capacity: 12,
+    cost: 14000, upkeepPerDay: 16, capacity: 12,
     paceFactor: 1.0, loadMinutes: 4, unloadMinutes: 3, stealth: 0.93,
     direct: true, airKph: 55,
   },
   heavylift: {
     id: 'heavylift', name: 'Heavy-Lift Drone', class: 'air',
     blurb: 'Industrial rotors and a slung crate. Still small, but it ignores every road.',
-    cost: 46000, wagePerDay: 210, capacity: 70,
+    cost: 46000, upkeepPerDay: 46, capacity: 70,
     paceFactor: 1.0, loadMinutes: 9, unloadMinutes: 7, stealth: 0.82,
     direct: true, airKph: 38,
   },

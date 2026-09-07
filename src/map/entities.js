@@ -1,7 +1,7 @@
 // Everything the player owns, drawn on the map: property markers, standing
 // routes, and couriers moving along them in real time.
 
-import { BUILDINGS, PRODUCTS } from '../game/constants.js';
+import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
 import { buildingById, districtById } from '../game/state.js';
 import { escapeHtml, overlayColor } from './mapView.js';
 
@@ -25,7 +25,12 @@ const ICONS = {
   note: '<path d="M2 6h20v12H2Z" opacity="0.5"/><circle cx="12" cy="12" r="3.2"/><path d="M4.5 8.5h2v7h-2Zm13 0h2v7h-2Z"/>',
 };
 
-const VEHICLE_GLYPH = { bike: '◈', sedan: '▰', van: '▮' };
+// The catalogue outgrew per-model glyphs; a marker reads by class instead.
+const CLASS_GLYPH = { foot: '✦', twowheel: '◈', car: '▰', van: '▮', truck: '▭', air: '▲' };
+function glyphFor(type) {
+  const def = COURIERS[type];
+  return (def && CLASS_GLYPH[def.class]) || '▰';
+}
 
 function svgIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.box}</svg>`;
@@ -163,7 +168,9 @@ export class LotLayer {
         this.onSelect?.(lot, e.latlng);
       });
       if (!LotLayer.isTouch()) {
-        poly.bindTooltip(`${lot.name} · ${Math.round(lot.areaM2)} m²`,
+        poly.bindTooltip(lot.kind === 'parking'
+          ? `${lot.name} · ${lot.spaces} spaces`
+          : `${lot.name} · ${Math.round(lot.areaM2)} m²`,
           { direction: 'top', opacity: 0.9, className: 'lot-tip' });
       }
       poly.addTo(this.group);
@@ -180,6 +187,14 @@ export class LotLayer {
 
   styleFor(lot) {
     const selected = this.selectedId === lot.id;
+    // Car parks read as tarmac, not premises — you can see the fleet's options
+    // at a glance without hunting through the building stock.
+    if (lot.kind === 'parking' && !lot.buildingId) {
+      const owned = lot.owned;
+      return { color: owned ? '#2f8fa8' : '#4b6f7d', weight: selected ? 3 : 1.4,
+               opacity: 1, dashArray: owned ? null : '4 3',
+               fillColor: '#5fd0e8', fillOpacity: owned ? 0.42 : 0.22 };
+    }
     if (lot.buildingId) {
       return { color: '#c2560c', weight: selected ? 3 : 2, opacity: 1,
                fillColor: '#ff8a3d', fillOpacity: 0.6 };
@@ -291,7 +306,7 @@ export class CourierLayer {
       const laden = Object.values(c.cargo).some((v) => v > 0.01);
       const html =
         `<div class="cmark ${laden ? 'is-laden' : ''} ${c.phase === 'idle' ? 'is-idle' : ''}">` +
-        `<span>${VEHICLE_GLYPH[c.type] || '▰'}</span></div>`;
+        `<span>${glyphFor(c.type)}</span></div>`;
       const icon = L.divIcon({ className: '', html, iconSize: [20, 20], iconAnchor: [10, 10] });
 
       if (!marker) {

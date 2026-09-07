@@ -1,7 +1,10 @@
 // Player actions. Each one validates, charges, mutates state and returns
 // { ok, error } so the UI can report a reason without knowing the rules.
 
-import { BUILDINGS, BUILDING_IDS, COURIERS, FIXER, RIVALS, MARKET_PROPERTY } from './constants.js';
+import { parkedPosition } from './state.js';
+import {
+  BUILDINGS, BUILDING_IDS, COURIERS, DRIVERS, FIXER, RIVALS, MARKET_PROPERTY,
+} from './constants.js';
 import {
   lotById, areaScale, areaCapacityScale, lotResale, marketValue, rentPerDay, lotPnL,
 } from './lots.js';
@@ -15,7 +18,10 @@ import {
   buildingById,
   canAfford,
   createBuilding,
-  createCourier,
+  createVehicle,
+  createDriver,
+  nextDriverHireFee,
+  driverById,
   createRoute,
   courierById,
   districtById,
@@ -115,7 +121,11 @@ export function endTenancy(state, lotId) {
 
 /** What can legally go into a building you own, and why not. */
 export function operationOptions(lot, state = null) {
-  return BUILDING_IDS.map((id) => {
+  return BUILDING_IDS.filter((id) => {
+    // A car park takes a depot and nothing else; premises take everything but.
+    const need = BUILDINGS[id].requiresKind || null;
+    return need ? lot.kind === need : lot.kind !== 'parking';
+  }).map((id) => {
     const def = BUILDINGS[id];
     const fits = lot.areaM2 >= def.minAreaM2;
     const gate = state ? unlockStatus(state, id) : null;
@@ -145,6 +155,12 @@ export function developLot(state, lotId, typeId) {
   if (lot.buildingId) return { ok: false, error: 'Something is already running there.' };
   const gate = unlockStatus(state, typeId);
   if (gate && gate.locked) return { ok: false, error: gate.reason };
+  if (def.requiresKind && lot.kind !== def.requiresKind) {
+    return { ok: false, error: `A ${def.name} only goes on a car park.` };
+  }
+  if (!def.requiresKind && lot.kind === 'parking') {
+    return { ok: false, error: 'A car park is only good for a depot.' };
+  }
   if (lot.areaM2 < def.minAreaM2) {
     return {
       ok: false,
@@ -235,49 +251,136 @@ export function sellBuilding(state, buildingId) {
   return { ok: true, refund };
 }
 
-export function hireCourier(state, typeId) {
+/** Buy a vehicle. It is an asset — it sits parked until someone drives it. */
+/** Every depot you run, with how many bays are spoken for. */
+export function depots(state) {
+  return (state.buildings || [])
+    .filter((b) => b.kind === 'depot')
+    .map((b) => {
+      const lot = lotById(state, b.lotId);
+      const spaces = (lot && lot.spaces) || 0;
+      const parked = (state.couriers || []).filter((c) => c.homeBuildingId === b.id);
+      return { building: b, lot, spaces, parked, free: Math.max(0, spaces - parked.length) };
+    });
+}
+
+export function fleetSpaces(state) {
+  const all = depots(state);
+  return {
+    total: all.reduce((a, d) => a + d.spaces, 0),
+    used: all.reduce((a, d) => a + d.parked.length, 0),
+    depots: all,
+  };
+}
+
+export function buyVehicle(state, typeId) {
   const def = COURIERS[typeId];
   if (!def) return { ok: false, error: 'Unknown vehicle.' };
+
+  // A vehicle has to have somewhere to live, and the map decides how much room
+  // there is — a surface lot or a multi-storey you actually own.
+  const open = depots(state).filter((d) => d.free > 0)
+    .sort((a, b) => b.free - a.free)[0];
+  if (!open) {
+    const any = depots(state).length;
+    return {
+      ok: false,
+      error: any
+        ? 'Every bay is taken. Buy another car park and put a depot on it.'
+        : 'Nowhere to keep it. Buy a car park on the map and fit it out as a depot first.',
+    };
+  }
   if (!canAfford(state, def.cost)) {
-    return { ok: false, error: `Need $${def.cost.toLocaleString()} clean.` };
+    return { ok: false, error: `A ${def.name} costs $${def.cost.toLocaleString()} clean.` };
   }
   spendClean(state, def.cost);
-  const home = state.buildings[0]?.id || null;
-  const c = createCourier(typeId, home);
-  c.name = `${def.name} #${state.couriers.filter((x) => x.type === typeId).length + 1}`;
-  c.position = home ? buildingById(state, home).latlng : { ...state.origin };
-  state.couriers.push(c);
-  logEvent(state, `Hired a ${def.name} for $${def.cost.toLocaleString()}.`, 'good');
-  return { ok: true, courier: c };
+
+  const home = open.building.id;
+  const v = createVehicle(typeId, home);
+  // Take the lowest free bay, so the yard fills up in order.
+  const taken = new Set(open.parked.map((c) => c.parkSlot));
+  let slot = 0;
+  while (taken.has(slot)) slot++;
+  v.parkSlot = slot;
+
+  const sameType = state.couriers.filter((x) => x.type === typeId).length + 1;
+  v.name = `${def.name} #${sameType}`;
+  v.position = parkedPosition(state, v) || { ...state.origin };
+  state.couriers.push(v);
+  logEvent(state,
+    `Bought a ${def.name} for $${def.cost.toLocaleString()}. Parked at ${open.building.name}.`,
+    'good');
+  return { ok: true, vehicle: v };
 }
 
-/** Fit something to a vehicle. Tiers are per class, so lists stay short. */
-export function upgradeCourier(state, courierId, upgradeId) {
-  const c = courierById(state, courierId);
-  if (!c) return { ok: false, error: 'That vehicle is gone.' };
-  const def = COURIERS[c.type];
-  const u = vehicleUpgradeById(def.class, upgradeId);
-  if (!u) return { ok: false, error: 'That doesn’t fit this vehicle.' };
-  if ((c.upgrades || []).includes(upgradeId)) return { ok: false, error: 'Already fitted.' };
-  if (!canAfford(state, u.cost)) {
-    return { ok: false, error: `${u.name} costs $${u.cost.toLocaleString()} clean.` };
+/**
+ * Take on a driver. Each one is harder to find than the last, so the fee climbs
+ * — the people willing to do this work are not an unlimited supply.
+ */
+export function hireDriver(state) {
+  state.drivers = state.drivers || [];
+  if (state.drivers.length >= DRIVERS.maxRoster) {
+    return { ok: false, error: 'Nobody else in this city wants the job.' };
   }
-  spendClean(state, u.cost);
-  c.upgrades = (c.upgrades || []).concat(upgradeId);
-  logEvent(state, `${u.name} fitted to ${c.name}.`, 'good');
-  return { ok: true, upgrade: u };
+  const fee = nextDriverHireFee(state);
+  if (!canAfford(state, fee)) {
+    return { ok: false, error: `Bringing someone else in costs $${fee.toLocaleString()} clean.` };
+  }
+  spendClean(state, fee);
+  const d = createDriver(state.drivers.length);
+  d.hiredAtMinute = state.minutes;
+  state.drivers.push(d);
+  logEvent(state, `${d.name} is driving for you — $${fee.toLocaleString()} up front, $${d.wagePerDay}/day.`, 'good');
+  return { ok: true, driver: d, fee };
 }
 
-export { vehicleUpgrades, vehicleStats };
-
-export function fireCourier(state, courierId) {
-  const idx = state.couriers.findIndex((c) => c.id === courierId);
+export function fireDriver(state, driverId) {
+  const idx = (state.drivers || []).findIndex((d) => d.id === driverId);
   if (idx < 0) return { ok: false, error: 'Already gone.' };
-  const c = state.couriers[idx];
-  state.couriers.splice(idx, 1);
-  logEvent(state, `${c.name} is off the payroll.`, 'info');
+  const [d] = state.drivers.splice(idx, 1);
+  for (const v of state.couriers) {
+    if (v.driverId === d.id) { v.driverId = null; v.phase = 'idle'; v.routeId = null; }
+  }
+  logEvent(state, `${d.name} is off the payroll.`, 'info');
   return { ok: true };
 }
+
+/** Put a driver in a vehicle, or take them out of it. */
+export function assignDriver(state, vehicleId, driverId) {
+  const v = courierById(state, vehicleId);
+  if (!v) return { ok: false, error: 'That vehicle is gone.' };
+  const d = driverId ? driverById(state, driverId) : null;
+  if (driverId && !d) return { ok: false, error: 'That driver is gone.' };
+
+  // One driver, one vehicle.
+  if (d) {
+    for (const other of state.couriers) {
+      if (other.id !== v.id && other.driverId === d.id) {
+        other.driverId = null;
+        other.phase = 'idle';
+      }
+    }
+  }
+  v.driverId = d ? d.id : null;
+  if (!d) { v.phase = 'idle'; v.progress = 0; }
+  else if (v.routeId) { v.phase = 'loading'; v.progress = 0; v.dwellLeft = 0; }
+  return { ok: true };
+}
+
+export function sellVehicle(state, vehicleId) {
+  const idx = state.couriers.findIndex((c) => c.id === vehicleId);
+  if (idx < 0) return { ok: false, error: 'Already gone.' };
+  const v = state.couriers[idx];
+  const def = COURIERS[v.type];
+  // Vehicles lose value the moment you drive them off the forecourt.
+  const back = Math.round(def.cost * 0.55);
+  state.couriers.splice(idx, 1);
+  state.cash.clean += back;
+  logEvent(state, `Sold the ${def.name} for $${back.toLocaleString()}.`, 'info');
+  return { ok: true, back };
+}
+
+
 
 /**
  * Create a standing route. The road geometry is fetched in the background —

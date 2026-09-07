@@ -34,7 +34,9 @@ const lab = openSite('lab');
 openSite('stash');
 const shop = openSite('laundromat');
 openSite('fungi_room');
-const courier = A.hireCourier(state, 'sedan').courier;
+openSite('depot');
+const courier = A.buyVehicle(state, 'sedan').vehicle;
+A.assignDriver(state, courier.id, A.hireDriver(state).driver.id);
 
 const held = [...districts].sort((a, b) => b.rivalControl - a.rivalControl)[0];
 const open = [...districts].sort((a, b) => a.rivalControl - b.rivalControl)[0];

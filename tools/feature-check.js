@@ -97,8 +97,8 @@
   window.__featureTarget = target.id;
   g.createRouteFromDraft({ fromId: growB.id, toKey: 'building:' + labB.id, cargo: 'raw', product: 'any' });
   g.createRouteFromDraft({ fromId: labB.id, toKey: 'district:' + target.id, cargo: 'packs', product: 'any' });
-  g.hireCourier('scooter');
-  g.hireCourier('scooter');
+  g.buyVehicle('scooter');
+  g.buyVehicle('scooter');
   ok('couriers can be hired', s.couriers.length >= 2, s.couriers.length + ' on the payroll');
 
   out.push('');

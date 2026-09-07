@@ -63,7 +63,7 @@ if (!g || !g.state) {
     if (!s.lots.some((l) => l.rented)) { g.buyLot(spare[1].id); g.rentOut(spare[1].id); }
     if (!s.lots.some((l) => l.owned && !l.buildingId && !l.rented)) g.buyLot(spare[2].id);
   }
-  if (!s.couriers.length) g.hireCourier('bike');
+  if (!s.couriers.length) g.buyVehicle('bike');
 
   const body = document.getElementById('inspectorBody');
   const panels = [

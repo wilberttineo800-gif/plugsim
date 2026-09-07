@@ -501,11 +501,36 @@ game.developLot = (lotId, typeId) => {
 game.beginPlacement = () => {};
 game.cancelPlacement = () => { game.ui.setPlacing(null); };
 
-game.hireCourier = (typeId) => {
-  diag.trace('hire courier');
-  const r = A.hireCourier(game.state, typeId);
+game.buyVehicle = (typeId) => {
+  diag.trace('buy vehicle');
+  const r = A.buyVehicle(game.state, typeId);
   if (!r.ok) return toast(r.error, 'bad');
-  game.ui.renderRail();
+  toast(`${r.vehicle.name} is yours. It needs a driver.`, 'good', 3600);
+  game.ui.renderRail(true);
+  game.courierLayer.sync(game.state);
+};
+
+game.hireDriver = () => {
+  diag.trace('hire driver');
+  const r = A.hireDriver(game.state);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.driver.name} signed on for ${Math.round(r.fee).toLocaleString()}.`, 'good', 3600);
+  game.ui.renderRail(true);
+};
+
+game.assignDriver = (vehicleId, driverId) => {
+  const r = A.assignDriver(game.state, vehicleId, driverId);
+  if (!r.ok) return toast(r.error, 'bad');
+  game.ui.renderRail(true);
+  game.courierLayer.sync(game.state);
+};
+
+game.sellVehicle = (id) => {
+  const r = A.sellVehicle(game.state, id);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Sold for ${r.back.toLocaleString()}.`, 'info');
+  if (game.state.selection?.id === id) game.select(null);
+  game.ui.renderRail(true);
   game.courierLayer.sync(game.state);
 };
 
@@ -515,13 +540,6 @@ game.upgradeCourier = (id, upgradeId) => {
   if (!r.ok) return toast(r.error, 'bad');
   toast(`${r.upgrade.name} fitted.`, 'good', 2600);
   game.ui.render();
-};
-
-game.fireCourier = (id) => {
-  A.fireCourier(game.state, id);
-  if (game.state.selection?.id === id) game.select(null);
-  game.ui.renderRail();
-  game.courierLayer.sync(game.state);
 };
 
 game.upgradeBuilding = (id, upgradeId) => {

@@ -11,6 +11,7 @@ import { haversineKm } from '../src/game/geo.js';
 import { createState, createRoute, logEvent, clockOf } from '../src/game/state.js';
 import { stepSim } from '../src/game/sim.js';
 import * as A from '../src/game/actions.js';
+import { nextDriverHireFee } from '../src/game/state.js';
 import { streetPrice, sellRatePerHour, rivalShare } from '../src/game/economy.js';
 
 const log = (...a) => print(a.join(' '));
@@ -83,6 +84,7 @@ function build(type, district) {
 
 const grow = build('grow_house', cheap);
 const lab = build('lab', cheap);
+const depot = build('depot', cheap);
 log(`cash after opening: ${fmt(state.cash.clean)} clean`);
 
 if (!grow || !lab) { log('FAILED to open — cannot continue'); throw new Error('setup'); }
@@ -104,13 +106,15 @@ function wire(fromId, toType, toId, cargo, product) {
 const rGrowLab = wire(grow.id, 'building', lab.id, 'raw', 'any');
 const saleRoutes = sellIn.slice(0, 4).map((d) => wire(lab.id, 'district', d.id, 'packs', 'any'));
 
-const c1 = A.hireCourier(state, 'bike');
-const c2 = A.hireCourier(state, 'bike');
-if (c1.ok) A.assignCourier(state, c1.courier.id, rGrowLab.id);
+const c1 = A.buyVehicle(state, 'bike');
+const c2 = A.buyVehicle(state, 'bike');
+// A vehicle is an asset; somebody still has to drive it.
+[c1, c2].forEach((r) => { if (r.ok) { const d = A.hireDriver(state); if (d.ok) A.assignDriver(state, r.vehicle.id, d.driver.id); } });
+if (c1.ok) A.assignCourier(state, c1.vehicle.id, rGrowLab.id);
 else log(`  !! COULD NOT HIRE: ${c1.error}`);
-if (c2.ok) A.assignCourier(state, c2.courier.id, saleRoutes[0].id);
+if (c2.ok) A.assignCourier(state, c2.vehicle.id, saleRoutes[0].id);
 else log(`  !! COULD NOT HIRE: ${c2.error}`);
-log(`couriers on payroll: ${state.couriers.length}; cash now ${fmt(state.cash.clean)} clean`);
+log(`fleet: ${state.couriers.length} vehicle(s), ${state.drivers.length} driver(s); cash now ${fmt(state.cash.clean)} clean`);
 if (!state.couriers.length) log('  !! nothing can move — the run below is meaningless');
 log(`sell routes: ${saleRoutes.map((r) => state.districts.find((d) => d.id === r.toId).name + ' ' + r.km.toFixed(1) + 'km').join(', ')}`);
 
@@ -120,11 +124,15 @@ function playTurn() {
   // Wash whatever the fixer will take, every day.
   A.washWithFixer(state);
 
-  // Put another courier on the next unsold district when we can afford one.
-  if (state.cash.clean >= 900 && nextSaleRoute < saleRoutes.length) {
-    const hire = A.hireCourier(state, 'bike');
-    if (hire.ok) {
-      A.assignCourier(state, hire.courier.id, saleRoutes[nextSaleRoute].id);
+  // Cover another district, but only when both the van and somebody to drive
+  // it are affordable — a vehicle with nobody in it earns nothing.
+  const needed = 900 + nextDriverHireFee(state);
+  if (state.cash.clean >= needed && nextSaleRoute < saleRoutes.length) {
+    const hire = A.buyVehicle(state, 'bike');
+    const drv = A.hireDriver(state);
+    if (hire.ok && drv.ok) {
+      A.assignDriver(state, hire.vehicle.id, drv.driver.id);
+      A.assignCourier(state, hire.vehicle.id, saleRoutes[nextSaleRoute].id);
       nextSaleRoute++;
     }
   }
@@ -137,8 +145,13 @@ function playTurn() {
     const g2 = build('grow_house', byRent[state.buildings.length % 6]);
     if (g2) {
       const r = wire(g2.id, 'building', lab.id, 'raw', 'any');
-      const hire = A.hireCourier(state, 'sedan');
-      if (hire.ok) A.assignCourier(state, hire.courier.id, r.id);
+      const hire = state.cash.clean >= 3400 + nextDriverHireFee(state)
+        ? A.buyVehicle(state, 'sedan') : { ok: false };
+      const drv = hire.ok ? A.hireDriver(state) : { ok: false };
+      if (hire.ok && drv.ok) {
+        A.assignDriver(state, hire.vehicle.id, drv.driver.id);
+        A.assignCourier(state, hire.vehicle.id, r.id);
+      }
     }
   }
   // Once there's rep and money, try running the crew off the contested block.
@@ -155,8 +168,13 @@ function playTurn() {
     const fungi = build('fungi_room', cheap);
     if (fungi) {
       const r = wire(fungi.id, 'building', lab.id, 'raw', 'any');
-      const hire = A.hireCourier(state, 'bike');
-      if (hire.ok) A.assignCourier(state, hire.courier.id, r.id);
+      const hire = state.cash.clean >= 900 + nextDriverHireFee(state)
+        ? A.buyVehicle(state, 'bike') : { ok: false };
+      const drv = hire.ok ? A.hireDriver(state) : { ok: false };
+      if (hire.ok && drv.ok) {
+        A.assignDriver(state, hire.vehicle.id, drv.driver.id);
+        A.assignCourier(state, hire.vehicle.id, r.id);
+      }
       log('  → diversified into psilocybin');
     }
   }

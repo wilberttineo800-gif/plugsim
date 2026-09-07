@@ -130,7 +130,10 @@ print('=== 5. couriers have real load/unload time ===');
   A.assignCourier(st, c.id, r.id);
   for (let h = 0; h < 24; h += 0.05) stepSim(st, 0.05, {});
   const def = COURIERS.sedan;
-  const expected = 24 / ((0.4 / def.speedKph) * 2 + (def.loadMinutes + def.unloadMinutes) / 60);
+  // Travel is OSRM's drive time scaled by the vehicle; the harness has no
+  // router, so the fallback (distance over 22 km/h) applies.
+  const legH = ((0.4 / 22) * 60 * def.paceFactor) / 60;
+  const expected = 24 / (legH * 2 + (def.loadMinutes + def.unloadMinutes) / 60);
   check('trips/day is sane on a 400 m route', c.tripsCompleted < 40,
         c.tripsCompleted + ' trips (was 1140 before; theory ' + expected.toFixed(0) + ')');
 }

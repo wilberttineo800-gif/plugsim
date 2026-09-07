@@ -169,6 +169,128 @@ export const UPGRADES = {
   nightclub: legitSet('room', 16000, 21000),
 };
 
+/**
+ * Vehicle upgrades, by class. A truck tier has no business appearing on a
+ * bicycle, so each class carries its own short list and they stay short.
+ *
+ *   capacityMult  how much it carries
+ *   paceMult      travel time: below 1 is quicker
+ *   turnaroundMult  loading and unloading time
+ *   stealthAdd    how much less likely it is to be pulled over
+ */
+export const VEHICLE_UPGRADES = {
+  foot: [
+    { id: 'bag', name: 'Bigger Bag', cost: 200,
+      blurb: 'A holdall instead of pockets. Twice as much per trip.',
+      effects: { capacityMult: 2 } },
+    { id: 'route', name: 'Knows the Cuts', cost: 350,
+      blurb: 'Alleys, fences and shortcuts nobody else uses.',
+      effects: { paceMult: 0.78 } },
+  ],
+  twowheel: [
+    { id: 'panniers', name: 'Panniers', cost: 700,
+      blurb: 'Frame bags either side. Far more per run.',
+      effects: { capacityMult: 1.8, paceMult: 1.05 } },
+    { id: 'tuned', name: 'Tuned', cost: 1400,
+      blurb: 'Derestricted and geared for the city.',
+      effects: { paceMult: 0.8 } },
+    { id: 'plates', name: 'Swapped Plates', cost: 1100,
+      blurb: 'Nothing on it matches anything on record.',
+      effects: { stealthAdd: 0.08 } },
+  ],
+  car: [
+    { id: 'seats', name: 'Seats Out', cost: 1200,
+      blurb: 'Rear seats gone, floor flattened. Room where passengers were.',
+      effects: { capacityMult: 1.6, turnaroundMult: 0.9 } },
+    { id: 'engine', name: 'Engine Work', cost: 4200,
+      blurb: 'It moves like something far more expensive.',
+      effects: { paceMult: 0.82 } },
+    { id: 'trap', name: 'Hidden Compartment', cost: 5600,
+      blurb: 'A void behind the panels that a search rarely finds.',
+      effects: { stealthAdd: 0.2, capacityMult: 0.9, turnaroundMult: 1.3 } },
+    { id: 'armour', name: 'Armour', cost: 9000,
+      blurb: 'Plated doors and run-flats. Heavy, and it drives like it.',
+      effects: { stealthAdd: 0.1, paceMult: 1.22, capacityMult: 0.85 } },
+  ],
+  van: [
+    { id: 'shelving', name: 'Racked Out', cost: 2200,
+      blurb: 'Proper racking. More in, and quicker to load.',
+      effects: { capacityMult: 1.5, turnaroundMult: 0.75 } },
+    { id: 'livery', name: 'Trade Livery', cost: 3100,
+      blurb: 'Signwritten as a plumber. It belongs on any street.',
+      effects: { stealthAdd: 0.22 } },
+    { id: 'suspension', name: 'Heavy Suspension', cost: 4800,
+      blurb: 'Carries a full load without sitting on the bump stops.',
+      effects: { capacityMult: 1.35, paceMult: 0.94 } },
+    { id: 'falsefloor', name: 'False Floor', cost: 7400,
+      blurb: 'The load sits under the load.',
+      effects: { stealthAdd: 0.18, turnaroundMult: 1.25 } },
+  ],
+  air: [
+    { id: 'battery', name: 'Extended Battery', cost: 3800,
+      blurb: 'It stops turning back early. Longer hops, same load.',
+      effects: { paceMult: 0.85 } },
+    { id: 'cradle', name: 'Payload Cradle', cost: 5200,
+      blurb: 'A proper slung crate rather than taped-on boxes.',
+      effects: { capacityMult: 1.7, paceMult: 1.08 } },
+    { id: 'quiet', name: 'Low-Noise Rotors', cost: 6900,
+      blurb: 'You hear it only once it has already gone.',
+      effects: { stealthAdd: 0.05 } },
+  ],
+  truck: [
+    { id: 'trailer', name: 'Longer Trailer', cost: 12000,
+      blurb: 'More again, at the cost of getting it round corners.',
+      effects: { capacityMult: 1.6, paceMult: 1.12 } },
+    { id: 'liftgate', name: 'Lift Gate', cost: 8500,
+      blurb: 'Loading stops being the whole job.',
+      effects: { turnaroundMult: 0.55 } },
+    { id: 'logbook', name: 'Clean Logbook', cost: 15000,
+      blurb: 'Papers, plates and a haulage name that checks out.',
+      effects: { stealthAdd: 0.28 } },
+    { id: 'refit', name: 'Engine Refit', cost: 18000,
+      blurb: 'It will never be quick, but it stops being the slowest thing on the road.',
+      effects: { paceMult: 0.85 } },
+  ],
+};
+
+/** What can still be done to this vehicle. */
+export function vehicleUpgrades(courier, def) {
+  const list = VEHICLE_UPGRADES[def.class] || [];
+  const owned = new Set(courier.upgrades || []);
+  return list.map((u) => ({ ...u, owned: owned.has(u.id) }));
+}
+
+export function vehicleUpgradeById(cls, id) {
+  return (VEHICLE_UPGRADES[cls] || []).find((u) => u.id === id) || null;
+}
+
+/** Everything installed on this vehicle, combined. */
+export function vehicleEffects(courier, def) {
+  const e = { capacityMult: 1, paceMult: 1, turnaroundMult: 1, stealthAdd: 0 };
+  for (const id of courier.upgrades || []) {
+    const u = vehicleUpgradeById(def.class, id);
+    if (!u) continue;
+    const fx = u.effects || {};
+    e.capacityMult *= fx.capacityMult ?? 1;
+    e.paceMult *= fx.paceMult ?? 1;
+    e.turnaroundMult *= fx.turnaroundMult ?? 1;
+    e.stealthAdd += fx.stealthAdd ?? 0;
+  }
+  return e;
+}
+
+/** The vehicle's numbers with everything fitted to it. */
+export function vehicleStats(courier, def) {
+  const fx = vehicleEffects(courier, def);
+  return {
+    capacity: def.capacity * fx.capacityMult,
+    paceFactor: def.paceFactor * fx.paceMult,
+    loadMinutes: def.loadMinutes * fx.turnaroundMult,
+    unloadMinutes: def.unloadMinutes * fx.turnaroundMult,
+    stealth: Math.min(0.97, def.stealth + fx.stealthAdd),
+  };
+}
+
 /** Everything this building could still have done to it. */
 export function availableUpgrades(building) {
   const list = UPGRADES[building.type] || [];

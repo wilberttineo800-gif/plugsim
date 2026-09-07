@@ -366,6 +366,10 @@ export async function fetchRoute(from, to) {
       result = {
         points: route.geometry.coordinates.map(([lng, lat]) => ({ lat, lng })),
         km: route.distance / 1000,
+        // OSRM's own estimate for driving these actual roads — turns, road
+        // classes and speed limits included. Far better than distance over a
+        // made-up average speed.
+        driveMinutes: route.duration / 60,
         real: true,
       };
     }
@@ -374,7 +378,9 @@ export async function fetchRoute(from, to) {
   }
   if (!result) {
     // Straight line, padded to approximate the detour a real street grid forces.
-    result = { points: [from, to], km: haversineKm(from, to) * 1.35, real: false };
+    const km = haversineKm(from, to) * 1.35;
+    // No router: fall back to a plausible urban average.
+    result = { points: [from, to], km, driveMinutes: (km / 22) * 60, real: false };
   }
   routeCache.set(key, result);
   return result;

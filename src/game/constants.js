@@ -454,92 +454,177 @@ export const BUILDING_IDS = Object.keys(BUILDINGS);
 // and finding somewhere to stop are most of a short trip. The load/unload
 // minutes matter more than speed on a route of a few hundred metres, which is
 // exactly how real delivery work behaves.
+// Travel time comes from OSRM's own estimate for driving these actual roads.
+// `paceFactor` is how this vehicle compares to that baseline car: under 1 is
+// quicker, over 1 is slower. A semi is not just a big van — it is genuinely
+// slower through a city, and a runner is walking.
+//
+// `class` groups vehicles for upgrades, so a truck tier never appears on a bike.
+// Vehicle classes, and what each is for.
+export const COURIER_CLASSES = {
+  foot:     { id: 'foot',     name: 'On foot',      note: 'Slow and tiny, but invisible.' },
+  twowheel: { id: 'twowheel', name: 'Two wheels',   note: 'Cuts through traffic, carries little.' },
+  car:      { id: 'car',      name: 'Cars',         note: 'The everyday backbone of a fleet.' },
+  van:      { id: 'van',      name: 'Vans',         note: 'Real capacity, and real attention.' },
+  truck:    { id: 'truck',    name: 'Trucks',       note: 'Moves everything, slowly, in plain sight.' },
+  air:      { id: 'air',      name: 'Air',          note: 'Ignores roads entirely. Barely carries anything.' },
+};
+
+// Travel time comes from OSRM's own estimate for driving these actual roads.
+// `paceFactor` compares this vehicle to that baseline car: under 1 is quicker.
+// A semi is not just a big van — it is genuinely slower through a city, and a
+// runner is walking. Anything marked `direct` ignores the road network and
+// flies straight, which wins wherever streets detour.
 export const COURIERS = {
+  // --- On foot -------------------------------------------------------------
   runner: {
-    id: 'runner',
-    name: 'Foot Runner',
-    blurb: 'A kid on a corner. Carries almost nothing, but nobody looks twice.',
-    cost: 350,
-    wagePerDay: 55,
-    capacity: 14,
-    speedKph: 4.5,
-    loadMinutes: 6,
-    unloadMinutes: 5,
-    stealth: 0.94,
+    id: 'runner', name: 'Foot Runner', class: 'foot',
+    blurb: 'Walking pace. Carries almost nothing, and nobody looks twice.',
+    cost: 350, wagePerDay: 55, capacity: 14,
+    paceFactor: 7.5, loadMinutes: 6, unloadMinutes: 5, stealth: 0.94,
   },
+  jogger: {
+    id: 'jogger', name: 'Runner in Lycra', class: 'foot',
+    blurb: 'Running gear and a hydration pack. Quicker, and reads as exercise.',
+    cost: 900, wagePerDay: 80, capacity: 22,
+    paceFactor: 5.2, loadMinutes: 7, unloadMinutes: 6, stealth: 0.96,
+  },
+  // --- Two wheels ----------------------------------------------------------
   bike: {
-    id: 'bike',
-    name: 'Bike Courier',
-    blurb: 'Quick through traffic, slips down alleys, barely worth pulling over.',
-    cost: 900,
-    wagePerDay: 90,
-    capacity: 40,
-    speedKph: 13,
-    loadMinutes: 12,
-    unloadMinutes: 9,
-    stealth: 0.85,
+    id: 'bike', name: 'Bike Courier', class: 'twowheel',
+    blurb: 'Through traffic and down alleys. Barely worth pulling over.',
+    cost: 900, wagePerDay: 90, capacity: 40,
+    paceFactor: 1.9, loadMinutes: 12, unloadMinutes: 9, stealth: 0.85,
+  },
+  ebike: {
+    id: 'ebike', name: 'E-Bike', class: 'twowheel',
+    blurb: 'A bike that keeps up with traffic and still uses the cycle lane.',
+    cost: 2200, wagePerDay: 110, capacity: 55,
+    paceFactor: 1.3, loadMinutes: 13, unloadMinutes: 10, stealth: 0.86,
   },
   scooter: {
-    id: 'scooter',
-    name: 'Delivery Scooter',
-    blurb: 'A food-delivery box on the back. Fast, plausible, and hard to tail.',
-    cost: 1900,
-    wagePerDay: 120,
-    capacity: 65,
-    speedKph: 20,
-    loadMinutes: 15,
-    unloadMinutes: 11,
-    stealth: 0.78,
+    id: 'scooter', name: 'Delivery Scooter', class: 'twowheel',
+    blurb: 'A food-delivery box on the back. Quick, plausible, hard to tail.',
+    cost: 1900, wagePerDay: 120, capacity: 65,
+    paceFactor: 1.0, loadMinutes: 15, unloadMinutes: 11, stealth: 0.78,
+  },
+  motorcycle: {
+    id: 'motorcycle', name: 'Motorcycle', class: 'twowheel',
+    blurb: 'Nothing in a city is faster. Nothing carries less for the money.',
+    cost: 7800, wagePerDay: 210, capacity: 45,
+    paceFactor: 0.68, loadMinutes: 11, unloadMinutes: 8, stealth: 0.5,
+  },
+  // --- Cars ----------------------------------------------------------------
+  hatchback: {
+    id: 'hatchback', name: 'Compact Hatchback', class: 'car',
+    blurb: 'The cheapest four wheels that will do the job. Utterly forgettable.',
+    cost: 2100, wagePerDay: 140, capacity: 95,
+    paceFactor: 1.05, loadMinutes: 18, unloadMinutes: 13, stealth: 0.7,
   },
   sedan: {
-    id: 'sedan',
-    name: 'Beater Sedan',
+    id: 'sedan', name: 'Beater Sedan', class: 'car',
     blurb: 'Anonymous and cheap. The honest workhorse of a growing operation.',
-    cost: 3400,
-    wagePerDay: 165,
-    capacity: 140,
-    speedKph: 22,
-    loadMinutes: 22,
-    unloadMinutes: 16,
-    stealth: 0.62,
+    cost: 3400, wagePerDay: 165, capacity: 140,
+    paceFactor: 1.0, loadMinutes: 22, unloadMinutes: 16, stealth: 0.62,
   },
   cab: {
-    id: 'cab',
-    name: 'Livery Cab',
-    blurb: 'Belongs everywhere at any hour. Costs a fortune in wages.',
-    cost: 6800,
-    wagePerDay: 300,
-    capacity: 160,
-    speedKph: 25,
-    loadMinutes: 18,
-    unloadMinutes: 13,
-    stealth: 0.8,
+    id: 'cab', name: 'Livery Cab', class: 'car',
+    blurb: 'Belongs anywhere at any hour. Costs a fortune in wages.',
+    cost: 6800, wagePerDay: 300, capacity: 160,
+    paceFactor: 0.92, loadMinutes: 18, unloadMinutes: 13, stealth: 0.8,
+  },
+  suv: {
+    id: 'suv', name: 'SUV', class: 'car',
+    blurb: 'School-run bodywork with a boot you can live out of.',
+    cost: 11500, wagePerDay: 250, capacity: 300,
+    paceFactor: 1.06, loadMinutes: 24, unloadMinutes: 18, stealth: 0.74,
+  },
+  luxury: {
+    id: 'luxury', name: 'Executive Saloon', class: 'car',
+    blurb: 'Tinted, immaculate and expensive. Nobody stops it, and everyone remembers it.',
+    cost: 32000, wagePerDay: 480, capacity: 180,
+    paceFactor: 0.85, loadMinutes: 16, unloadMinutes: 12, stealth: 0.9,
+  },
+  sportscar: {
+    id: 'sportscar', name: 'Sports Car', class: 'car',
+    blurb: 'The fastest thing you own and the least room in it. Remembered by everyone who sees it.',
+    cost: 24000, wagePerDay: 340, capacity: 55,
+    paceFactor: 0.72, loadMinutes: 10, unloadMinutes: 8, stealth: 0.35,
+  },
+  // --- Vans ----------------------------------------------------------------
+  minivan: {
+    id: 'minivan', name: 'Minivan', class: 'van',
+    blurb: 'School run camouflage with the seats out. Real capacity, ordinary pace.',
+    cost: 5600, wagePerDay: 200, capacity: 260,
+    paceFactor: 1.1, loadMinutes: 28, unloadMinutes: 20, stealth: 0.72,
   },
   van: {
-    id: 'van',
-    name: 'Panel Van',
+    id: 'van', name: 'Panel Van', class: 'van',
     blurb: 'Serious capacity, and exactly what police expect to search.',
-    cost: 9200,
-    wagePerDay: 260,
-    capacity: 480,
-    speedKph: 19,
-    loadMinutes: 38,
-    unloadMinutes: 28,
-    stealth: 0.45,
+    cost: 9200, wagePerDay: 260, capacity: 480,
+    paceFactor: 1.25, loadMinutes: 38, unloadMinutes: 28, stealth: 0.45,
+  },
+  chiller: {
+    id: 'chiller', name: 'Refrigerated Van', class: 'van',
+    blurb: 'Cold, sealed and nobody wants to stand in it. Keeps product at its best.',
+    cost: 16000, wagePerDay: 330, capacity: 420,
+    paceFactor: 1.28, loadMinutes: 42, unloadMinutes: 30, stealth: 0.68,
+    // A chilled load arrives in the condition it left in.
+    preservesQuality: true,
+  },
+  luton: {
+    id: 'luton', name: 'Luton Van', class: 'van',
+    blurb: 'A box on a van chassis. Removals by day, and by night.',
+    cost: 19000, wagePerDay: 360, capacity: 820,
+    paceFactor: 1.35, loadMinutes: 48, unloadMinutes: 35, stealth: 0.5,
+  },
+  // --- Trucks --------------------------------------------------------------
+  pickup: {
+    id: 'pickup', name: 'Pickup Truck', class: 'truck',
+    blurb: 'A trade truck with a covered bed. Belongs on any site in the country.',
+    cost: 8400, wagePerDay: 230, capacity: 340,
+    paceFactor: 1.1, loadMinutes: 26, unloadMinutes: 19, stealth: 0.66,
   },
   boxtruck: {
-    id: 'boxtruck',
-    name: 'Box Truck',
-    blurb: 'Moves a warehouse in one run. Slow, thirsty, impossible to hide.',
-    cost: 21000,
-    wagePerDay: 430,
-    capacity: 1400,
-    speedKph: 16,
-    loadMinutes: 65,
-    unloadMinutes: 48,
-    stealth: 0.3,
+    id: 'boxtruck', name: 'Box Truck', class: 'truck',
+    blurb: 'Moves a warehouse in one run. Slow, and impossible to hide.',
+    cost: 21000, wagePerDay: 430, capacity: 1700,
+    paceFactor: 1.5, loadMinutes: 65, unloadMinutes: 48, stealth: 0.34,
+  },
+  flatbed: {
+    id: 'flatbed', name: 'Flatbed', class: 'truck',
+    blurb: 'Strapped pallets under a tarp. Loads and unloads faster than anything its size, and hides nothing at all.',
+    cost: 27000, wagePerDay: 470, capacity: 1250,
+    paceFactor: 1.45, loadMinutes: 45, unloadMinutes: 34,
+    // The load is literally in open view — the least discreet thing you can run.
+    stealth: 0.12,
+  },
+  semi: {
+    id: 'semi', name: 'Semi Truck', class: 'truck',
+    blurb: 'Everything you own in one trailer. Crawls through a city and can be seen from orbit.',
+    cost: 68000, wagePerDay: 720, capacity: 4200,
+    paceFactor: 1.95, loadMinutes: 110, unloadMinutes: 80, stealth: 0.18,
+  },
+  // --- Air -----------------------------------------------------------------
+  drone: {
+    id: 'drone', name: 'Delivery Drone', class: 'air',
+    blurb: 'Straight over everything. Carries almost nothing and cannot be followed.',
+    cost: 14000, wagePerDay: 90, capacity: 12,
+    paceFactor: 1.0, loadMinutes: 4, unloadMinutes: 3, stealth: 0.93,
+    direct: true, airKph: 55,
+  },
+  heavylift: {
+    id: 'heavylift', name: 'Heavy-Lift Drone', class: 'air',
+    blurb: 'Industrial rotors and a slung crate. Still small, but it ignores every road.',
+    cost: 46000, wagePerDay: 210, capacity: 70,
+    paceFactor: 1.0, loadMinutes: 9, unloadMinutes: 7, stealth: 0.82,
+    direct: true, airKph: 38,
   },
 };
+
+
+
+
 
 
 

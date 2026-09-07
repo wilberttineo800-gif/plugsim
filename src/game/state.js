@@ -10,7 +10,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 9;
+export const SAVE_VERSION = 10;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -109,6 +109,7 @@ export function createCourier(typeId, homeBuildingId) {
     cargoKind: 'packs',
     cargoQuality: emptyProductMap(0.5),
     homeBuildingId,
+    upgrades: [],
     tripsCompleted: 0,
     lastEvent: null,
   };
@@ -124,6 +125,7 @@ export function createRoute({ fromId, toType, toId, cargo, product }) {
     product, // product id or 'any'
     points: null, // filled in async by the router
     km: null,
+    driveMinutes: null, // OSRM's real drive time for these roads
     realRoad: false,
     active: true,
   };

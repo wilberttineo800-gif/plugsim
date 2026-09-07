@@ -250,7 +250,7 @@ function bootGame(state) {
         : buildingById(state, r.toId)?.latlng;
       if (from && to) {
         fetchRoute(from.latlng, to).then((res) => {
-          r.points = res.points; r.km = res.km; r.realRoad = res.real;
+          r.points = res.points; r.km = res.km; r.driveMinutes = res.driveMinutes; r.realRoad = res.real;
         });
       }
     }
@@ -506,6 +506,14 @@ game.hireCourier = (typeId) => {
   game.courierLayer.sync(game.state);
 };
 
+game.upgradeCourier = (id, upgradeId) => {
+  diag.trace('upgrade vehicle');
+  const r = A.upgradeCourier(game.state, id, upgradeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.upgrade.name} fitted.`, 'good', 2600);
+  game.ui.render();
+};
+
 game.fireCourier = (id) => {
   A.fireCourier(game.state, id);
   if (game.state.selection?.id === id) game.select(null);
@@ -573,7 +581,7 @@ game.editRoute = (routeId, changes) => {
       : buildingById(game.state, route.toId)?.latlng;
     if (!from || !to) return;
     const res = await fetchRoute(from.latlng, to);
-    route.points = res.points; route.km = res.km; route.realRoad = res.real;
+    route.points = res.points; route.km = res.km; route.driveMinutes = res.driveMinutes; route.realRoad = res.real;
     game.routeLayer.sync(game.state);
     game.ui.renderRail(true);
   });

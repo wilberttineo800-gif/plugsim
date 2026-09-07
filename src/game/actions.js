@@ -8,7 +8,9 @@ import {
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
-import { upgradeById, availableUpgrades, effectsFor } from './upgrades.js';
+import {
+  upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
+} from './upgrades.js';
 import {
   buildingById,
   canAfford,
@@ -249,6 +251,25 @@ export function hireCourier(state, typeId) {
   return { ok: true, courier: c };
 }
 
+/** Fit something to a vehicle. Tiers are per class, so lists stay short. */
+export function upgradeCourier(state, courierId, upgradeId) {
+  const c = courierById(state, courierId);
+  if (!c) return { ok: false, error: 'That vehicle is gone.' };
+  const def = COURIERS[c.type];
+  const u = vehicleUpgradeById(def.class, upgradeId);
+  if (!u) return { ok: false, error: 'That doesn’t fit this vehicle.' };
+  if ((c.upgrades || []).includes(upgradeId)) return { ok: false, error: 'Already fitted.' };
+  if (!canAfford(state, u.cost)) {
+    return { ok: false, error: `${u.name} costs $${u.cost.toLocaleString()} clean.` };
+  }
+  spendClean(state, u.cost);
+  c.upgrades = (c.upgrades || []).concat(upgradeId);
+  logEvent(state, `${u.name} fitted to ${c.name}.`, 'good');
+  return { ok: true, upgrade: u };
+}
+
+export { vehicleUpgrades, vehicleStats };
+
 export function fireCourier(state, courierId) {
   const idx = state.couriers.findIndex((c) => c.id === courierId);
   if (idx < 0) return { ok: false, error: 'Already gone.' };
@@ -284,6 +305,7 @@ export async function addRoute(state, spec, onReady) {
   const result = await fetchRoute(from.latlng, toLatLng);
   route.points = result.points;
   route.km = result.km;
+  route.driveMinutes = result.driveMinutes;
   route.realRoad = result.real;
   onReady?.(route);
   return { ok: true, route };

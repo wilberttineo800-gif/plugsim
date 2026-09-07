@@ -16,7 +16,7 @@ import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
-import { effectsFor, upkeepFor } from './upgrades.js';
+import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
 import { rentPerDay } from './lots.js';
 import {
   buildingById,
@@ -206,7 +206,9 @@ function stepLabs(state, dt) {
 
 function stepCouriers(state, dt, hooks) {
   for (const c of state.couriers) {
-    const def = COURIERS[c.type];
+    const base = COURIERS[c.type];
+    // Whatever is fitted to this vehicle changes what it can do.
+    const def = { ...base, ...vehicleStats(c, base) };
     const route = routeById(state, c.routeId);
 
     if (!route || !route.active) {
@@ -220,7 +222,14 @@ function stepCouriers(state, dt, hooks) {
     const source = buildingById(state, route.fromId);
     if (!source) { c.phase = 'idle'; continue; }
 
-    const legHours = route.km / Math.max(1, def.speedKph);
+    // Air goes straight over everything; everything else follows the roads at
+    // OSRM's own estimated pace, scaled by what this vehicle is.
+    const ends = [route.points[0], route.points[route.points.length - 1]];
+    const straightKm = haversineKm(ends[0], ends[1]);
+    const legHours = def.direct
+      ? Math.max(0.02, straightKm / (def.airKph || 45))
+      : Math.max(0.02, ((route.driveMinutes != null ? route.driveMinutes : (route.km / 22) * 60)
+          * (def.paceFactor || 1)) / 60);
 
     switch (c.phase) {
       case 'idle':
@@ -242,8 +251,11 @@ function stepCouriers(state, dt, hooks) {
       }
       case 'outbound': {
         c.progress += legHours > 0 ? dt / legHours : 1;
-        c.position = pointAlongPath(route.points, clamp01(c.progress));
-        maybeGetStopped(state, c, def, dt, hooks);
+        c.position = def.direct
+          ? straightLine(ends[0], ends[1], clamp01(c.progress))
+          : pointAlongPath(route.points, clamp01(c.progress));
+        // Nothing on the road to be pulled over by.
+        if (!def.direct) maybeGetStopped(state, c, def, dt, hooks);
         if (c.progress >= 1) {
           c.phase = 'unloading';
           c.dwellLeft = (def.unloadMinutes || 0) / 60;
@@ -255,7 +267,7 @@ function stepCouriers(state, dt, hooks) {
         c.dwellLeft -= dt;
         if (c.dwellLeft <= 0) {
           c.dwellLeft = 0;
-          unloadCargo(state, c, route, hooks);
+          unloadCargo(state, c, route, hooks, def);
           c.phase = 'returning';
           c.progress = 0;
           c.tripsCompleted++;
@@ -264,7 +276,9 @@ function stepCouriers(state, dt, hooks) {
       }
       case 'returning': {
         c.progress += legHours > 0 ? dt / legHours : 1;
-        c.position = pointAlongPath(route.points, 1 - clamp01(c.progress));
+        c.position = def.direct
+          ? straightLine(ends[0], ends[1], 1 - clamp01(c.progress))
+          : pointAlongPath(route.points, 1 - clamp01(c.progress));
         if (c.progress >= 1) {
           c.phase = 'loading';
           c.progress = 0;
@@ -275,6 +289,12 @@ function stepCouriers(state, dt, hooks) {
         c.phase = 'idle';
     }
   }
+}
+
+/** Straight-line interpolation, for anything that doesn't use roads. */
+function straightLine(a, b, t) {
+  const f = clamp01(t);
+  return { lat: a.lat + (b.lat - a.lat) * f, lng: a.lng + (b.lng - a.lng) * f };
 }
 
 function loadCargo(state, c, def, route, source) {
@@ -302,7 +322,7 @@ function loadCargo(state, c, def, route, source) {
   return loaded;
 }
 
-function unloadCargo(state, c, route, hooks = {}) {
+function unloadCargo(state, c, route, hooks = {}, def = null) {
   const carried = totalPacks(c.cargo);
   if (carried <= 0) return;
 
@@ -324,7 +344,11 @@ function unloadCargo(state, c, route, hooks = {}) {
     for (const pid of PRODUCT_IDS) {
       const amount = c.cargo[pid];
       if (amount <= 0) continue;
-      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], amount, c.cargoQuality[pid]);
+      // A refrigerated load doesn't degrade on the way.
+      const arriving = def && def.preservesQuality
+        ? c.cargoQuality[pid]
+        : Math.max(0, c.cargoQuality[pid] - 0.02);
+      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], amount, arriving);
       d.supply[pid] += amount;
       c.cargo[pid] = 0;
     }
@@ -362,7 +386,8 @@ function maybeGetStopped(state, c, def, dt, hooks) {
   if (!d || d.heat < HEAT.stopHeatFloor) return;
 
   const heatFactor = (d.heat - HEAT.stopHeatFloor) / (HEAT.max - HEAT.stopHeatFloor);
-  const perHour = HEAT.stopChanceAtMaxHeat * clamp01(heatFactor) * (1 - COURIERS[c.type].stealth);
+  const stats = vehicleStats(c, COURIERS[c.type]);
+  const perHour = HEAT.stopChanceAtMaxHeat * clamp01(heatFactor) * (1 - stats.stealth);
   if (rng() < perHour * dt) {
     const fine = Math.round(carried * HEAT.finePerPackSeized);
     for (const pid of PRODUCT_IDS) c.cargo[pid] = 0;

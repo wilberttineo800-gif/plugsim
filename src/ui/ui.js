@@ -3,7 +3,8 @@
 // delegation — cheap enough to redraw the whole panel on any state change.
 
 import {
-  BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, PRODUCTS, PRODUCT_IDS, SPEEDS,
+  BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
+  PRODUCTS, PRODUCT_IDS, SPEEDS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
@@ -15,7 +16,9 @@ import {
 import { crewById } from '../game/crews.js';
 import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
 import { unlockStatus, regionNote } from '../game/progression.js';
-import { availableUpgrades, describeEffects, effectsFor, upkeepFor } from '../game/upgrades.js';
+import {
+  availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
+} from '../game/upgrades.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import { buildingById, courierById, districtById, clockOf } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
@@ -187,6 +190,7 @@ export class GameUI {
       case 'hire': g.hireCourier(type); break;
       case 'fire': g.fireCourier(id); break;
       case 'upgrade': g.upgradeBuilding(id, type); break;
+      case 'upgrade-courier': g.upgradeCourier(id, type); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
       case 'sell-building': g.sellBuilding(id); break;
@@ -597,31 +601,62 @@ export class GameUI {
 
   tabFleet() {
     const s = this.game.state;
+    const owned = {};
+    for (const c of s.couriers) owned[c.type] = (owned[c.type] || 0) + 1;
 
-    const hire = COURIER_IDS.map((id) => {
-      const def = COURIERS[id];
-      const short = s.cash.clean < def.cost;
-      return (
-        `<button class="card ${short ? 'is-locked' : ''}" data-action="hire" data-type="${id}" ${short ? 'disabled' : ''}>
-          <div class="card__head">
-            <span class="card__name">${esc(def.name)}</span>
-            <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(def.cost)}</span>
-          </div>
-          ${def.blurb ? `<div class="card__blurb">${esc(def.blurb)}</div>` : ''}
-          <div class="card__meta">
-            <span>${def.capacity} cap</span><span>${def.speedKph} km/h</span>
-            <span>${pct(def.stealth)} slick</span><span>${money(def.wagePerDay)}/day</span>
-          </div>
-        </button>`
-      );
+    // Grouped by class, so a growing catalogue stays readable.
+    const dealership = Object.values(COURIER_CLASSES).map((cls) => {
+      const models = COURIER_IDS
+        .filter((id) => COURIERS[id].class === cls.id)
+        .sort((a, b) => COURIERS[a].cost - COURIERS[b].cost);
+      if (!models.length) return '';
+
+      const cards = models.map((id) => {
+        const def = COURIERS[id];
+        const short = s.cash.clean < def.cost;
+        const have = owned[id] || 0;
+        const pace = def.direct
+          ? `${def.airKph} km/h direct`
+          : `${def.paceFactor <= 1 ? '' : '+'}${Math.round((def.paceFactor - 1) * 100)}% pace`;
+        return `
+          <button class="card ${short ? 'is-locked' : ''}" data-action="hire" data-type="${id}" ${short ? 'disabled' : ''}>
+            <div class="card__head">
+              <span class="card__name">${esc(def.name)}${have ? ` <span style="color:var(--sodium)">×${have}</span>` : ''}</span>
+              <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(def.cost)}</span>
+            </div>
+            <div class="card__blurb">${esc(def.blurb)}</div>
+            <div class="card__meta">
+              <span>${units(def.capacity)} cap</span>
+              <span>${esc(pace)}</span>
+              <span>${pct(def.stealth)} slick</span>
+              <span>${money(def.wagePerDay)}/day</span>
+            </div>
+          </button>`;
+      }).join('');
+
+      return `<details class="upgrades" ${cls.id === 'car' ? 'open' : ''}>
+        <summary><span>${esc(cls.name)}</span>
+          <span class="upgrades__count">${models.length} model${models.length === 1 ? '' : 's'}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">${esc(cls.note)}</p>
+          ${cards}
+        </div>
+      </details>`;
     }).join('');
 
     const fleet = s.couriers.length
       ? s.couriers.map((c) => this.courierCard(c)).join('')
-      : '<div class="empty">No couriers. Product doesn’t walk itself to the block.</div>';
+      : '<div class="empty">No vehicles. Product doesn’t walk itself to the block.</div>';
 
     return (
-      `<div class="sect"><div class="sect__title"><span>Hire</span></div>${hire}</div>` +
+      `<div class="sect">
+        <div class="sect__title"><span>Dealership</span><span>${COURIER_IDS.length} models</span></div>
+        <p class="card__blurb" style="margin:0 0 10px">
+          Travel time is the real drive on these roads, scaled by what the vehicle
+          is. Bigger carries more and moves slower; air ignores the roads entirely.
+        </p>
+        ${dealership}
+      </div>` +
       `<div class="sect"><div class="sect__title"><span>Your fleet</span><span>${s.couriers.length}</span></div>${fleet}</div>`
     );
   }
@@ -788,6 +823,47 @@ export class GameUI {
           </select></div>
         <button class="ghostbtn" style="width:100%" data-action="edit-route" data-id="${r.id}">Done</button>
       </div>`;
+  }
+
+  /** What can still be fitted to this vehicle, priced with its effect. */
+  vehicleUpgradeBlock(c) {
+    const s = this.game.state;
+    const def = COURIERS[c.type];
+    const list = vehicleUpgrades(c, def);
+    if (!list.length) return '';
+    const installed = list.filter((u) => u.owned);
+    const open = list.filter((u) => !u.owned);
+
+    const row = (u) => {
+      const short = s.cash.clean < u.cost;
+      const bits = [];
+      const fx = u.effects || {};
+      if (fx.capacityMult) bits.push(`${fx.capacityMult >= 1 ? '+' : ''}${Math.round((fx.capacityMult - 1) * 100)}% capacity`);
+      if (fx.paceMult) bits.push(`${fx.paceMult <= 1 ? '−' : '+'}${Math.round(Math.abs(1 - fx.paceMult) * 100)}% travel time`);
+      if (fx.turnaroundMult) bits.push(`${fx.turnaroundMult <= 1 ? '−' : '+'}${Math.round(Math.abs(1 - fx.turnaroundMult) * 100)}% turnaround`);
+      if (fx.stealthAdd) bits.push(`+${Math.round(fx.stealthAdd * 100)} slick`);
+      return `
+        <button class="card ${short ? 'is-locked' : ''}"
+          data-action="upgrade-courier" data-id="${c.id}" data-type="${u.id}" ${short ? 'disabled' : ''}>
+          <div class="card__head">
+            <span class="card__name">${esc(u.name)}</span>
+            <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(u.cost)}</span>
+          </div>
+          <div class="card__blurb">${esc(u.blurb)}</div>
+          <div class="card__meta">${bits.map((b) => `<span style="color:${b.startsWith('+') && !b.includes('travel') && !b.includes('turnaround') ? 'var(--good)' : b.startsWith('−') ? 'var(--good)' : 'var(--warn)'}">${esc(b)}</span>`).join('')}</div>
+        </button>`;
+    };
+
+    return `
+      <details class="upgrades" ${open.length && !installed.length ? 'open' : ''}>
+        <summary><span>Fit out</span>
+          <span class="upgrades__count">${installed.length}/${list.length} fitted</span></summary>
+        <div class="upgrades__body">
+          ${open.length ? open.map(row).join('') : '<div class="empty">Nothing left to fit.</div>'}
+          ${installed.length ? `<div class="sect__title" style="margin-top:10px"><span>Fitted</span></div>
+            <div class="chips">${installed.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}
+        </div>
+      </details>`;
   }
 
   /** Testing controls. Not reachable through ordinary play. */
@@ -1367,13 +1443,14 @@ export class GameUI {
     const route = s.routes.find((r) => r.id === c.routeId);
     const info = route ? routeLabel(s, route) : null;
     const carried = PRODUCT_IDS.reduce((n, p) => n + c.cargo[p], 0);
+    const fitted = vehicleStats(c, def);
 
     return (
       `<h2 class="ttl">${esc(c.name)}</h2>
       <p class="subttl">${esc(this.phaseLabel(c))}</p>
       <div class="sect">
-        <div class="sect__title"><span>Load</span><span>${units(carried)} / ${def.capacity}</span></div>
-        <div class="meter"><i style="width:${(carried / def.capacity) * 100}%"></i></div>
+        <div class="sect__title"><span>Load</span><span>${units(carried)} / ${units(fitted.capacity)}</span></div>
+        <div class="meter"><i style="width:${Math.min(100, (carried / fitted.capacity) * 100)}%"></i></div>
         <div class="rows" style="margin-top:9px">
           ${PRODUCT_IDS.filter((p) => c.cargo[p] > 0.01)
             .map((p) => `<div class="row"><span>${esc(PRODUCTS[p].name)}</span><span>${units(c.cargo[p])}</span></div>`)
@@ -1386,7 +1463,10 @@ export class GameUI {
           ? `<div class="rows">
                <div class="row"><span>Route</span><span>${esc(info.from)} → ${esc(info.to)}</span></div>
                <div class="row"><span>Leg</span><span>${km(route.km)}</span></div>
-               <div class="row"><span>One way</span><span>${duration(route.km / def.speedKph)}</span></div>
+               <div class="row"><span>One way</span>
+                 <span>${duration(((route.driveMinutes ?? (route.km / 22) * 60) * (def.paceFactor || 1)) / 60)}</span></div>
+               <div class="row"><span>Turnaround</span>
+                 <span>${duration((def.loadMinutes + def.unloadMinutes) / 60)}</span></div>
                <div class="row"><span>Runs done</span><span>${c.tripsCompleted}</span></div>
              </div>`
           : '<div class="empty">Parked with no route. Assign one from the Fleet tab.</div>'}
@@ -1394,11 +1474,13 @@ export class GameUI {
       <div class="sect">
         <div class="sect__title"><span>Vehicle</span></div>
         <div class="rows">
-          <div class="row"><span>Speed</span><span>${def.speedKph} km/h</span></div>
-          <div class="row"><span>Keeps a low profile</span><span>${pct(def.stealth)}</span></div>
+          <div class="row"><span>Pace</span>
+            <span class="${def.paceFactor <= 1 ? 'good' : 'warn'}">${def.paceFactor <= 1 ? '' : '+'}${Math.round((def.paceFactor - 1) * 100)}% vs a car</span></div>
+          <div class="row"><span>Keeps a low profile</span><span>${pct(fitted.stealth)}</span></div>
           <div class="row"><span>Wage</span><span>${money(def.wagePerDay)}/day</span></div>
         </div>
       </div>
+      ${this.vehicleUpgradeBlock(c)}
       <div class="btnrow">
         <button class="ghostbtn" data-action="goto-tab" data-tab="fleet">Fleet</button>
         <button class="ghostbtn" data-action="fire" data-id="${c.id}">Let go</button>

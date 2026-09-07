@@ -47,6 +47,11 @@ for (const [to, type] of [[lab.id, 'building'], [held.id, 'district'], [open.id,
   state.routes.push(r);
 }
 A.assignCourier(state, courier.id, state.routes[1].id);
+// Install a couple of upgrades so the panel renders with effects applied.
+A.upgradeBuilding(state, grow.id, 'lights');
+A.upgradeBuilding(state, grow.id, 'racks');
+A.upgradeBuilding(state, lab.id, 'line');
+A.upgradeBuilding(state, shop.id, 'books');
 for (let h = 0; h < 24 * 6; h += 0.05) stepSim(state, 0.05, {});
 
 // Build a UI without touching the constructor (which needs a DOM).
@@ -75,6 +80,9 @@ const cases = [
   ['lotPanel (owned empty)', () => { const l = state.lots.find((x) => !x.owned); A.buyLot(state, l.id); return ui.lotPanel(l); }],
   ['lotPanel (developed)', () => ui.lotPanel(state.lots.find((l) => l.buildingId))],
   ['lotDevelopBlock', () => ui.lotDevelopBlock(state.lots.find((l) => l.owned && !l.buildingId))],
+  ['upgradeBlock grow', () => ui.upgradeBlock(grow)],
+  ['upgradeBlock lab', () => ui.upgradeBlock(lab)],
+  ['upgradeBlock shop', () => ui.upgradeBlock(shop)],
   ['dailyNet', () => String(ui.dailyNet())],
 ];
 

@@ -6,7 +6,7 @@ import { lotById, areaScale, areaCapacityScale, lotResale } from './lots.js';
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
-import { upgradeCost } from './sim.js';
+import { upgradeById, availableUpgrades, effectsFor } from './upgrades.js';
 import {
   buildingById,
   canAfford,
@@ -103,20 +103,28 @@ export function developLot(state, lotId, typeId) {
   return { ok: true, building: b, cost: def.cost };
 }
 
-export function upgradeBuilding(state, buildingId) {
+export function upgradeBuilding(state, buildingId, upgradeId) {
   const b = buildingById(state, buildingId);
   if (!b) return { ok: false, error: 'Property is gone.' };
-  if (b.level >= 5) return { ok: false, error: 'Already fully built out.' };
 
-  const cost = upgradeCost(b);
-  if (!canAfford(state, cost)) {
-    return { ok: false, error: `Need $${cost.toLocaleString()} clean to upgrade.` };
+  const u = upgradeById(b.type, upgradeId);
+  if (!u) return { ok: false, error: 'No such upgrade.' };
+  if ((b.upgrades || []).includes(upgradeId)) {
+    return { ok: false, error: 'Already installed.' };
   }
-  spendClean(state, cost);
-  b.level++;
-  logEvent(state, `${b.name} upgraded to level ${b.level}.`, 'good');
-  return { ok: true, cost };
+  if (!canAfford(state, u.cost)) {
+    return { ok: false, error: `${u.name} costs $${u.cost.toLocaleString()} clean.` };
+  }
+
+  spendClean(state, u.cost);
+  b.upgrades = (b.upgrades || []).concat(upgradeId);
+  // Level is just how built-out the place is, for the marker badge.
+  b.level = 1 + b.upgrades.length;
+  logEvent(state, `${u.name} installed at ${b.name}.`, 'good');
+  return { ok: true, upgrade: u, cost: u.cost };
 }
+
+export { availableUpgrades, effectsFor };
 
 export function toggleBuilding(state, buildingId) {
   const b = buildingById(state, buildingId);

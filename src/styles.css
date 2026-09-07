@@ -617,6 +617,24 @@ kbd {
   *, *::before, *::after { animation-duration: .001ms !important; transition-duration: .001ms !important; }
 }
 
+/* Upgrade disclosure */
+.upgrades { margin: 12px 0 4px; border-top: 1px solid var(--line-soft); }
+.upgrades > summary {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0 8px;
+  cursor: pointer; list-style: none;
+  font-family: var(--font-display); text-transform: uppercase;
+  letter-spacing: .1em; font-size: 11px; font-weight: 600; color: var(--text-faint);
+}
+.upgrades > summary::-webkit-details-marker { display: none; }
+.upgrades > summary:hover { color: var(--sodium); }
+.upgrades > summary::after {
+  content: '▾'; margin-left: 8px; transition: transform .15s ease; color: var(--text-faint);
+}
+.upgrades[open] > summary::after { transform: rotate(180deg); }
+.upgrades__count { font-family: var(--font-mono); letter-spacing: 0; color: var(--text-dim); }
+.upgrades__body { padding-bottom: 4px; }
+
 /* ── Touch + small screens ─────────────────────────────────────────────── */
 
 /* The grip only exists on phones, where the panels are dismissible sheets. */

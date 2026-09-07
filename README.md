@@ -104,6 +104,19 @@ grind it out legally or run the chain and launder.
 - **Payroll is due daily.** Come up short and sites stall — but they recover on
   their own as product moves, and you can always sell a property to get out.
 
+## Upgrades
+
+Click any established building for a dropdown of what can still be done to it,
+each with a price and exactly what it changes. Every one of the fifteen building
+types has its own list — LED lighting and vertical racks for a grow house, a
+second line and a QA bench for a lab, a decoy wall for a stash, a second set of
+books for anything legitimate.
+
+Effects stack multiplicatively and are all explicit: output, storage, product
+quality, heat generated, raid resistance, legal takings, laundering capacity and
+running cost. A fully built-out grow house runs at ×1.78 output and ×1.90
+storage with 45% raid resistance, for $410/day instead of $130.
+
 ## Real-world data
 
 Everything is free and keyless, and each call degrades gracefully if it fails:

@@ -10,7 +10,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -66,6 +66,7 @@ export function createBuilding(typeId, latlng, districtId) {
     latlng,
     districtId,
     level: 1,
+    upgrades: [],
     active: true,
     // Unified inventory — production fills `raw`, labs convert it into `packs`.
     raw: emptyProductMap(),

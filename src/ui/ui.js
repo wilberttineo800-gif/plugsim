@@ -6,11 +6,12 @@ import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, PRODUCTS, PRODUCT_IDS, SPEEDS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
-import { levelCapacity, levelYield, upgradeCost, sizeScale } from '../game/sim.js';
+import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions } from '../game/actions.js';
 import { KIND_LABEL, lotById, lotResale, priceBreakdown, sqft } from '../game/lots.js';
 import { crewById } from '../game/crews.js';
 import { unlockStatus, regionNote } from '../game/progression.js';
+import { availableUpgrades, describeEffects, effectsFor, upkeepFor } from '../game/upgrades.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import { buildingById, courierById, districtById, clockOf } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
@@ -171,7 +172,7 @@ export class GameUI {
       case 'select-lot': g.select('lot', id); break;
       case 'hire': g.hireCourier(type); break;
       case 'fire': g.fireCourier(id); break;
-      case 'upgrade': g.upgradeBuilding(id); break;
+      case 'upgrade': g.upgradeBuilding(id, type); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'sell-building': g.sellBuilding(id); break;
       case 'select-building': g.select('building', id); break;
@@ -232,12 +233,12 @@ export class GameUI {
 
   legitTakings(b) {
     const def = BUILDINGS[b.type];
-    return def.revenuePerDay * this.legitPull(b) * levelYield(b.level) * sizeScale(b);
+    return def.revenuePerDay * this.legitPull(b) * effectsFor(b).revenueMult * sizeScale(b);
   }
 
   legitProfit(b) {
     const def = BUILDINGS[b.type];
-    return this.legitTakings(b) - def.upkeepPerDay * (1 + (b.level - 1) * 0.35);
+    return this.legitTakings(b) - upkeepFor(b);
   }
 
   /** Rough daily P&L: what the streets pay in, minus every fixed cost. */
@@ -932,14 +933,13 @@ export class GameUI {
     const s = this.game.state;
     const def = BUILDINGS[b.type];
     const d = districtById(s, b.districtId);
-    const up = upgradeCost(b);
-    const canUp = b.level < 5 && s.cash.clean >= up;
 
     let body = '';
     if (def.kind === 'production') {
       const p = PRODUCTS[def.product];
-      const cap = def.capacity * levelCapacity(b.level);
-      const perCycle = def.slots * def.rawPerSlot * levelYield(b.level);
+      const fx = effectsFor(b);
+      const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
+      const perCycle = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b);
       body =
         `<div class="sect">
           <div class="sect__title"><span>Current cycle</span><span>${pct(b.cycleProgress)}</span></div>
@@ -958,11 +958,12 @@ export class GameUI {
           </div>
         </div>`;
     } else if (def.kind === 'processing') {
-      const cap = def.capacity * levelCapacity(b.level);
+      const fx = effectsFor(b);
+      const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
       const held = PRODUCT_IDS.reduce((n, p) => n + b.packs[p], 0);
       body =
         `<div class="sect">
-          <div class="sect__title"><span>Throughput</span><span>${units(def.rawPerHour * levelYield(b.level))} raw/h</span></div>
+          <div class="sect__title"><span>Throughput</span><span>${units(def.rawPerHour * fx.yieldMult * sizeScale(b))} raw/h</span></div>
           <div class="rows">
             ${PRODUCT_IDS.map((pid) => `<div class="row"><span>${esc(PRODUCTS[pid].name)} waiting</span><span>${units(b.raw[pid])} raw</span></div>`).join('')}
           </div>
@@ -975,7 +976,7 @@ export class GameUI {
           </div>
         </div>`;
     } else if (def.kind === 'storage') {
-      const cap = def.capacity * levelCapacity(b.level);
+      const cap = def.capacity * effectsFor(b).capacityMult * sizeCapacity(b);
       const held = PRODUCT_IDS.reduce((n, p) => n + b.packs[p], 0);
       body =
         `<div class="sect">
@@ -992,7 +993,7 @@ export class GameUI {
             <span class="${this.legitProfit(b) >= 0 ? 'good' : 'bad'}">${this.legitProfit(b) >= 0 ? '+' : ''}${money(this.legitProfit(b))}/day</span></div>
           <div class="rows">
             <div class="row"><span>Takings</span><span class="money">${money(this.legitTakings(b))}/day</span></div>
-            <div class="row"><span>Costs</span><span>${money(def.upkeepPerDay * (1 + (b.level - 1) * 0.35))}/day</span></div>
+            <div class="row"><span>Costs</span><span>${money(upkeepFor(b))}/day</span></div>
             <div class="row"><span>Block wealth</span>
               <span class="${this.legitPull(b) >= 1 ? 'good' : 'warn'}">${pct(districtById(s, b.districtId)?.wealth ?? 0.5)} · ×${this.legitPull(b).toFixed(2)}</span></div>
             <div class="row"><span>Earned today</span><span class="money">${money(b.earnedToday || 0)}</span></div>
@@ -1004,7 +1005,7 @@ export class GameUI {
         <div class="sect">
           <div class="sect__title"><span>Laundry</span></div>
           <div class="rows">
-            <div class="row"><span>Capacity</span><span>${money(def.launderPerDay * levelYield(b.level) * sizeScale(b))}/day</span></div>
+            <div class="row"><span>Capacity</span><span>${money(def.launderPerDay * effectsFor(b).launderMult * sizeScale(b))}/day</span></div>
             <div class="row"><span>Their cut</span><span>${pct(def.cut)}</span></div>
             <div class="row"><span>Washed today</span><span class="money">${money(b.launderedToday)}</span></div>
           </div>
@@ -1020,21 +1021,60 @@ export class GameUI {
       <div class="sect">
         <div class="sect__title"><span>Running costs</span></div>
         <div class="rows">
-          <div class="row"><span>Upkeep</span><span>${money(def.upkeepPerDay * (1 + (b.level - 1) * 0.35))}/day</span></div>
-          <div class="row"><span>Heat added</span><span class="${def.heatPerDay > 0 ? 'warn' : 'good'}">${def.heatPerDay > 0 ? '+' : ''}${def.heatPerDay.toFixed(2)}/day</span></div>
+          <div class="row"><span>Upkeep</span><span>${money(upkeepFor(b))}/day</span></div>
+          <div class="row"><span>Heat added</span><span class="${def.heatPerDay > 0 ? 'warn' : 'good'}">${def.heatPerDay > 0 ? '+' : ''}${(def.heatPerDay * effectsFor(b).heatMult).toFixed(2)}/day</span></div>
+          ${effectsFor(b).raidResist > 0 ? `<div class="row"><span>Raid resistance</span><span class="good">${pct(effectsFor(b).raidResist)}</span></div>` : ''}
         </div>
       </div>
+      ${this.upgradeBlock(b)}
       <div class="btnrow">
         ${b.kind !== 'front' ? `<button class="primarybtn" data-action="route-from" data-id="${b.id}" data-tab="routes">Ship from here</button>` : ''}
-        <button class="ghostbtn" data-action="upgrade" data-id="${b.id}" ${canUp ? '' : 'disabled'}>
-          ${b.level >= 5 ? 'Maxed' : `Upgrade ${moneyShort(up)}`}
-        </button>
       </div>
       <div class="btnrow">
         <button class="ghostbtn" data-action="toggle" data-id="${b.id}">${b.active ? 'Shut down' : 'Reopen'}</button>
         <button class="ghostbtn" data-action="sell-building" data-id="${b.id}">Sell up</button>
       </div>`
     );
+  }
+
+  /** Everything that can still be done to this building, priced and explained. */
+  upgradeBlock(b) {
+    const s = this.game.state;
+    const list = availableUpgrades(b);
+    if (!list.length) return '';
+
+    const installed = list.filter((u) => u.owned);
+    const open = list.filter((u) => !u.owned);
+
+    const row = (u) => {
+      const short = s.cash.clean < u.cost;
+      const effects = describeEffects(u.effects);
+      return `
+        <button class="card ${short ? 'is-locked' : ''}"
+          data-action="upgrade" data-id="${b.id}" data-type="${u.id}" ${short ? 'disabled' : ''}>
+          <div class="card__head">
+            <span class="card__name">${esc(u.name)}</span>
+            <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(u.cost)}</span>
+          </div>
+          <div class="card__blurb">${esc(u.blurb)}</div>
+          <div class="card__meta">
+            ${effects.map((e) => `<span style="color:${e.startsWith('+$') ? 'var(--warn)' : 'var(--good)'}">${esc(e)}</span>`).join('')}
+          </div>
+        </button>`;
+    };
+
+    return `
+      <details class="upgrades" ${open.length && !installed.length ? 'open' : ''}>
+        <summary>
+          <span>Upgrades</span>
+          <span class="upgrades__count">${installed.length}/${list.length} installed</span>
+        </summary>
+        <div class="upgrades__body">
+          ${open.length ? open.map(row).join('') : '<div class="empty">Fully built out.</div>'}
+          ${installed.length ? `<div class="sect__title" style="margin-top:10px"><span>Installed</span></div>
+            <div class="chips">${installed.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}
+        </div>
+      </details>`;
   }
 
   courierPanel(c) {

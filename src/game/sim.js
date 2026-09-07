@@ -15,6 +15,7 @@ import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
+import { effectsFor, upkeepFor } from './upgrades.js';
 import {
   buildingById,
   districtById,
@@ -57,20 +58,8 @@ export function sizeCapacity(b) {
   return b && b.capScale ? b.capScale : sizeScale(b);
 }
 
-/** Level scaling: each upgrade adds throughput, capacity and product quality. */
-export function levelYield(level) {
-  return 1 + (level - 1) * 0.45;
-}
-export function levelCapacity(level) {
-  return 1 + (level - 1) * 0.6;
-}
-export function levelQuality(level) {
-  return (level - 1) * 0.09;
-}
-
-export function upgradeCost(b) {
-  return Math.round(buildingDef(b).cost * 0.7 * Math.pow(1.65, b.level - 1));
-}
+// Buildings no longer improve on a flat level curve — see upgrades.js, where
+// each type has its own list and every effect is explicit.
 
 // ---------------------------------------------------------------------------
 
@@ -105,7 +94,8 @@ function stepProduction(state, dt) {
 
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
 
-    const cap = def.capacity * levelCapacity(b.level) * sizeCapacity(b);
+    const fx = effectsFor(b);
+    const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
     if (b.raw[def.product] >= cap) {
       b.stalledReason = 'Storage full — move the harvest out';
       continue;
@@ -127,8 +117,8 @@ function stepProduction(state, dt) {
     if (b.cycleProgress >= 1) {
       b.cycleProgress = 0;
       b.cycleStarted = false;
-      const yieldAmount = def.slots * def.rawPerSlot * levelYield(b.level) * sizeScale(b);
-      const quality = clamp01(def.baseQuality + levelQuality(b.level));
+      const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b);
+      const quality = clamp01(def.baseQuality + fx.qualityAdd);
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);
       b.rawQuality[def.product] = blendQuality(
@@ -149,13 +139,14 @@ function stepLabs(state, dt) {
     b.stalledReason = null;
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
 
-    const packCap = def.capacity * levelCapacity(b.level) * sizeCapacity(b);
+    const fx = effectsFor(b);
+    const packCap = def.capacity * fx.capacityMult * sizeCapacity(b);
     if (totalPacks(b.packs) >= packCap) {
       b.stalledReason = 'Packaged stock full — ship it out';
       continue;
     }
 
-    const budget = def.rawPerHour * levelYield(b.level) * sizeScale(b) * dt;
+    const budget = def.rawPerHour * fx.yieldMult * sizeScale(b) * dt;
     let didWork = false;
 
     // Split the line's time across whatever is waiting, in proportion to how
@@ -177,7 +168,7 @@ function stepLabs(state, dt) {
       paySoft(state, cost);
 
       const packs = take * PRODUCTS[pid].packsPerRaw;
-      const quality = clamp01(b.rawQuality[pid] + def.qualityBonus + levelQuality(b.level));
+      const quality = clamp01(b.rawQuality[pid] + def.qualityBonus + fx.qualityAdd);
       b.packQuality[pid] = blendQuality(b.packs[pid], b.packQuality[pid], packs, quality);
       b.raw[pid] -= take;
       b.packs[pid] += packs;
@@ -291,7 +282,7 @@ function unloadCargo(state, c, route, hooks = {}) {
     const def = BUILDINGS[target.type];
     const pool = route.cargo === 'raw' ? target.raw : target.packs;
     const qualityPool = route.cargo === 'raw' ? target.rawQuality : target.packQuality;
-    const cap = def.capacity * levelCapacity(target.level) * sizeCapacity(target);
+    const cap = def.capacity * effectsFor(target).capacityMult * sizeCapacity(target);
     for (const pid of PRODUCT_IDS) {
       const amount = c.cargo[pid];
       if (amount <= 0) continue;
@@ -393,14 +384,15 @@ function stepLegit(state, dt) {
     const wealth = d ? d.wealth : 0.5;
     const swing = LEGIT_WEALTH_SWING * (def.wealthSensitivity || 1);
     const pull = clamp(1 + (wealth - 0.5) * 2 * swing, 0.25, 2.2);
-    const takings = def.revenuePerDay * pull * levelYield(b.level) * sizeScale(b) * (dt / 24);
+    const fx = effectsFor(b);
+    const takings = def.revenuePerDay * pull * fx.revenueMult * sizeScale(b) * (dt / 24);
 
     state.cash.clean += takings;
     b.earnedToday = (b.earnedToday || 0) + takings;
     state.stats.legalRevenue = (state.stats.legalRevenue || 0) + takings;
 
     // Then wash what the books can absorb.
-    const capacity = def.launderPerDay * levelYield(b.level) * sizeScale(b) * (dt / 24);
+    const capacity = def.launderPerDay * fx.launderMult * sizeScale(b) * (dt / 24);
     const amount = Math.min(state.cash.dirty, capacity);
     if (amount <= 0) {
       b.stalledReason = 'Trading legally — no street cash to wash';
@@ -487,7 +479,7 @@ function stepHeat(state, dt) {
     if (!d) continue;
     // A building's own footprint, amplified by how heavily policed the block is.
     const policeFactor = 0.6 + d.policing * 0.9;
-    d.heat = clamp(d.heat + def.heatPerDay * policeFactor * (dt / 24), 0, HEAT.max);
+    d.heat = clamp(d.heat + def.heatPerDay * effectsFor(b).heatMult * policeFactor * (dt / 24), 0, HEAT.max);
   }
 
   // Attention bleeds outward. Without this you could dump on a hot block
@@ -555,7 +547,8 @@ function stepEnforcement(state, dt, hooks = {}) {
     if (!d || d.heat < HEAT.raidHeatFloor) continue;
 
     const factor = (d.heat - HEAT.raidHeatFloor) / (HEAT.max - HEAT.raidHeatFloor);
-    const perHour = HEAT.raidChanceAtMaxHeat * clamp01(factor) * (0.5 + d.policing);
+    const perHour = HEAT.raidChanceAtMaxHeat * clamp01(factor) * (0.5 + d.policing)
+      * (1 - effectsFor(b).raidResist);
     if (rng() >= perHour * dt) continue;
 
     const lostRaw = totalPacks(b.raw);
@@ -594,7 +587,7 @@ function settleDay(state) {
     b.launderedToday = 0;
     b.earnedToday = 0;
     if (!b.active) continue;
-    upkeep += BUILDINGS[b.type].upkeepPerDay * (1 + (b.level - 1) * 0.35);
+    upkeep += upkeepFor(b);
   }
   let wages = 0;
   for (const c of state.couriers) wages += COURIERS[c.type].wagePerDay;

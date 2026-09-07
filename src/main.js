@@ -402,10 +402,10 @@ game.fireCourier = (id) => {
   game.courierLayer.sync(game.state);
 };
 
-game.upgradeBuilding = (id) => {
-  const r = A.upgradeBuilding(game.state, id);
+game.upgradeBuilding = (id, upgradeId) => {
+  const r = A.upgradeBuilding(game.state, id, upgradeId);
   if (!r.ok) return toast(r.error, 'bad');
-  toast('Upgraded.', 'good', 1800);
+  toast(`${r.upgrade.name} installed.`, 'good', 2600);
   game.buildingLayer.sync(game.state);
   game.ui.render();
 };

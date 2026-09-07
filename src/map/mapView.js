@@ -27,6 +27,9 @@ export function createMap(elementId, center, zoom = 14) {
   const map = L.map(elementId, {
     center: [center.lat, center.lng],
     zoom,
+    // OSM stops serving tiles at 19, but the game's own geometry is vector and
+    // stays sharp, so the map keeps going and the basemap is upscaled.
+    maxZoom: 21,
     zoomControl: false,
     attributionControl: true,
     preferCanvas: true,
@@ -38,7 +41,9 @@ export function createMap(elementId, center, zoom = 14) {
 
   L.tileLayer(TILE_URL, {
     attribution: TILE_ATTRIB,
-    maxZoom: 19,
+    maxZoom: 21,
+    maxNativeZoom: 18, // detectRetina asks for 19, which is OSM's limit
+
     // OSM only serves 256px tiles, which get upscaled on a HiDPI screen and
     // turn street names to mush. This pulls the next zoom level down and draws
     // it at half size instead, so labels render at native pixel density.

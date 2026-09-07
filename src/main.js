@@ -331,10 +331,24 @@ function isEditing() {
 
 // --- Game API used by the UI ------------------------------------------------
 
-game.select = (kind, id) => {
+game.select = (kind, id, opts = {}) => {
+  const previous = game.state.selection;
   game.state.selection = kind ? { kind, id } : null;
   // Lets the map controls move out from under the inspector.
   document.body.classList.toggle('has-inspector', !!kind);
+
+  // Selecting property you own moves in for a proper look at the block. Only
+  // your own — browsing what's for sale shouldn't yank the map around.
+  const changed = !previous || previous.kind !== kind || previous.id !== id;
+  if (changed && opts.focus !== false) {
+    if (kind === 'building') {
+      const b = buildingById(game.state, id);
+      if (b) flyToPoint(b.latlng);
+    } else if (kind === 'lot') {
+      const l = lotById(game.state, id);
+      if (l && l.owned) flyToPoint(l.center);
+    }
+  }
   game.districtLayer.setSelected(kind === 'district' ? id : null);
   game.buildingLayer.setSelected(kind === 'building' ? id : null);
   game.buildingLayer.sync(game.state);
@@ -348,13 +362,30 @@ game.setOverlay = (id) => {
   game.lotLayer.setOverlay(id, game.state.lots || []);
 };
 
+/**
+ * Bring a point into view at close range. On a phone the inspector sheet covers
+ * the lower half of the screen, so the target is nudged upward to land in the
+ * band that's actually visible rather than behind the sheet.
+ */
+function flyToPoint(latlng, minZoom = 18) {
+  const zoom = Math.max(game.map.getZoom(), minZoom);
+  let center = L.latLng(latlng.lat, latlng.lng);
+  if (game.ui && game.ui.isPhone()) {
+    // The sheet takes roughly the lower 60% of a phone screen, so aim for the
+    // middle of the band left above it rather than the middle of the map.
+    const shift = game.map.getSize().y * 0.31;
+    center = game.map.unproject(game.map.project(center, zoom).add([0, shift]), zoom);
+  }
+  game.map.flyTo(center, zoom, { duration: 0.55 });
+}
+
 game.focusOn = (kind, id) => {
   if (kind === 'district') {
     game.districtLayer.frame(id);
     return;
   }
   const target = buildingById(game.state, id)?.latlng;
-  if (target) game.map.setView([target.lat, target.lng], Math.max(game.map.getZoom(), 17));
+  if (target) flyToPoint(target);
 };
 
 game.setSpeed = (i) => {

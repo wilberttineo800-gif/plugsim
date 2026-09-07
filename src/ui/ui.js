@@ -90,6 +90,9 @@ export class GameUI {
     for (const b of this.dom.mobileNav.children) {
       b.classList.toggle('is-on', b.dataset.mtab === 'map');
     }
+    // Dropping the selection too, otherwise the next periodic render sees a
+    // selected thing with a closed sheet and immediately re-opens it.
+    if (this.game.state && this.game.state.selection) this.game.select(null);
   }
 
   buildOverlayOptions() {
@@ -288,7 +291,7 @@ export class GameUI {
     this.renderTicker();
   }
 
-  renderRail() {
+  renderRail(force = false) {
     const map = {
       build: () => this.tabBuild(),
       blocks: () => this.tabBlocks(),
@@ -296,7 +299,11 @@ export class GameUI {
       routes: () => this.tabRoutes(),
       ledger: () => this.tabLedger(),
     };
-    this.dom.railBody.innerHTML = (map[this.tab] || map.build)();
+    const html = (map[this.tab] || map.build)();
+    if (force || html !== this._lastRailHtml) {
+      this.dom.railBody.innerHTML = html;
+      this._lastRailHtml = html;
+    }
   }
 
   // --- Build tab ------------------------------------------------------------
@@ -729,6 +736,7 @@ export class GameUI {
     if (!sel) {
       this.dom.inspector.hidden = true;
       this.dom.inspector.classList.remove('is-open');
+      this._lastInspectorHtml = null;
       return;
     }
     const s = this.game.state;
@@ -751,7 +759,10 @@ export class GameUI {
       return;
     }
     this.dom.inspector.hidden = false;
-    this.dom.inspectorBody.innerHTML = html;
+    if (html !== this._lastInspectorHtml) {
+      this.dom.inspectorBody.innerHTML = html;
+      this._lastInspectorHtml = html;
+    }
     if (this.isPhone() && !this.dom.inspector.classList.contains('is-open')) {
       this.openSheet('inspector');
     }

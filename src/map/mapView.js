@@ -193,6 +193,9 @@ export class DistrictLayer {
       const marker = this.labels.get(d.id);
       if (marker) marker.setIcon(this.iconFor(d));
     }
+    // setIcon builds a fresh element, which loses whatever display style the
+    // zoom rule had applied to the old one.
+    this.setLabelsVisible(this.labelsVisible !== false);
   }
 
   /** Block names would pile on top of each other below this zoom. */
@@ -201,6 +204,7 @@ export class DistrictLayer {
   }
 
   setLabelsVisible(visible) {
+    this.labelsVisible = visible;
     for (const [, marker] of this.labels) {
       const el = marker.getElement();
       if (el) el.style.display = visible ? '' : 'none';

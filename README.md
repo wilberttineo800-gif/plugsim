@@ -64,7 +64,11 @@ Room                 └──► packaged product, quality-graded
    drive shorter legs.
 4. **Routes + couriers** — nothing moves by itself. Draw a route, assign a
    courier, and they run it on a loop forever.
-5. **Districts** absorb packs over game-hours at the street price.
+5. **Districts** absorb packs over game-hours at the street price. They aren't
+   drawn as shapes — a grid over real streets was clutter once buildings became
+   the thing you click. Block names sit on the map, the **Blocks** tab ranks
+   every district by whatever the map is showing, and the overlay (demand,
+   price, rival turf) tints the buildings themselves.
 6. **Legit Front** converts street cash to clean. Only clean money buys
    property; street cash covers supplies, wages and upkeep.
 
@@ -119,7 +123,7 @@ src/game/     pure simulation — no DOM, no browser
   constants.js  all tuning lives here
   sim.js        the tick: production, labs, couriers, markets, heat, raids
   economy.js    street pricing
-  districts.js  hex grid + stats from real coordinates
+  districts.js  district grid + stats from real coordinates
   lots.js       real OSM buildings as purchasable property
   crews.js      rival crews, turf control, who holds what
   geo.js        distance, routing, OSM services

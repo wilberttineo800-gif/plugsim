@@ -156,9 +156,9 @@ export class LotLayer {
     // so demand, price and rival turf still read geographically.
     const district = this.districts.get(lot.districtId);
     const fill = district ? overlayColor(district, this.overlay) : '#9fb8d0';
-    return { color: selected ? '#ff8a3d' : '#8299b0', weight: selected ? 2.4 : 1,
-             opacity: selected ? 0.95 : 0.7, fillColor: fill,
-             fillOpacity: selected ? 0.42 : 0.30 };
+    return { color: selected ? '#ff8a3d' : fill, weight: selected ? 2.6 : 1.3,
+             opacity: selected ? 1 : 0.95, fillColor: fill,
+             fillOpacity: selected ? 0.55 : 0.42 };
   }
 
   refresh(lots) {

@@ -65,10 +65,10 @@ function ramp(stops, t) {
   return `rgb(${Math.round(a[0] + (b[0] - a[0]) * f)}, ${Math.round(a[1] + (b[1] - a[1]) * f)}, ${Math.round(a[2] + (b[2] - a[2]) * f)})`;
 }
 
-const RAMP_COOL = [[26, 38, 52], [38, 84, 96], [72, 152, 128], [148, 206, 128]];
-const RAMP_HEAT = [[28, 34, 44], [92, 44, 52], [176, 58, 54], [242, 122, 62]];
-const RAMP_MONEY = [[30, 34, 44], [64, 72, 96], [126, 118, 96], [216, 182, 96]];
-const RAMP_REP = [[28, 34, 46], [58, 72, 118], [104, 108, 190], [176, 148, 226]];
+const RAMP_COOL = [[70, 92, 112], [58, 118, 132], [82, 172, 142], [162, 220, 138]];
+const RAMP_HEAT = [[78, 88, 104], [138, 72, 76], [196, 70, 64], [248, 134, 72]];
+const RAMP_MONEY = [[76, 84, 100], [104, 108, 116], [158, 146, 106], [230, 196, 106]];
+const RAMP_REP = [[74, 84, 104], [82, 100, 158], [124, 128, 206], [186, 160, 234]];
 
 /** Normalised 0..1 value + colour for a district under the given overlay. */
 export function overlayValue(district, overlayId) {

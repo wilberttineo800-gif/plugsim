@@ -3,32 +3,31 @@
 // game can be re-tuned without touching simulation code.
 // ---------------------------------------------------------------------------
 
-// Time. The world advances in game-minutes, and 1x is meant to read as real:
-// a courier crossing three kilometres of city should take about twenty seconds
-// on screen, not four. At 2 game-minutes per real second it took 4.7s, which is
-// why traffic looked like it was flying at every speed.
+// Time. 1x is real time — one game minute is one real minute, so a courier
+// crossing three kilometres of city takes exactly as long as that drive takes
+// in the world, and the map reads like watching live GPS. Everything above it
+// is an explicit multiple of reality, so the number on the button means what
+// it says.
 //
-//   1x   a game day in 48 real minutes   · a 3 km drive in ~19s
-//   3x   16 minutes                      · ~6s
-//   10x  5 minutes                       · ~2s
-//   15x  3 minutes                       · ~1s
-//   30x  1.6 minutes                     · under a second, for long hauls
-export const GAME_MINUTES_PER_REAL_SECOND = 0.5;
+//   1x      real time            · a 3 km drive takes ~9 min · a day in 24 h
+//   10x     ten times reality    · ~56 s                     · a day in 2.4 h
+//   60x     a minute a second    · ~9 s                      · a day in 24 min
+//   300x                         · ~2 s                      · a day in 5 min
+//   1000x   for long hauls       · under a second            · a day in 90 s
+export const GAME_MINUTES_PER_REAL_SECOND = 1 / 60;
 export const TICK_MS = 100;
-export const SPEEDS = [0, 1, 3, 10, 15, 30];
+export const SPEEDS = [0, 1, 10, 60, 300, 1000];
 
 /** What each speed means in plain terms, for the button tooltips. */
 export const SPEED_NOTES = {
   0: 'Paused',
-  1: 'Real pace — a day takes 48 minutes',
-  3: 'A day in 16 minutes',
-  10: 'A day in 5 minutes',
-  15: 'A day in 3 minutes',
-  30: 'A day in 1.6 minutes',
+  1: 'Real time — a drive takes as long as the drive',
+  10: 'Ten times real — a day in 2.4 hours',
+  60: 'A minute every second — a day in 24 minutes',
+  300: 'A day in 5 minutes',
+  1000: 'A day in 90 seconds',
 };
 
-// Enough for a minimum viable chain — one grow, one lab, one courier — with a
-// thin buffer for the first few cycles of supplies. Anything more is earned.
 export const START_CASH_DIRTY = 0;
 export const START_CASH_CLEAN = 18000;
 

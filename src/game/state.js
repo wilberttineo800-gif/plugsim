@@ -36,7 +36,10 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     routes: [],
     // Total elapsed game minutes since day 1, 06:00.
     minutes: 6 * 60,
-    speedIndex: 1,
+    // Opens at 60x — a day in 24 minutes. 1x is real time, which looks
+    // frozen to someone who has just arrived; it is there to watch a
+    // delivery happen, not to start on.
+    speedIndex: 3,
     cash: { clean: START_CASH_CLEAN, dirty: START_CASH_DIRTY },
     stats: {
       packsSold: emptyProductMap(),

@@ -106,19 +106,103 @@ async function fetchJson(url, timeoutMs = 9000, options = {}) {
   }
 }
 
-/** Free-text place search. Returns [{name, lat, lng}]. */
+// Nominatim reads a bare two-letter state code as a street suffix — "Waterbury
+// CT" comes back as Waterbury Court in San Jose. Spelling the state out fixes
+// it, so the abbreviation is expanded before the query is ever sent.
+const US_STATES = {
+  al: 'Alabama', ak: 'Alaska', az: 'Arizona', ar: 'Arkansas', ca: 'California',
+  co: 'Colorado', ct: 'Connecticut', de: 'Delaware', fl: 'Florida', ga: 'Georgia',
+  hi: 'Hawaii', id: 'Idaho', il: 'Illinois', in: 'Indiana', ia: 'Iowa',
+  ks: 'Kansas', ky: 'Kentucky', la: 'Louisiana', me: 'Maine', md: 'Maryland',
+  ma: 'Massachusetts', mi: 'Michigan', mn: 'Minnesota', ms: 'Mississippi',
+  mo: 'Missouri', mt: 'Montana', ne: 'Nebraska', nv: 'Nevada', nh: 'New Hampshire',
+  nj: 'New Jersey', nm: 'New Mexico', ny: 'New York', nc: 'North Carolina',
+  nd: 'North Dakota', oh: 'Ohio', ok: 'Oklahoma', or: 'Oregon', pa: 'Pennsylvania',
+  ri: 'Rhode Island', sc: 'South Carolina', sd: 'South Dakota', tn: 'Tennessee',
+  tx: 'Texas', ut: 'Utah', vt: 'Vermont', va: 'Virginia', wa: 'Washington',
+  wv: 'West Virginia', wi: 'Wisconsin', wy: 'Wyoming', dc: 'District of Columbia',
+  pr: 'Puerto Rico',
+};
+const CA_PROVINCES = {
+  ab: 'Alberta', bc: 'British Columbia', mb: 'Manitoba', nb: 'New Brunswick',
+  nl: 'Newfoundland and Labrador', ns: 'Nova Scotia', on: 'Ontario',
+  pe: 'Prince Edward Island', qc: 'Quebec', sk: 'Saskatchewan',
+};
+
+/** "Waterbury CT" -> "Waterbury, Connecticut". Leaves everything else alone. */
+export function expandRegionAbbreviation(query) {
+  const m = String(query).trim().match(/^(.*?)[,\s]+([A-Za-z]{2})\.?$/);
+  if (!m) return query;
+  const [, place, abbr] = m;
+  const key = abbr.toLowerCase();
+  const full = US_STATES[key] || CA_PROVINCES[key];
+  if (!full || !place.trim()) return query;
+  return `${place.trim()}, ${full}`;
+}
+
+/** Cities and towns should outrank streets that happen to share a name. */
+function placeScore(r) {
+  const cls = r.category || r.class;
+  const t = r.type;
+  if (cls === 'place' && t === 'city') return 0;
+  if (cls === 'place' && ['town', 'borough'].includes(t)) return 1;
+  if (cls === 'boundary' && t === 'administrative') return 1;
+  if (cls === 'place' && ['village', 'suburb', 'neighbourhood', 'quarter'].includes(t)) return 2;
+  if (cls === 'place') return 3;
+  if (cls === 'highway') return 8; // a street called Waterbury Court
+  if (cls === 'building') return 9;
+  return 5;
+}
+
+/** OSM's raw type is jargon; say what a person would say. */
+const KIND_LABEL = {
+  city: 'City', town: 'Town', village: 'Village', hamlet: 'Hamlet',
+  borough: 'Borough', suburb: 'Neighbourhood', neighbourhood: 'Neighbourhood',
+  quarter: 'Quarter', administrative: 'City', municipality: 'City',
+  county: 'County', state: 'State', region: 'Region', island: 'Island',
+  residential: 'Street', unclassified: 'Street', tertiary: 'Street',
+  secondary: 'Street', primary: 'Street', house: 'Address', yes: 'Building',
+  postcode: 'Postcode',
+};
+
+/** A short "Connecticut, United States" line rather than the full OSM path. */
+function contextOf(r) {
+  const a = r.address || {};
+  return [a.state || a.province || a.county, a.country]
+    .filter(Boolean)
+    .join(', ');
+}
+
+/**
+ * Free-text place search, anywhere in the world. Returns [{short, name, lat, lng}]
+ * with settlements ranked above streets.
+ */
 export async function geocode(query) {
+  const q = expandRegionAbbreviation(query);
   const url =
-    'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&q=' +
-    encodeURIComponent(query);
+    'https://nominatim.openstreetmap.org/search?format=jsonv2&addressdetails=1&limit=12&q=' +
+    encodeURIComponent(q);
   try {
-    const rows = await fetchJson(url, 9000, { headers: { Accept: 'application/json' } });
-    return rows.map((r) => ({
-      name: r.display_name,
-      short: r.name || r.display_name.split(',')[0],
-      lat: parseFloat(r.lat),
-      lng: parseFloat(r.lon),
-    }));
+    const rows = await fetchJson(url, 10000, { headers: { Accept: 'application/json' } });
+    const seen = new Set();
+    return rows
+      .map((r) => ({ r, score: placeScore(r) }))
+      .sort((a, b) => a.score - b.score || (b.r.importance || 0) - (a.r.importance || 0))
+      .map(({ r }) => ({
+        name: contextOf(r) || r.display_name,
+        short: r.name || r.display_name.split(',')[0],
+        kind: KIND_LABEL[r.type] || null,
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+      }))
+      .filter((row) => {
+        // One entry per place; Nominatim often returns a point and a boundary.
+        const key = `${row.short}|${row.name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .slice(0, 7);
   } catch (err) {
     console.warn('[geo] geocode failed', err);
     return [];

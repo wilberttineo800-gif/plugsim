@@ -64,12 +64,15 @@ async function doSearch() {
   resultsEl.innerHTML = '';
   const results = await geocode(q);
   if (!results.length) {
-    setStatus('Nothing found. Try a city, a postcode, or a street.', true);
+    setStatus('Nothing found. Try adding the state or country — “Waterbury, Connecticut”.', true);
     return;
   }
   setStatus('');
   resultsEl.innerHTML = results
-    .map((r, i) => `<button class="result" data-i="${i}"><b>${esc(r.short)}</b><span>${esc(r.name)}</span></button>`)
+    .map((r, i) => `<button class="result" data-i="${i}">
+        <b>${esc(r.short)}${r.kind ? `<em>${esc(r.kind.replace(/_/g, ' '))}</em>` : ''}</b>
+        <span>${esc(r.name)}</span>
+      </button>`)
     .join('');
   resultsEl.querySelectorAll('.result').forEach((btn) => {
     btn.addEventListener('click', () => {
@@ -330,6 +333,8 @@ function isEditing() {
 
 game.select = (kind, id) => {
   game.state.selection = kind ? { kind, id } : null;
+  // Lets the map controls move out from under the inspector.
+  document.body.classList.toggle('has-inspector', !!kind);
   game.districtLayer.setSelected(kind === 'district' ? id : null);
   game.buildingLayer.setSelected(kind === 'building' ? id : null);
   game.buildingLayer.sync(game.state);

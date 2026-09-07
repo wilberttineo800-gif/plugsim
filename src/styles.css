@@ -94,6 +94,23 @@ button, input, select { font-family: inherit; color: inherit; }
 }
 .leaflet-bar a:hover { background: var(--panel-3) !important; }
 
+/* The zoom control sits bottom-right, where the event ticker and the inspector
+   both overlay the map — the minus button was completely unclickable. Lift it
+   clear of the ticker, and shift it aside when the inspector is open. */
+.leaflet-control-zoom {
+  margin-bottom: 60px !important;
+  margin-right: 12px !important;
+  transition: margin-right .2s ease;
+}
+body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
+.leaflet-control-zoom a {
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 32px !important;
+  font-size: 19px !important;
+}
+.leaflet-control-attribution { margin-bottom: 44px !important; }
+
 .district-label { cursor: pointer; }
 .district-label span {
   font-family: var(--font-display);
@@ -573,7 +590,15 @@ button, input, select { font-family: inherit; color: inherit; }
   border-radius: var(--radius); cursor: pointer; transition: border-color .12s ease;
 }
 .result:hover { border-color: var(--sodium); }
-.result b { display: block; font-size: 13.5px; font-weight: 600; }
+.result b {
+  display: flex; align-items: baseline; gap: 8px;
+  font-size: 13.5px; font-weight: 600;
+}
+.result b em {
+  font-style: normal; font-family: var(--font-display);
+  text-transform: uppercase; letter-spacing: .09em;
+  font-size: 10px; font-weight: 600; color: var(--sodium);
+}
 .result span { display: block; font-size: 11px; color: var(--text-faint); margin-top: 2px; }
 
 .start__actions { display: flex; gap: 7px; margin-top: 24px; flex-wrap: wrap; }
@@ -790,6 +815,7 @@ kbd {
   .field select, .field input { padding: 11px 9px; font-size: 16px; }
   .rail__tabs button { padding: 12px 4px; }
   .leaflet-control-zoom { display: none; }
+  .leaflet-control-attribution { margin-bottom: 84px !important; }
 
   .start__panel { padding: 26px 20px 22px; }
   .start__panel h1 { font-size: 42px; }

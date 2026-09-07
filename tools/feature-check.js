@@ -38,6 +38,9 @@
   out.push('=== property ===');
   s.cash.clean = Math.max(s.cash.clean, 250000);
   const forSale = s.lots.filter((l) => !l.owned);
+  // Car parks are property too, but they only take a depot — keep them out of
+  // the premises picks below.
+  const premises = forSale.filter((l) => l.kind !== 'parking');
   const tiny = forSale.filter((l) => l.areaM2 < 30).length;
   ok('a range of sizes exists', forSale.length > 50,
     Math.round(Math.min(...forSale.map((l) => l.areaM2))) + '–' +
@@ -45,7 +48,7 @@
   ok('prices vary with size and block',
     new Set(forSale.slice(0, 40).map((l) => l.price)).size > 10);
 
-  const plot = forSale.filter((l) => l.areaM2 > 120 && l.areaM2 < 400)
+  const plot = premises.filter((l) => l.areaM2 > 120 && l.areaM2 < 400)
     .sort((a, b) => a.price - b.price)[0];
   const before = s.cash.clean;
   const bought = g.buyLot(plot.id);
@@ -62,11 +65,13 @@
   ok('output scales to the floorplate', growB && growB.scale > 0 && growB.scale < 3.3,
     growB && ('×' + growB.scale.toFixed(2) + ' out, ×' + growB.capScale.toFixed(2) + ' store'));
 
-  const labLot = s.lots.filter((l) => !l.owned && l.areaM2 > 140)
+  // On a re-run the session may already have one; either way there must be a
+  // second operation to route to.
+  const labLot = s.lots.filter((l) => !l.owned && l.kind !== 'parking' && l.areaM2 > 140)
     .sort((a, b) => a.price - b.price)[0];
-  g.buyLot(labLot.id);
-  g.developLot(labLot.id, 'lab');
-  const labB = s.buildings.find((b) => b.lotId === labLot.id);
+  if (labLot) { g.buyLot(labLot.id); g.developLot(labLot.id, 'lab'); }
+  const labB = (labLot && s.buildings.find((b) => b.lotId === labLot.id))
+    || s.buildings.find((b) => b.kind === 'lab');
   ok('a second operation opens', !!labB, labB && labB.name);
 
   const upBefore = s.cash.clean;
@@ -82,8 +87,9 @@
   // locked, with a reason, until the requirements are met.
   const wasUnlocked = s.adminUnlockAll;
   s.adminUnlockAll = false;
-  g.select('lot', s.lots.find((l) => l.owned && !l.buildingId && !l.rented)?.id
-    || s.lots.find((l) => !l.owned).id);
+  const gateLot = s.lots.find((l) => l.kind !== 'parking' && l.owned && !l.buildingId && !l.rented)
+    || s.lots.find((l) => l.kind !== 'parking' && !l.owned);
+  g.select('lot', gateLot.id);
   g.ui.goTab('build');
   const buildHtml = document.getElementById('railBody').innerHTML;
   ok('gated operations are shown but locked',
@@ -98,25 +104,45 @@
   g.createRouteFromDraft({ fromId: growB.id, toKey: 'building:' + labB.id, cargo: 'raw', product: 'any' });
   g.createRouteFromDraft({ fromId: labB.id, toKey: 'district:' + target.id, cargo: 'packs', product: 'any' });
   // Nothing moves without somewhere to keep it — that's the point of a depot.
-  const noBay = g.buyVehicle('scooter');
-  ok('a vehicle is refused with no depot', s.couriers.length === 0,
-    'game says: ' + (noBay && noBay.error ? noBay.error : 'it let it through'));
+  // Only meaningful on a fresh session; a re-run already has a yard.
+  const hadDepot = s.buildings.some((b) => b.kind === 'depot');
+  if (!hadDepot) {
+    g.buyVehicle('scooter');
+    ok('a vehicle is refused with no depot', s.couriers.length === 0,
+      'nothing bought without somewhere to keep it');
+  } else {
+    out.push('  skip  a vehicle is refused with no depot (session already has one)');
+  }
 
   const carParks = s.lots.filter((l) => l.kind === 'parking' && !l.owned);
   ok('real car parks came back from the map', carParks.length > 0,
     carParks.length + ' on the map, ' +
     (carParks[0] ? carParks[0].spaces + ' spaces at the first' : ''));
 
-  if (carParks.length) {
-    const park = carParks.sort((a, b) => a.price - b.price)[0];
-    g.buyLot(park.id);
-    g.developLot(park.id, 'depot');
-    const depot = s.buildings.find((b) => b.lotId === park.id);
-    ok('a depot opens on a car park', !!depot && depot.kind === 'depot',
-      depot && (park.spaces + ' bays for ' + money(park.price)));
+  const freePark = carParks.filter((l) => !l.buildingId).sort((a, b) => a.price - b.price)[0];
+  if (freePark) {
+    g.buyLot(freePark.id);
+
+    // Owned and still empty: this is where the build menu should offer a depot
+    // and nothing else, because a car park is no use as premises.
+    g.select('lot', freePark.id);
+    g.ui.goTab('build');
+    // Only the develop buttons count — the tab also lists property you own.
+    const offered = Array.from(
+      document.querySelectorAll('#railBody [data-action="develop"][data-id="' + freePark.id + '"]')
+    ).map((b) => b.dataset.type);
+    ok('a car park only offers a depot',
+      offered.length === 1 && offered[0] === 'depot',
+      'offers: ' + (offered.join(', ') || 'nothing'));
+
+    g.developLot(freePark.id, 'grow_house');
     ok('premises are refused on a car park',
-      g.developLot(park.id, 'grow_house') && !s.buildings.some(
-        (b) => b.lotId === park.id && b.kind === 'grow_house'));
+      !s.buildings.some((b) => b.lotId === freePark.id && b.kind === 'grow_house'));
+
+    g.developLot(freePark.id, 'depot');
+    const depot = s.buildings.find((b) => b.lotId === freePark.id);
+    ok('a depot opens on a car park', !!depot && depot.kind === 'depot',
+      depot && (freePark.spaces + ' bays for ' + money(freePark.price)));
   }
 
   g.buyVehicle('scooter');
@@ -141,11 +167,13 @@
 
   out.push('');
   out.push('=== rent and resale ===');
-  const rentLot = s.lots.filter((l) => !l.owned).sort((a, b) => a.price - b.price)[0];
+  const rentLot = s.lots.filter((l) => !l.owned && l.kind !== 'parking')
+    .sort((a, b) => a.price - b.price)[0];
   g.buyLot(rentLot.id);
   const r = g.rentOut(rentLot.id);
   ok('a building can be let', rentLot.rented === true);
-  const sellLot2 = s.lots.filter((l) => !l.owned).sort((a, b) => a.price - b.price)[0];
+  const sellLot2 = s.lots.filter((l) => !l.owned && l.kind !== 'parking')
+    .sort((a, b) => a.price - b.price)[0];
   g.buyLot(sellLot2.id);
   const cashBeforeSale = s.cash.clean;
   g.sellLot(sellLot2.id);

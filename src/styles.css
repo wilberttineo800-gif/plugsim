@@ -67,23 +67,20 @@ button, input, select { font-family: inherit; color: inherit; }
 
 /* ── Map ───────────────────────────────────────────────────────────────── */
 
-#map { position: absolute; inset: 0; background: var(--ground); z-index: 0; }
-.leaflet-container { background: var(--ground); font-family: var(--font-body); }
+#map { position: absolute; inset: 0; background: #d8d4cd; z-index: 0; }
+.leaflet-container { background: #d8d4cd; font-family: var(--font-body); }
 
-/* OSM ships only a light basemap, and every keyless dark provider now stamps
-   a watermark across the tiles. Inverting the tile pane gives a proper night
-   map for free; the hue-rotate puts water and greenery back to roughly the
-   right side of the wheel after the invert flips them.
-
-   Contrast is pushed slightly *above* 1 rather than below: dimming the whole
-   pane softened the label edges and was most of why type looked grainy. */
+/* The basemap keeps OSM's own colours — green parks, blue water, warm roads.
+   It used to be inverted into a near-black sheet, which killed every colour on
+   it and made highlighted buildings glare. A light map under dark chrome reads
+   far better, especially on a phone. */
 .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(1.12) saturate(.5);
+  filter: saturate(1.12) brightness(.94) contrast(1.04);
 }
 .leaflet-tile {
-  /* Keep upscaled raster from being smeared by the browser's default filter. */
   image-rendering: -webkit-optimize-contrast;
 }
+
 .leaflet-control-attribution {
   background: rgba(8, 11, 16, .78) !important;
   color: var(--text-faint) !important;
@@ -103,15 +100,21 @@ button, input, select { font-family: inherit; color: inherit; }
   font-size: 11px;
   letter-spacing: .06em;
   text-transform: uppercase;
-  color: rgba(214, 228, 242, .62);
-  text-shadow: 0 1px 3px #000, 0 0 10px #000;
+  color: #26323f;
+  text-shadow:
+     0 1px 0 rgba(255, 255, 255, .95), 0 -1px 0 rgba(255, 255, 255, .95),
+     1px 0 0 rgba(255, 255, 255, .95), -1px 0 0 rgba(255, 255, 255, .95),
+     0 0 7px rgba(255, 255, 255, .9);
   white-space: nowrap;
   transition: color .12s ease;
 }
-.district-label:hover span { color: var(--sodium); }
+.district-label:hover span { color: #b8500f; }
 .district-label.is-selected span {
-  color: var(--sodium);
-  text-shadow: 0 1px 3px #000, 0 0 12px rgba(255, 138, 61, .5);
+  color: #a8410a;
+  text-shadow:
+     0 1px 0 rgba(255, 255, 255, .95), 0 -1px 0 rgba(255, 255, 255, .95),
+     1px 0 0 rgba(255, 255, 255, .95), -1px 0 0 rgba(255, 255, 255, .95),
+     0 0 9px rgba(255, 236, 220, .95);
 }
 
 /* Property markers */

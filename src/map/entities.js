@@ -181,24 +181,24 @@ export class LotLayer {
   styleFor(lot) {
     const selected = this.selectedId === lot.id;
     if (lot.buildingId) {
-      return { color: '#ff8a3d', weight: selected ? 2.4 : 1.6, opacity: 0.95,
-               fillColor: '#ff8a3d', fillOpacity: 0.34 };
+      return { color: '#c2560c', weight: selected ? 3 : 2, opacity: 1,
+               fillColor: '#ff8a3d', fillOpacity: 0.6 };
     }
     if (lot.rented) {
-      return { color: '#8f8ce0', weight: selected ? 2.4 : 1.4, opacity: 0.9,
-               fillColor: '#8f8ce0', fillOpacity: 0.24 };
+      return { color: '#5b56b8', weight: selected ? 3 : 1.8, opacity: 1,
+               fillColor: '#8f8ce0', fillOpacity: 0.55 };
     }
     if (lot.owned) {
-      return { color: '#e7c56a', weight: selected ? 2.4 : 1.4, opacity: 0.9,
-               fillColor: '#e7c56a', fillOpacity: 0.20 };
+      return { color: '#a8801c', weight: selected ? 3 : 1.8, opacity: 1,
+               fillColor: '#f0cf72', fillOpacity: 0.55 };
     }
     // Anything not yours is tinted by whatever the map is currently showing,
     // so demand, price and rival turf still read geographically.
     const district = this.districts.get(lot.districtId);
     const fill = district ? overlayColor(district, this.overlay) : '#9fb8d0';
-    return { color: selected ? '#ff8a3d' : fill, weight: selected ? 2.6 : 1.3,
-             opacity: selected ? 1 : 0.95, fillColor: fill,
-             fillOpacity: selected ? 0.55 : 0.42 };
+    return { color: selected ? '#c2560c' : fill, weight: selected ? 3 : 1.1,
+             opacity: selected ? 1 : 0.85, fillColor: fill,
+             fillOpacity: selected ? 0.55 : 0.34 };
   }
 
   /** Repaint what's drawn without rebuilding it. */

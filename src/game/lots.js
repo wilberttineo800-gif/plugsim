@@ -285,13 +285,17 @@ export function lotsInDistrict(state, districtId) {
 }
 
 /**
- * Throughput scaling. Output rises with the square root of floor area: more
- * room means more benches and more hands, but not proportionally — you're
- * limited by equipment and people, not by space alone.
+ * Throughput scaling, per building type.
+ *
+ * How output tracks floor area depends entirely on what the place does. An
+ * auto shop is bays, and bays fit the floor, so it scales nearly linearly. A
+ * lab is limited by equipment and trained hands, so doubling the room is worth
+ * far less than double. A check-cashing booth barely cares about size at all.
+ * Each type carries its own exponent rather than sharing one square root.
  */
-export function areaScale(lot, referenceM2) {
+export function areaScale(lot, referenceM2, exponent = 0.7) {
   if (!lot) return 1;
-  return clamp(Math.sqrt(lot.areaM2 / referenceM2), 0.65, 2.6);
+  return clamp(Math.pow(lot.areaM2 / referenceM2, exponent), 0.55, 3.2);
 }
 
 /**

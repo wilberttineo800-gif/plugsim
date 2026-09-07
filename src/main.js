@@ -31,17 +31,6 @@ const SURPRISE_CITIES = [
   { name: 'Baltimore, Maryland', lat: 39.2904, lng: -76.6122 },
 ];
 
-// Record faults from the very first line, with enough game state attached to
-// make a report actionable.
-diag.install(() => {
-  const s = game.state;
-  if (!s) return 'no game running';
-  return `day ${Math.floor(s.minutes / 1440) + 1} · ${s.cityName} · ` +
-    `${s.buildings.length} buildings · ${s.couriers.length} couriers · ` +
-    `${(s.lots || []).length} lots · clean $${Math.round(s.cash.clean)} · ` +
-    `speed ${s.speedIndex} · sel ${s.selection ? s.selection.kind : 'none'}`;
-});
-
 const game = {
   state: null,
   map: null,
@@ -56,6 +45,18 @@ const game = {
   loopHandle: null,
   lastFrame: 0,
 };
+
+// Record faults with enough game state attached to make a report actionable.
+// Installed after `game` exists: the snapshot closure reads it, and touching
+// a const before its initialiser runs throws.
+diag.install(() => {
+  const s = game && game.state;
+  if (!s) return 'no game running';
+  return `day ${Math.floor(s.minutes / 1440) + 1} · ${s.cityName} · ` +
+    `${s.buildings.length} buildings · ${s.couriers.length} couriers · ` +
+    `${(s.lots || []).length} lots · clean $${Math.round(s.cash.clean)} · ` +
+    `speed ${s.speedIndex} · sel ${s.selection ? s.selection.kind : 'none'}`;
+});
 
 // --- Start screen -----------------------------------------------------------
 

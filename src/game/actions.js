@@ -127,7 +127,7 @@ export function operationOptions(lot, state = null) {
       reason: locked
         ? gate.reason
         : fits ? null : `Needs ${def.minAreaM2} m² — this is ${Math.round(lot.areaM2)} m²`,
-      scale: areaScale(lot, def.referenceAreaM2),
+      scale: areaScale(lot, def.referenceAreaM2, def.areaExponent),
       capScale: areaCapacityScale(lot, def.referenceAreaM2),
     };
   });
@@ -157,7 +157,7 @@ export function developLot(state, lotId, typeId) {
   const b = createBuilding(typeId, { lat: lot.center.lat, lng: lot.center.lng }, lot.districtId);
   b.lotId = lot.id;
   b.areaM2 = lot.areaM2;
-  b.scale = areaScale(lot, def.referenceAreaM2);
+  b.scale = areaScale(lot, def.referenceAreaM2, def.areaExponent);
   b.capScale = areaCapacityScale(lot, def.referenceAreaM2);
   b.name = `${def.name} · ${lot.name}`;
   b.builtAtMinute = state.minutes;

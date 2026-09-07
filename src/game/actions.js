@@ -397,6 +397,67 @@ export function washWithFixer(state, requested) {
   return { ok: true, amount, clean };
 }
 
+/** Change a route in place rather than closing it and building a new one. */
+export function editRoute(state, routeId, changes, refetch) {
+  const route = routeById(state, routeId);
+  if (!route) return { ok: false, error: 'Route is gone.' };
+
+  const nextTo = changes.toKey ? changes.toKey.split(':') : null;
+  const movedEnd = nextTo && (nextTo[0] !== route.toType || nextTo[1] !== route.toId);
+  const movedStart = changes.fromId && changes.fromId !== route.fromId;
+
+  if (changes.cargo) route.cargo = changes.cargo;
+  if (changes.product) route.product = changes.product;
+  if (movedStart) route.fromId = changes.fromId;
+  if (movedEnd) { route.toType = nextTo[0]; route.toId = nextTo[1]; }
+
+  if (movedStart || movedEnd) {
+    // Geometry has to be refetched, and anyone on it starts the new run fresh.
+    route.points = null;
+    route.km = null;
+    for (const c of state.couriers) {
+      if (c.routeId === route.id) { c.phase = 'loading'; c.progress = 0; c.dwellLeft = 0; }
+    }
+    refetch?.(route);
+  }
+  return { ok: true, route, rerouted: movedStart || movedEnd };
+}
+
+// --- Admin -----------------------------------------------------------------
+// Testing conveniences. Deliberately separate from the game's own rules so
+// nothing here can be reached by ordinary play.
+
+export function adminGrant(state, cleanAmount = 100000, dirtyAmount = 0) {
+  state.cash.clean += cleanAmount;
+  state.cash.dirty += dirtyAmount;
+  logEvent(state, `[admin] granted $${cleanAmount.toLocaleString()} clean.`, 'info');
+  return { ok: true };
+}
+
+export function adminBuyBlock(state, districtId) {
+  const d = districtById(state, districtId);
+  if (!d) return { ok: false, error: 'No such block.' };
+  d.rivalControl = 0;
+  d.baseControl = 0;
+  d.heat = 0;
+  d.rep = 1;
+  logEvent(state, `[admin] took ${d.name} outright.`, 'info');
+  return { ok: true };
+}
+
+export function adminCoolOff(state) {
+  for (const d of state.districts) d.heat = 0;
+  logEvent(state, '[admin] all heat cleared.', 'info');
+  return { ok: true };
+}
+
+export function adminUnlockAll(state) {
+  state.unlocked = BUILDING_IDS.slice();
+  state.adminUnlockAll = true;
+  logEvent(state, '[admin] every operation unlocked.', 'info');
+  return { ok: true };
+}
+
 /** Describe a route in the words the player thinks in. */
 export function routeLabel(state, route) {
   const from = buildingById(state, route.fromId);

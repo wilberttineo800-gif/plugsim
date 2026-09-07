@@ -23,6 +23,7 @@ export function propertyCount(state) {
 export function unlockStatus(state, typeId) {
   const def = BUILDINGS[typeId];
   if (!def || !def.unlock) return null;
+  if (state && state.adminUnlockAll) return null;
 
   const needProps = def.unlock.properties || 0;
   const needCash = def.unlock.cash || 0;

@@ -75,9 +75,11 @@ export function stepSim(state, dtHours, hooks = {}) {
   stepProduction(state, dtHours);
   stepLabs(state, dtHours);
   stepCouriers(state, dtHours, hooks);
+  stepStorefronts(state, dtHours);
   stepMarkets(state, dtHours);
   stepLegit(state, dtHours);
   stepPropertyMarket(state, dtHours);
+  maybeRecordPrices(state);
   stepRents(state, dtHours);
   stepTurf(state, dtHours);
   stepHeat(state, dtHours);
@@ -339,6 +341,45 @@ function nearestDistrict(state, latlng) {
     if (km < bestKm) { bestKm = km; best = d; }
   }
   return bestKm < 1.4 ? best : null;
+}
+
+// --- Selling from your own premises -----------------------------------------
+
+/**
+ * A stash house sitting on a block can serve that block directly, feeding its
+ * packs onto the street without a courier making the last hop. It's metered:
+ * the place can only move so much a day, and never more than the block will
+ * actually absorb.
+ */
+function stepStorefronts(state, dt) {
+  for (const b of state.buildings) {
+    if (b.kind !== 'storage' || !b.active || b.selling === false) continue;
+    const def = buildingDef(b);
+    if (!def.sellsPerHour) continue;
+    const d = districtById(state, b.districtId);
+    if (!d) continue;
+
+    // Bigger premises shift more, and upgrades help.
+    const fx = effectsFor(b);
+    let budget = def.sellsPerHour * fx.yieldMult * Math.sqrt(sizeCapacity(b)) * dt;
+
+    for (const pid of PRODUCT_IDS) {
+      if (budget <= 0) break;
+      const have = b.packs[pid];
+      if (have <= 0.0001) continue;
+      // Never push more onto the block than it can take.
+      const room = Math.max(0, sellRatePerHour(d, pid) * MARKET.saturationHours - d.supply[pid]);
+      const move = Math.min(have, budget, room);
+      if (move <= 0.0001) continue;
+
+      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], move, b.packQuality[pid]);
+      d.supply[pid] += move;
+      b.packs[pid] -= move;
+      b.soldFromHere = (b.soldFromHere || 0) + move;
+      budget -= move;
+    }
+    d.discovered = true;
+  }
 }
 
 // --- Street sales -----------------------------------------------------------
@@ -622,6 +663,46 @@ function stepEnforcement(state, dt, hooks = {}) {
         'bad'
       );
     }
+  }
+}
+
+/**
+ * One price sample per game-day, city-wide, weighted by how much each block
+ * actually absorbs — so the chart reflects what you could really sell at, not
+ * an average over blocks nobody buys from.
+ */
+const PRICE_SAMPLE_HOURS = 6;
+
+/** Sample on a fixed cadence rather than once a day, so a chart fills in fast. */
+function maybeRecordPrices(state) {
+  const slot = Math.floor(state.minutes / 60 / PRICE_SAMPLE_HOURS);
+  if (state.lastPriceSlot === slot) return;
+  state.lastPriceSlot = slot;
+  recordPrices(state);
+}
+
+export function recordPrices(state) {
+  state.priceHistory = state.priceHistory || {};
+  for (const pid of PRODUCT_IDS) {
+    let weighted = 0;
+    let weight = 0;
+    let best = 0;
+    for (const d of state.districts) {
+      const w = d.demandPerHour[pid] || 0;
+      if (w <= 0) continue;
+      const price = streetPrice(d, pid);
+      weighted += price * w;
+      weight += w;
+      if (price > best) best = price;
+    }
+    const series = state.priceHistory[pid] || (state.priceHistory[pid] = []);
+    series.push({
+      day: Math.floor(state.minutes / 1440) + 1,
+      hour: Math.floor((state.minutes % 1440) / 60),
+      avg: weight ? weighted / weight : 0,
+      best,
+    });
+    if (series.length > 60) series.shift();
   }
 }
 

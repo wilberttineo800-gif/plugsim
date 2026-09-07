@@ -232,7 +232,8 @@ export const BUILDINGS = {
     id: 'stash',
     kind: 'storage',
     name: 'Stash House',
-    blurb: 'Buffer storage close to your customers. Cuts the distance couriers cover.',
+    blurb: 'Buffer storage close to your customers — and it can serve the block itself, so you don\u2019t need a courier for the last hop.',
+    sellsPerHour: 9,
     icon: 'box',
     cost: 1500,
     minAreaM2: 90,
@@ -250,7 +251,8 @@ export const BUILDINGS = {
     id: 'lockup',
     kind: 'storage',
     name: 'Lockup Garage',
-    blurb: 'A roller door and four walls. The cheapest place to park product near a buyer.',
+    blurb: 'A roller door and four walls. The cheapest place to park product near a buyer, and it can serve the block itself.',
+    sellsPerHour: 3.5,
     icon: 'box',
     cost: 600,
     minAreaM2: 11,
@@ -429,6 +431,10 @@ export const BUILDINGS = {
 export const BUILDING_IDS = Object.keys(BUILDINGS);
 
 // --- Couriers ---------------------------------------------------------------
+// Speeds are door-to-door city averages, not cruising speeds — traffic, lights
+// and finding somewhere to stop are most of a short trip. The load/unload
+// minutes matter more than speed on a route of a few hundred metres, which is
+// exactly how real delivery work behaves.
 export const COURIERS = {
   runner: {
     id: 'runner',
@@ -437,7 +443,9 @@ export const COURIERS = {
     cost: 350,
     wagePerDay: 55,
     capacity: 14,
-    speedKph: 6,
+    speedKph: 4.5,
+    loadMinutes: 6,
+    unloadMinutes: 5,
     stealth: 0.94,
   },
   bike: {
@@ -447,7 +455,9 @@ export const COURIERS = {
     cost: 900,
     wagePerDay: 90,
     capacity: 40,
-    speedKph: 18,
+    speedKph: 13,
+    loadMinutes: 12,
+    unloadMinutes: 9,
     stealth: 0.85,
   },
   scooter: {
@@ -457,7 +467,9 @@ export const COURIERS = {
     cost: 1900,
     wagePerDay: 120,
     capacity: 65,
-    speedKph: 34,
+    speedKph: 20,
+    loadMinutes: 15,
+    unloadMinutes: 11,
     stealth: 0.78,
   },
   sedan: {
@@ -467,7 +479,9 @@ export const COURIERS = {
     cost: 3400,
     wagePerDay: 165,
     capacity: 140,
-    speedKph: 38,
+    speedKph: 22,
+    loadMinutes: 22,
+    unloadMinutes: 16,
     stealth: 0.62,
   },
   cab: {
@@ -477,7 +491,9 @@ export const COURIERS = {
     cost: 6800,
     wagePerDay: 300,
     capacity: 160,
-    speedKph: 44,
+    speedKph: 25,
+    loadMinutes: 18,
+    unloadMinutes: 13,
     stealth: 0.8,
   },
   van: {
@@ -487,7 +503,9 @@ export const COURIERS = {
     cost: 9200,
     wagePerDay: 260,
     capacity: 480,
-    speedKph: 32,
+    speedKph: 19,
+    loadMinutes: 38,
+    unloadMinutes: 28,
     stealth: 0.45,
   },
   boxtruck: {
@@ -497,10 +515,14 @@ export const COURIERS = {
     cost: 21000,
     wagePerDay: 430,
     capacity: 1400,
-    speedKph: 28,
+    speedKph: 16,
+    loadMinutes: 65,
+    unloadMinutes: 48,
     stealth: 0.3,
   },
 };
+
+
 
 
 

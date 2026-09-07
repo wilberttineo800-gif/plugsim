@@ -442,6 +442,14 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
   font-family: var(--font-mono); font-size: 10.5px; color: var(--text-dim);
 }
 
+/* Price sparkline */
+.spark { display: block; width: 100%; height: 34px; margin-top: 6px; }
+.spark--empty {
+  height: 34px; display: grid; place-items: center;
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--text-faint);
+  border: 1px dashed var(--line-soft); border-radius: var(--radius);
+}
+
 /* Chips */
 .chips { display: flex; flex-wrap: wrap; gap: 5px; }
 .chip {

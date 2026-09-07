@@ -9,7 +9,7 @@ import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
 } from './game/state.js';
-import { stepSim } from './game/sim.js';
+import { stepSim, recordPrices } from './game/sim.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, pingIncident } from './map/entities.js';
@@ -224,6 +224,7 @@ function bootGame(state) {
     }
   }
 
+  if (!Object.keys(state.priceHistory || {}).length) recordPrices(state);
   game.ui = new GameUI(game);
   game.ui.show();
   game.buildingLayer.sync(state);
@@ -511,6 +512,43 @@ game.muscleIn = (districtId) => {
   );
   game.districtLayer.refresh();
   game.ui.render();
+};
+
+game.editRoute = (routeId, changes) => {
+  const r = A.editRoute(game.state, routeId, changes, async (route) => {
+    const from = buildingById(game.state, route.fromId);
+    const to = route.toType === 'district'
+      ? districtById(game.state, route.toId)?.center
+      : buildingById(game.state, route.toId)?.latlng;
+    if (!from || !to) return;
+    const res = await fetchRoute(from.latlng, to);
+    route.points = res.points; route.km = res.km; route.realRoad = res.real;
+    game.routeLayer.sync(game.state);
+    game.ui.renderRail(true);
+  });
+  if (!r.ok) return toast(r.error, 'bad');
+  if (r.rerouted) toast('Route changed — re-plotting the drive.', 'info');
+  game.routeLayer.sync(game.state);
+};
+
+// --- Admin (testing only) ---------------------------------------------------
+
+game.adminCash = (amount) => {
+  A.adminGrant(game.state, amount);
+  game.ui.render();
+  toast(`Added ${amount.toLocaleString()} clean.`, 'info');
+};
+game.adminUnlock = () => { A.adminUnlockAll(game.state); game.ui.render(); toast('Everything unlocked.', 'info'); };
+game.adminCool = () => { A.adminCoolOff(game.state); game.ui.render(); toast('Heat cleared.', 'info'); };
+game.adminBlock = (id) => { A.adminBuyBlock(game.state, id); game.districtLayer.refresh(); game.ui.render(); toast('Block taken.', 'info'); };
+game.adminSkipDay = () => {
+  stepSim(game.state, 24, {});
+  game.ui.render();
+  toast('Skipped a day.', 'info');
+};
+game.adminWipe = () => {
+  clearSave();
+  toast('Save wiped. Reload to start fresh.', 'warn', 5000);
 };
 
 game.removeRoute = (id) => {

@@ -156,6 +156,10 @@ export class GameUI {
       this.renderRail();
       return;
     }
+    if (name.startsWith('edit.')) {
+      this.game.editRoute(field.dataset.route, { [name.slice(5)]: value });
+      return;
+    }
     if (name === 'courierRoute') {
       this.game.assignCourier(field.dataset.courier, value || null);
       return;
@@ -188,6 +192,16 @@ export class GameUI {
       case 'select-courier': g.select('courier', id); break;
       case 'focus': g.focusOn(type, id); break;
       case 'remove-route': g.removeRoute(id); break;
+      case 'edit-route':
+        this.editingRoute = this.editingRoute === id ? null : id;
+        this.renderRail(true);
+        break;
+      case 'admin-cash': g.adminCash(Number(type)); break;
+      case 'admin-unlock': g.adminUnlock(); break;
+      case 'admin-cool': g.adminCool(); break;
+      case 'admin-day': g.adminSkipDay(); break;
+      case 'admin-wipe': g.adminWipe(); break;
+      case 'admin-block': g.adminBlock(id); break;
       case 'create-route': g.createRouteFromDraft(this.routeDraft); break;
       case 'route-from':
         this.routeDraft.fromId = id;
@@ -300,9 +314,11 @@ export class GameUI {
     const map = {
       build: () => this.tabBuild(),
       blocks: () => this.tabBlocks(),
+      market: () => this.tabMarket(),
       fleet: () => this.tabFleet(),
       routes: () => this.tabRoutes(),
       ledger: () => this.tabLedger(),
+      admin: () => this.tabAdmin(),
     };
     const html = (map[this.tab] || map.build)();
     if (force || html !== this._lastRailHtml) {
@@ -354,6 +370,98 @@ export class GameUI {
         : '') +
       this.ownedList()
     );
+  }
+
+  /** A tiny inline chart of where a price has been. */
+  sparkline(series, key, color) {
+    if (!series || series.length < 2) {
+      return '<div class="spark spark--empty">no history yet</div>';
+    }
+    const vals = series.map((p) => p[key]);
+    const lo = Math.min(...vals);
+    const hi = Math.max(...vals);
+    const span = hi - lo || 1;
+    const W = 240;
+    const H = 34;
+    const pts = vals.map((v, i) => {
+      const x = (i / (vals.length - 1)) * W;
+      const y = H - ((v - lo) / span) * (H - 4) - 2;
+      return `${x.toFixed(1)},${y.toFixed(1)}`;
+    });
+    return (
+      `<svg class="spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img"
+            aria-label="price over the last ${vals.length} days">
+        <polyline points="${pts.join(' ')}" fill="none" stroke="${esc(color)}"
+          stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>
+        <circle cx="${W}" cy="${pts[pts.length - 1].split(',')[1]}" r="2.6" fill="${esc(color)}"/>
+      </svg>`
+    );
+  }
+
+  /** What every product is worth right now, where it sells best, what you hold. */
+  tabMarket() {
+    const s = this.game.state;
+    const unlockedProducts = new Set(
+      Object.values(BUILDINGS)
+        .filter((def) => def.product && !unlockStatus(s, def.id)?.locked)
+        .map((def) => def.product)
+    );
+
+    const cards = PRODUCT_IDS.map((pid) => {
+      const p = PRODUCTS[pid];
+      const known = unlockedProducts.has(pid);
+
+      // Where it sells best right now.
+      const ranked = [...s.districts]
+        .map((d) => ({ d, price: streetPrice(d, pid), rate: sellRatePerHour(d, pid) }))
+        .sort((a, b) => b.price - a.price);
+      const top = ranked.slice(0, 3);
+      const avg = ranked.reduce((n, r) => n + r.price, 0) / Math.max(1, ranked.length);
+
+      // What you're holding, everywhere.
+      const held = s.buildings.reduce((n, b) => n + (b.packs[pid] || 0), 0);
+      const raw = s.buildings.reduce((n, b) => n + (b.raw[pid] || 0), 0);
+      const onStreet = s.districts.reduce((n, d) => n + d.supply[pid], 0);
+
+      const series = (s.priceHistory || {})[pid];
+      const first = series && series.length > 1 ? series[0].avg : null;
+      const move = first ? (avg - first) / first : 0;
+      const region = regionNote(s.countryCode, pid);
+
+      return `
+        <div class="card" style="cursor:default;${known ? '' : 'opacity:.55'}">
+          <div class="card__head">
+            <span class="card__name" style="color:${esc(p.color)}">${esc(p.name)}</span>
+            <span class="card__cost">${money(avg)}<span style="color:var(--text-faint)">/pack</span></span>
+          </div>
+          ${this.sparkline(series, 'avg', p.color)}
+          <div class="rows" style="margin-top:6px">
+            <div class="row"><span>Since day one</span>
+              <span class="${move >= 0 ? 'good' : 'bad'}">${move >= 0 ? '+' : ''}${pct(move)}</span></div>
+            <div class="row"><span>Best block</span>
+              <span>${top[0] ? `${esc(top[0].d.name)} · ${money(top[0].price)}` : '—'}</span></div>
+            ${region ? `<div class="row"><span>This region</span><span class="money">${esc(region)}</span></div>` : ''}
+          </div>
+          <div class="chips" style="margin-top:7px">
+            <span class="chip">${units(raw)} raw</span>
+            <span class="chip">${units(held)} packed</span>
+            <span class="chip">${units(onStreet)} on the street</span>
+          </div>
+          ${known ? `<div class="card__meta" style="margin-top:6px">
+            ${top.map((t) => `<span>${esc(t.d.name)} ${money(t.price)}</span>`).join('')}
+          </div>` : '<div class="card__meta" style="margin-top:6px"><span style="color:var(--text-faint)">You can\u2019t make this yet</span></div>'}
+        </div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Market</span><span>day ${clockOf(s.minutes).day}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        Prices are per pack, averaged across blocks and weighted by what each one
+        actually absorbs. Flooding a block drops its price; a block that knows you
+        pays more.
+      </p>
+      ${cards}
+    </div>`;
   }
 
   /**
@@ -626,10 +734,87 @@ export class GameUI {
           ${r.points && !r.realRoad ? '<span style="color:var(--text-faint)">est. distance</span>' : ''}
         </div>
         <div class="btnrow">
+          <button class="ghostbtn" data-action="edit-route" data-id="${r.id}">Edit</button>
           <button class="ghostbtn" data-action="remove-route" data-id="${r.id}">Close route</button>
         </div>
+        ${this.editingRoute === r.id ? this.routeEditor(r) : ''}
       </div>`
     );
+  }
+
+  /** Change an existing supply line instead of closing it and rebuilding. */
+  routeEditor(r) {
+    const s = this.game.state;
+    const sources = s.buildings.filter((b) => b.kind !== 'front');
+    const fromOpts = sources.map((b) =>
+      `<option value="${b.id}" ${r.fromId === b.id ? 'selected' : ''}>${esc(clip(b.name, 30))}</option>`
+    ).join('');
+    const buildingOpts = s.buildings
+      .filter((b) => b.id !== r.fromId && b.kind !== 'front')
+      .map((b) => `<option value="building:${b.id}" ${r.toType === 'building' && r.toId === b.id ? 'selected' : ''}>▸ ${esc(clip(b.name, 30))}</option>`)
+      .join('');
+    const districtOpts = [...s.districts]
+      .sort((a, b) => b.demandPerHour.weed - a.demandPerHour.weed)
+      .map((dd) => `<option value="district:${dd.id}" ${r.toType === 'district' && r.toId === dd.id ? 'selected' : ''}>◆ ${esc(clip(dd.name, 22))}</option>`)
+      .join('');
+
+    return `
+      <div class="sect" style="margin:10px 0 0;padding-top:8px;border-top:1px solid var(--line-soft)">
+        <div class="field"><label>Pick up from</label>
+          <select data-field="edit.fromId" data-route="${r.id}">${fromOpts}</select></div>
+        <div class="field"><label>Drop off at</label>
+          <select data-field="edit.toKey" data-route="${r.id}">
+            ${buildingOpts ? `<optgroup label="Your property">${buildingOpts}</optgroup>` : ''}
+            <optgroup label="Sell on the street">${districtOpts}</optgroup>
+          </select></div>
+        <div class="field"><label>Cargo</label>
+          <select data-field="edit.cargo" data-route="${r.id}">
+            <option value="packs" ${r.cargo === 'packs' ? 'selected' : ''}>Packaged product</option>
+            <option value="raw" ${r.cargo === 'raw' ? 'selected' : ''}>Raw harvest</option>
+          </select></div>
+        <div class="field"><label>Product</label>
+          <select data-field="edit.product" data-route="${r.id}">
+            <option value="any" ${r.product === 'any' ? 'selected' : ''}>Anything on hand</option>
+            ${PRODUCT_IDS.map((p) => `<option value="${p}" ${r.product === p ? 'selected' : ''}>${esc(PRODUCTS[p].name)}</option>`).join('')}
+          </select></div>
+        <button class="ghostbtn" style="width:100%" data-action="edit-route" data-id="${r.id}">Done</button>
+      </div>`;
+  }
+
+  /** Testing controls. Not reachable through ordinary play. */
+  tabAdmin() {
+    const s = this.game.state;
+    const blocks = [...s.districts]
+      .sort((a, b) => (b.rivalControl || 0) - (a.rivalControl || 0))
+      .slice(0, 8)
+      .map((d) => `<button class="card" data-action="admin-block" data-id="${d.id}">
+          <div class="card__head"><span class="card__name">${esc(d.name)}</span>
+            <span class="card__cost">${pct(d.rivalControl || 0)} held</span></div>
+          <div class="card__meta"><span>take it outright</span></div>
+        </button>`).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Admin</span><span style="color:var(--bad)">testing only</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        Shortcuts for trying things out. None of this is reachable in normal play.
+      </p>
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="admin-cash" data-type="100000">+$100k clean</button>
+        <button class="ghostbtn" data-action="admin-cash" data-type="1000000">+$1M clean</button>
+      </div>
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="admin-unlock">Unlock everything</button>
+        <button class="ghostbtn" data-action="admin-cool">Clear all heat</button>
+      </div>
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="admin-day">Skip a day</button>
+        <button class="ghostbtn" data-action="admin-wipe">Wipe save</button>
+      </div>
+    </div>
+    <div class="sect">
+      <div class="sect__title"><span>Take a block</span></div>
+      ${blocks}
+    </div>`;
   }
 
   // --- Ledger tab -----------------------------------------------------------

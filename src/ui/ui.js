@@ -9,7 +9,7 @@ import {
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity } from '../game/sim.js';
-import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces } from '../game/actions.js';
+import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -943,8 +943,12 @@ export class GameUI {
     const installed = list.filter((u) => u.owned);
     const open = list.filter((u) => !u.owned);
 
+    // Your own workshop does the fitting cheaper.
+    const discount = fittingDiscount(s);
+
     const row = (u) => {
-      const short = s.cash.clean < u.cost;
+      const price = Math.round(u.cost * (1 - discount));
+      const short = s.cash.clean < price;
       const bits = [];
       const fx = u.effects || {};
       if (fx.capacityMult) bits.push(`${fx.capacityMult >= 1 ? '+' : ''}${Math.round((fx.capacityMult - 1) * 100)}% capacity`);
@@ -956,7 +960,9 @@ export class GameUI {
           data-action="upgrade-courier" data-id="${c.id}" data-type="${u.id}" ${short ? 'disabled' : ''}>
           <div class="card__head">
             <span class="card__name">${esc(u.name)}</span>
-            <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(u.cost)}</span>
+            <span class="card__cost ${short ? 'is-short' : ''}">${discount > 0
+              ? `<s style="opacity:.5">${moneyShort(u.cost)}</s> ${moneyShort(price)}`
+              : moneyShort(price)}</span>
           </div>
           <div class="card__blurb">${esc(u.blurb)}</div>
           <div class="card__meta">${bits.map((b) => `<span style="color:${b.startsWith('+') && !b.includes('travel') && !b.includes('turnaround') ? 'var(--good)' : b.startsWith('−') ? 'var(--good)' : 'var(--warn)'}">${esc(b)}</span>`).join('')}</div>
@@ -969,6 +975,8 @@ export class GameUI {
         <summary><span>Fit out</span>
           <span class="upgrades__count">${installed.length}/${list.length} fitted</span></summary>
         <div class="upgrades__body">
+          ${discount > 0 ? `<p class="card__blurb" style="color:var(--good);margin:0 0 8px">
+            Your auto shop does the work — ${Math.round(discount * 100)}% off fitting.</p>` : ''}
           ${open.length ? open.map(row).join('') : '<div class="empty">Nothing left to fit.</div>'}
           ${installed.length ? `<div class="sect__title" style="margin-top:10px"><span>Fitted</span></div>
             <div class="chips">${installed.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}

@@ -212,6 +212,49 @@ export function upgradeBuilding(state, buildingId, upgradeId) {
   return { ok: true, upgrade: u, cost: u.cost };
 }
 
+/**
+ * How much an auto shop knocks off fitting work. Running your own workshop is
+ * supposed to be worth something — the note asks for buildings that actually do
+ * a job — so every shop you own cuts the bill, and building it out cuts more.
+ */
+export function fittingDiscount(state) {
+  const shops = (state.buildings || []).filter((b) => b.type === 'autoshop' && b.active !== false);
+  if (!shops.length) return 0;
+  // Best shop leads; extra shops help a little, and the whole thing is capped
+  // so the work is never free.
+  const best = shops.reduce(
+    (n, b) => Math.max(n, 0.15 + 0.05 * (b.upgrades || []).length), 0);
+  return Math.min(0.45, best + 0.03 * (shops.length - 1));
+}
+
+/** Fit something to a vehicle. Each upgrade goes on once. */
+export function upgradeCourier(state, vehicleId, upgradeId) {
+  const v = (state.couriers || []).find((c) => c.id === vehicleId);
+  if (!v) return { ok: false, error: 'That vehicle is gone.' };
+
+  const def = COURIERS[v.type];
+  const u = vehicleUpgradeById(def.class, upgradeId);
+  if (!u) return { ok: false, error: 'No such upgrade for this vehicle.' };
+  if ((v.upgrades || []).includes(upgradeId)) {
+    return { ok: false, error: 'Already fitted.' };
+  }
+
+  const discount = fittingDiscount(state);
+  const cost = Math.round(u.cost * (1 - discount));
+  if (!canAfford(state, cost)) {
+    return { ok: false, error: `${u.name} costs $${cost.toLocaleString()} clean.` };
+  }
+
+  spendClean(state, cost);
+  v.upgrades = (v.upgrades || []).concat(upgradeId);
+  logEvent(state,
+    discount > 0
+      ? `${u.name} fitted to ${v.name} at your own shop — saved $${(u.cost - cost).toLocaleString()}.`
+      : `${u.name} fitted to ${v.name}.`,
+    'good');
+  return { ok: true, upgrade: u, cost, discount };
+}
+
 export { availableUpgrades, effectsFor };
 
 export function toggleBuilding(state, buildingId) {

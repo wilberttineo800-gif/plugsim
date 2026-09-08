@@ -6,7 +6,7 @@ import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute } from '../src/game/state.js';
 import { stepSim, cityPrice } from '../src/game/sim.js';
-import { upkeepFor } from '../src/game/upgrades.js';
+import { upkeepFor, vehicleStats } from '../src/game/upgrades.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
 import { haversineKm } from '../src/game/geo.js';
@@ -191,6 +191,50 @@ print('=== 8. market headline matches the recorded series ===');
   const last = st.priceHistory.weed[st.priceHistory.weed.length - 1].avg;
   check('same metric both places', Math.abs(live - last) / last < 0.02,
         'live $' + live.toFixed(2) + ' vs series $' + last.toFixed(2));
+}
+
+print('');
+print('=== 9. every button in the UI reaches a real action ===');
+{
+  // The vehicle upgrade button was wired to an action that was never written,
+  // so clicking it threw and nothing happened. Nothing caught that, because
+  // no test ever called it. Check the whole surface instead of one action.
+  const st = world();
+  const wired = [
+    'buyLot', 'sellLot', 'rentOut', 'endTenancy', 'developLot', 'buyVehicle',
+    'hireDriver', 'fireDriver', 'assignDriver', 'sellVehicle', 'assignCourier',
+    'editRoute', 'upgradeBuilding', 'upgradeCourier', 'muscleIn', 'washWithFixer',
+    'toggleBuilding', 'removeRoute',
+  ];
+  const missing = wired.filter((n) => typeof A[n] !== 'function');
+  check('every action the UI calls exists', missing.length === 0,
+        missing.length ? 'missing: ' + missing.join(', ') : wired.length + ' actions');
+
+  // And the vehicle upgrade actually fits and charges.
+  open(st, 'grow_house');
+  const v = A.buyVehicle(st, 'sedan').vehicle;
+  const before = st.cash.clean;
+  const up = A.upgradeCourier(st, v.id, 'seats');
+  check('a vehicle upgrade fits', up.ok && v.upgrades.includes('seats'),
+        up.ok ? 'paid $' + up.cost : up.error);
+  check('a vehicle upgrade charges clean money', st.cash.clean < before,
+        '$' + Math.round(before - st.cash.clean));
+  check('it changes what the vehicle can do',
+        vehicleStats(v, COURIERS.sedan).capacity > COURIERS.sedan.capacity,
+        vehicleStats(v, COURIERS.sedan).capacity.toFixed(0) + ' vs ' + COURIERS.sedan.capacity);
+  check('the same upgrade cannot be fitted twice',
+        !A.upgradeCourier(st, v.id, 'seats').ok);
+
+  // An auto shop is supposed to do the fitting cheaper.
+  const st2 = world();
+  const v2 = A.buyVehicle(st2, 'sedan').vehicle;
+  const plain = A.upgradeCourier(st2, v2.id, 'seats').cost;
+  const st3 = world();
+  open(st3, 'autoshop');
+  const v3 = A.buyVehicle(st3, 'sedan').vehicle;
+  const shopped = A.upgradeCourier(st3, v3.id, 'seats').cost;
+  check('an auto shop discounts fitting work', shopped < plain,
+        '$' + plain + ' -> $' + shopped);
 }
 
 print('');

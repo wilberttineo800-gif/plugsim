@@ -238,7 +238,7 @@
     // everything he asked and he's gone.
     const talking = /ray ·/i.test(buildTab);
     const finished = (s.tutorialDone || []).length >= 5
-      || s.buildings.some((b) => BUILDINGS[b.type] && BUILDINGS[b.type].kind === 'front');
+      || s.buildings.some((b) => b.kind === 'front');
     ok('the helper briefs you, is dismissed, or is done',
       talking || s.tutorialDismissed || finished,
       talking ? 'briefing you' : s.tutorialDismissed ? 'dismissed' : 'list finished');

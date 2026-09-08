@@ -693,12 +693,15 @@ function syncDaylight() {
   lastDark = d;
   const pane = document.querySelector('.leaflet-tile-pane');
   if (!pane) return;
-  // Midday sits at the daytime filter; midnight goes down and blue.
-  const brightness = (0.72 - d * 0.22).toFixed(3);
-  const saturate = (0.82 - d * 0.24).toFixed(3);
-  const hue = (176 + d * 22).toFixed(0);
+  // The map is inverted throughout — that's what turns a light OSM raster into
+  // something that belongs in a dark console, with the greens still green. Only
+  // the exposure moves with the clock, so day and night share one visual
+  // language and the transition never passes through a muddy grey.
+  const brightness = (1.02 - d * 0.24).toFixed(3);
+  const contrast = (0.78 + d * 0.08).toFixed(3);
+  const saturate = (0.78 - d * 0.23).toFixed(3);
   pane.style.filter =
-    `brightness(${brightness}) saturate(${saturate}) contrast(1.06) hue-rotate(${hue}deg) invert(.06)`;
+    `invert(1) hue-rotate(180deg) brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
   document.body.classList.toggle('is-night', d > 0.62);
 }
 

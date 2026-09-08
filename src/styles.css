@@ -74,13 +74,15 @@ button, input, select { font-family: inherit; color: inherit; }
    It used to be inverted into a near-black sheet, which killed every colour on
    it and made highlighted buildings glare. A light map under dark chrome reads
    far better, especially on a phone. */
-/* The map has to sit *inside* a dark console, not shine out of it. A light
-   OSM raster at full brightness makes the panels look like a different app.
-   The filter is driven from the clock at runtime — this is the daytime value
-   and the starting point before the first tick. */
+/* The map has to sit *inside* a dark console, not shine out of it.
+   Inverting the raster and spinning the hue back is what turns a light OSM
+   tile into a night map while keeping parks green and water blue — brightness
+   alone just gives flat grey. The exposure is driven from the clock at
+   runtime; this is the daytime value and the starting point before the first
+   tick. */
 .leaflet-tile-pane {
-  filter: brightness(.72) saturate(.82) contrast(1.06) hue-rotate(176deg) invert(.06);
-  transition: filter 1.2s linear;
+  filter: invert(1) hue-rotate(180deg) brightness(1.02) contrast(.78) saturate(.78);
+  transition: filter 1.4s linear;
 }
 
 /* Overnight, the streetlights are the only thing on. */

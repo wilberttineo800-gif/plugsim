@@ -432,6 +432,56 @@
   }
 
   out.push('');
+  out.push('=== artwork ===');
+  {
+    const A = window.__plugsimArt;
+    if (!A) {
+      out.push('  skip  artwork (module not exposed)');
+    } else {
+      const host = document.createElement('div');
+      host.style.cssText = 'position:absolute;left:-9999px;top:0;width:400px;height:400px;';
+      document.body.appendChild(host);
+
+      // Nothing may spill outside its own frame — a clipped muzzle or a cut-off
+      // grip reads as a broken picture, and it can't be seen from the markup.
+      const clipped = [];
+      const empty = [];
+      const check = (label, html) => {
+        host.innerHTML = html;
+        const svg = host.querySelector('svg');
+        if (!svg) { empty.push(label); return; }
+        const vb = (svg.getAttribute('viewBox') || '').trim().split(/\s+/).map(Number);
+        let box = null;
+        for (const p of svg.querySelectorAll('path')) {
+          const b = p.getBBox();
+          if (!b.width && !b.height) continue;
+          box = box ? {
+            x: Math.min(box.x, b.x), y: Math.min(box.y, b.y),
+            r: Math.max(box.r, b.x + b.width), b: Math.max(box.b, b.y + b.height),
+          } : { x: b.x, y: b.y, r: b.x + b.width, b: b.y + b.height };
+        }
+        if (!box) { empty.push(label); return; }
+        const fits = box.x >= vb[0] - 0.6 && box.r <= vb[0] + vb[2] + 0.6
+          && box.y >= vb[1] - 0.6 && box.b <= vb[1] + vb[3] + 0.6;
+        if (!fits) clipped.push(label);
+      };
+
+      for (const id of A.GUN_IDS) check('gun ' + id, A.gunArt(id, { size: 200 }));
+      for (const id of Object.keys(A.PRODUCT_ART)) check('product ' + id, A.productArt(id, { size: 120 }));
+      for (const id of A.ATTACHMENT_IDS) check('attach ' + id, A.attachmentArt(id, { size: 120 }));
+      check('rifle fully fitted',
+        A.gunWithAttachments('rifle', ['optic', 'suppressor', 'extmag'], { size: 240 }));
+      host.remove();
+
+      ok('every drawing has geometry', empty.length === 0, empty.join(', ') || 'all drawn');
+      ok('nothing is clipped by its own frame', clipped.length === 0,
+        clipped.join(', ') || (A.GUN_IDS.length + A.ATTACHMENT_IDS.length +
+          Object.keys(A.PRODUCT_ART).length + 1) + ' drawings in frame');
+      ok('all four gun categories are drawn', A.GUN_IDS.length === 4, A.GUN_IDS.join(', '));
+    }
+  }
+
+  out.push('');
   out.push('=== diagnostics ===');
   const d = window.plugsimDiag.summary();
   ok('diagnostics recording', d.events > 0, d.events + ' events, ' + d.faults + ' faults');

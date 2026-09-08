@@ -399,6 +399,10 @@ game.toggleAI = () => {
 // calls this.
 game.__boot = (state) => bootGame(state);
 
+// Exposed for the browser check, which measures every drawing's geometry —
+// a clipped muzzle can't be seen from the markup alone.
+import('./ui/art.js').then((art) => { window.__plugsimArt = art; }).catch(() => {});
+
 game.sellItemTo = (itemId, playerId) => {
   diag.trace('sell item to operation');
   const r = A.sellItemTo(game.state, itemId, playerId);
@@ -450,7 +454,11 @@ function bootGame(state) {
   syncPlayerMarker();
   fitToDistricts(game.map, state.districts);
 
-  game.map.on('click', () => game.select(null));
+  game.map.on('click', () => {
+    // On a phone, reaching for the map is how you ask for the map back.
+    if (game.ui && game.ui.isPhone && game.ui.isPhone()) game.ui.closeSheets();
+    else game.select(null);
+  });
   game.map.on('moveend zoomend', () => scheduleTileSweep());
 
   // Saved routes have geometry already; only refetch ones that never resolved.

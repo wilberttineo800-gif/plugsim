@@ -721,22 +721,32 @@ kbd {
     position: sticky;
     top: 0;
     width: 100%;
-    height: 22px;
+    /* A proper thumb target — the old 22px strip was easy to miss entirely. */
+    height: 30px;
     flex: 0 0 auto;
-    background: transparent;
+    background: linear-gradient(180deg, var(--panel) 55%, transparent);
     border: 0;
-    cursor: pointer;
+    cursor: grab;
     z-index: 3;
+    touch-action: none;
   }
+  .sheet__grip:active { cursor: grabbing; }
   .sheet__grip::before {
     content: '';
     position: absolute;
-    top: 8px; left: 50%;
-    width: 38px; height: 4px;
+    top: 10px; left: 50%;
+    width: 46px; height: 5px;
     transform: translateX(-50%);
-    background: var(--line);
-    border-radius: 2px;
+    background: var(--text-faint);
+    border-radius: 3px;
+    transition: background .15s ease, width .15s ease;
   }
+  .sheet__grip:hover::before,
+  .sheet__grip:active::before { background: var(--sodium); width: 56px; }
+
+  /* The sheets themselves are dragged, so the browser must not claim the
+     vertical gesture first. */
+  .rail.is-open, .inspector.is-open { touch-action: pan-y; }
   .inspector { padding-top: 0; }
   .inspector__close { top: 20px; }
 
@@ -940,4 +950,93 @@ kbd {
   /* On a phone the labels crowd the map, so only the selected one shows. */
   .bmark__label { display: none; }
   .bmark.is-selected .bmark__label { display: block; }
+}
+
+/* --- Goods and weapons, drawn ---------------------------------------------- */
+
+.card--goods .card__name {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+}
+.goods__art {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9px;
+  background: color-mix(in srgb, currentColor 11%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  flex: none;
+}
+.goods__art .art { width: 22px; height: 22px; }
+.goods__art .art--gun { width: 28px; height: 14px; }
+
+/* A card that leads with a picture. */
+.card--art, .card--attach { padding-top: 10px; }
+.card__art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 6px 12px;
+  margin: -4px -2px 8px;
+  border-radius: 10px;
+  background:
+    radial-gradient(120% 100% at 50% 0%, color-mix(in srgb, var(--sodium) 7%, transparent), transparent 70%),
+    var(--panel-2);
+  border: 1px solid var(--line-soft);
+}
+.card__art--small { padding: 6px; }
+.card:hover .card__art { border-color: var(--line); }
+
+/* The showcase: the weapon this line builds, at a size you can read. */
+.showcase {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 14px;
+  margin-bottom: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background:
+    radial-gradient(140% 120% at 22% 0%, color-mix(in srgb, var(--sodium) 10%, transparent), transparent 62%),
+    linear-gradient(180deg, var(--panel-2), var(--panel));
+}
+.showcase__art {
+  flex: 1 1 150px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 130px;
+}
+.showcase__art .art { width: 100%; height: auto; max-width: 190px; }
+.showcase__meta { flex: 1 1 150px; min-width: 140px; }
+.showcase__name {
+  font: 600 15px/1.2 var(--font-display);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--text);
+  margin-bottom: 5px;
+}
+.showcase__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font: 500 11px/1.5 var(--font-mono);
+  color: var(--text-dim);
+  margin-bottom: 8px;
+}
+.chip--art {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+}
+.chip--art .art { width: 18px; height: 18px; opacity: .85; }
+
+@media (max-width: 780px) {
+  .showcase { padding: 11px; gap: 10px; }
+  .showcase__art .art { max-width: 150px; }
 }

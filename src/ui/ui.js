@@ -115,9 +115,65 @@ export class GameUI {
     }
   }
 
+  /**
+   * Push a sheet down to dismiss it. Dragging starts on the grip, or anywhere
+   * in the sheet's body when it's already scrolled to the top — which is how
+   * every sheet on a phone behaves, so it's what a player will try first.
+   */
+  makeDraggable(sheet, grip) {
+    if (!sheet) return;
+    let startY = 0;
+    let dy = 0;
+    let dragging = false;
+    let fromGrip = false;
+
+    const body = sheet.querySelector('.rail__body, #inspectorBody') || sheet;
+
+    const begin = (e) => {
+      if (!this.isPhone() || !sheet.classList.contains('is-open')) return;
+      fromGrip = grip && (e.target === grip || grip.contains(e.target));
+      // From the body, only when there's nothing above to scroll to — otherwise
+      // the player is trying to scroll, not dismiss.
+      if (!fromGrip && body.scrollTop > 0) return;
+      dragging = true;
+      startY = e.clientY;
+      dy = 0;
+      sheet.style.transition = 'none';
+      // Capture keeps the gesture even if the thumb leaves the sheet. Some
+      // pointers can't be captured; that's not a reason to abandon the drag.
+      try { sheet.setPointerCapture?.(e.pointerId); } catch { /* not capturable */ }
+    };
+
+    const move = (e) => {
+      if (!dragging) return;
+      dy = e.clientY - startY;
+      if (dy < 0) dy = dy * 0.25;          // a little resistance upward
+      sheet.style.transform = `translateY(${Math.max(0, dy)}px)`;
+      // Once it's clearly a drag, stop the body scrolling under it.
+      if (Math.abs(dy) > 6) e.preventDefault();
+    };
+
+    const end = () => {
+      if (!dragging) return;
+      dragging = false;
+      sheet.style.transition = '';
+      sheet.style.transform = '';
+      // Far enough down and it goes; otherwise it springs back.
+      if (dy > 90) this.closeSheets();
+    };
+
+    sheet.addEventListener('pointerdown', begin);
+    sheet.addEventListener('pointermove', move, { passive: false });
+    sheet.addEventListener('pointerup', end);
+    sheet.addEventListener('pointercancel', end);
+    sheet.addEventListener('lostpointercapture', end);
+  }
+
   closeSheets() {
     this.dom.rail.classList.remove('is-open');
     this.dom.inspector.classList.remove('is-open');
+    this.dom.rail.style.transform = '';
+    this.dom.inspector.style.transform = '';
     for (const b of this.dom.mobileNav.children) {
       b.classList.toggle('is-on', b.dataset.mtab === 'map');
     }
@@ -182,6 +238,10 @@ export class GameUI {
 
     document.getElementById('railGrip').addEventListener('click', () => this.closeSheets());
     document.getElementById('inspectorGrip').addEventListener('click', () => this.closeSheets());
+    // A sheet with a handle looks draggable, so make it draggable. Tapping the
+    // grip still closes it; now so does pushing it down.
+    this.makeDraggable(this.dom.rail, document.getElementById('railGrip'));
+    this.makeDraggable(this.dom.inspector, document.getElementById('inspectorGrip'));
     this.phone.addEventListener('change', () => this.syncLayout());
 
     // Tap to go to where you are; hold (or tap again when already there) to
@@ -551,6 +611,9 @@ export class GameUI {
     const cards = PRODUCT_IDS.map((pid) => {
       const p = PRODUCTS[pid];
       const known = unlockedProducts.has(pid);
+      const art = productArt(pid, {
+        size: 34, color: known ? p.color : 'var(--text-faint)',
+      });
 
       // Where it sells best right now.
       const ranked = [...s.districts]
@@ -574,9 +637,10 @@ export class GameUI {
       const region = regionNote(s.countryCode, pid);
 
       return `
-        <div class="card" style="cursor:default;${known ? '' : 'opacity:.55'}">
+        <div class="card card--goods" style="cursor:default;${known ? '' : 'opacity:.55'}">
           <div class="card__head">
-            <span class="card__name" style="color:${esc(p.color)}">${esc(p.name)}</span>
+            <span class="card__name" style="color:${esc(p.color)}">
+              <span class="goods__art">${art}</span>${esc(p.name)}</span>
             <span class="card__cost">${money(avg)}<span style="color:var(--text-faint)">/pack</span></span>
           </div>
           ${this.sparkline(series, 'avg', p.color)}

@@ -16,11 +16,14 @@ const GUN_VIEWBOX = '0 0 64 32';
 export const GUN_ART = {
   handgun: {
     label: 'Handgun',
-    // Slide, frame, trigger guard, grip raked back the way a pistol sits.
+    // Muzzle left, grip raked back right — slide, frame, trigger guard, grip.
+    // Kept inside the 64x32 field so nothing is cut off at small sizes.
     path: `
-      M14 9 h30 a2 2 0 0 1 2 2 v4 h-4 v-2 h-24 v2 h-2 l-1 3
-      h-6 l-4 9 h-7 l3 -12 a3 3 0 0 1 3 -2 h2 v-2 a2 2 0 0 1 2 -2 z
-      M20 18 h9 a1 1 0 0 1 0 2 h-9 z
+      M5 9 h40 a1 1 0 0 1 1 1 v5 a1 1 0 0 1 -1 1 h-40 z
+      M9 7 h2 v2 h-2 z
+      M18 16 h24 v4 h-24 z
+      M32 20 h10 l3 10 h-11 z
+      M22 20 h9 v2 h-7 l-2 3 h-2 z
     `,
   },
   shotgun: {
@@ -230,7 +233,7 @@ export function attachmentArt(id, { size = 34, color = 'currentColor' } = {}) {
   // Each is drawn in gun coordinates, so frame it tightly around itself.
   const boxes = {
     optic: '20 0 20 12', suppressor: '-7 7 12 10', compensator: '-4 6 10 10',
-    extmag: '21 14 13 16', foregrip: '12 14 7 11', laser: '9 14 20 7',
+    extmag: '21 14 13 16', foregrip: '12 14 7 14', laser: '9 14 20 7',
   };
   const paint = a.stroked
     ? `stroke="${color}" stroke-width="1.4" fill="none" stroke-linecap="round"`

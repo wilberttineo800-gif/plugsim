@@ -7,6 +7,7 @@
 // footprints anyway. OSM gives the geometry and the tags for free.
 
 import { LOTS, MARKET_PROPERTY } from './constants.js';
+import { rentEffects } from './upgrades.js';
 import { haversineKm } from './geo.js';
 import { clamp, clamp01, lerp, hashUnit } from './rng.js';
 
@@ -116,25 +117,69 @@ export function pricedArea(areaM2) {
 }
 
 /** The full breakdown, so the UI can show why a building costs what it does. */
-export function priceBreakdown(kind, areaM2, district) {
+/**
+ * How many storeys a building has. OSM often says; where it doesn't, the kind
+ * of building is a decent guess — a rowhouse is not a tower and a warehouse is
+ * one tall space.
+ */
+const DEFAULT_LEVELS = {
+  tower: 12, apartment: 4, office: 5, retail: 2, house: 2, rowhouse: 2,
+  warehouse: 1, industrial: 1, garage: 1, shed: 1, parking: 1, kiosk: 1,
+};
+
+export function levelsOf(tags, kind) {
+  const stated = parseInt(tags['building:levels'] ?? tags.levels, 10);
+  if (Number.isFinite(stated) && stated > 0) return clamp(stated, 1, 90);
+  return DEFAULT_LEVELS[kind] || 2;
+}
+
+/** Everything under the roof, not just the ground it stands on. */
+export function floorArea(lot) {
+  return lot.areaM2 * (lot.levels || 1);
+}
+
+// An average flat, once halls and stairs are taken out. Used to turn a real
+// footprint into a believable number of front doors.
+const M2_PER_FLAT = 85;
+const RESIDENTIAL = new Set(['apartment', 'tower', 'house', 'rowhouse']);
+
+/**
+ * How many separate homes are in this building. The design note asked for
+ * apartment counts to drive rent, because a block of flats and a shop of the
+ * same footprint are not the same business.
+ */
+export function dwellingsIn(kind, areaM2, levels) {
+  if (!RESIDENTIAL.has(kind)) return 0;
+  if (kind === 'house') return 1;
+  if (kind === 'rowhouse') return Math.max(1, Math.round(levels / 2));
+  // Circulation eats roughly 15% of a block of flats.
+  return Math.max(1, Math.round((areaM2 * levels * 0.85) / M2_PER_FLAT));
+}
+
+export function priceBreakdown(kind, areaM2, district, levels = 1) {
   const rent = district ? district.rentIndex : 0.5;
   const kindMult = KIND_PRICE_MULT[kind] || 1;
   const blockMult = lerp(0.7, 1.65, rent);
   const effective = pricedArea(areaM2);
-  const raw = effective * LOTS.pricePerM2 * kindMult * blockMult;
+  // Height counts, but with diminishing returns: the ground floor is the
+  // valuable one and every storey above it is worth progressively less.
+  const heightMult = Math.pow(Math.max(1, levels), 0.62);
+  const raw = effective * LOTS.pricePerM2 * kindMult * blockMult * heightMult;
   const price = Math.round(clamp(raw, LOTS.minPrice, LOTS.maxPrice) / 10) * 10;
   return {
     price,
     kindMult,
     blockMult,
+    levels,
+    heightMult,
     ratePerM2: price / Math.max(1, areaM2),
     ratePerSqft: price / Math.max(1, sqft(areaM2)),
     discounted: effective < areaM2,
   };
 }
 
-export function lotPrice(kind, areaM2, district) {
-  return priceBreakdown(kind, areaM2, district).price;
+export function lotPrice(kind, areaM2, district, levels = 1) {
+  return priceBreakdown(kind, areaM2, district, levels).price;
 }
 
 /**
@@ -151,11 +196,28 @@ export function lotResale(lot, district) {
   return Math.round(marketValue(lot, district) * (1 - MARKET_PROPERTY.agentFee));
 }
 
-/** What a tenant would pay per day for this building. */
+/**
+ * What a tenant would pay per day. Three things move it beyond the raw value:
+ * how many front doors are in the building, what work has been done to it, and
+ * how rough the block is.
+ */
 export function rentPerDay(lot, district) {
   const wealth = district ? district.wealth : 0.5;
   const pull = 1 + (wealth - 0.5) * 2 * MARKET_PROPERTY.rentWealthSwing;
-  return Math.round(marketValue(lot, district) * MARKET_PROPERTY.rentYieldPerDay * pull);
+  const fx = rentEffects(lot);
+
+  // A block of flats is many tenancies, not one. Multiple lettings are worth
+  // more than a single one of the same floor area, but with a management drag.
+  const units = (lot.units || 0) + fx.addUnits;
+  const multiLet = units > 1 ? 1 + Math.log(units) * 0.16 : 1;
+
+  const crime = district && district.crime != null ? district.crime : 0;
+  const rough = 1 - Math.max(0, crime - fx.crimeRelief) * MARKET_PROPERTY.crimeRentDrag;
+
+  return Math.round(
+    marketValue(lot, district) * MARKET_PROPERTY.rentYieldPerDay
+    * pull * fx.rentMult * multiLet * Math.max(0.5, rough)
+  );
 }
 
 /** Profit or loss against what you actually paid. */
@@ -198,6 +260,8 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
     const address = addressOf(tags);
     const parkingType = kind === 'parking'
       ? (tags.parking || 'surface').toLowerCase() : null;
+    const levels = kind === 'parking' ? 1 : levelsOf(tags, kind);
+    const units = dwellingsIn(kind, areaM2, levels);
     lots.push({
       id: `L${n++}`,
       osmId: w.id,
@@ -209,11 +273,14 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
       districtId: district.id,
       parkingType,
       spaces: kind === 'parking' ? parkingSpaces(tags, areaM2) : 0,
+      levels,
+      units,
+      rentUpgrades: [],
       name: address
         || (kind === 'parking'
           ? `${PARKING_LABEL[parkingType] || 'Car park'} · ${parkingSpaces(tags, areaM2)} spaces`
           : `${KIND_LABEL[kind]} · ${Math.round(areaM2)} m²`),
-      price: lotPrice(kind, areaM2, district),
+      price: lotPrice(kind, areaM2, district, levels),
       owned: false,
       paidPrice: null,
       rented: false,

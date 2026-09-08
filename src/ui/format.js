@@ -61,3 +61,12 @@ export function esc(s) {
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[ch]));
 }
+
+/** Crime as a word. Nobody wants to read 0.47. */
+export function crimeLabel(v) {
+  if (v >= 0.72) return 'Lawless';
+  if (v >= 0.55) return 'Rough';
+  if (v >= 0.38) return 'Patchy';
+  if (v >= 0.22) return 'Settled';
+  return 'Quiet';
+}

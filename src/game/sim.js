@@ -4,6 +4,7 @@
 import {
   BUILDINGS,
   COURIERS,
+  CRIME,
   HEAT,
   HQ_HEAT_RELIEF,
   MARKET,
@@ -620,6 +621,17 @@ function stepLegit(state, dt) {
 function stepPropertyMarket(state, dt) {
   const days = dt / 24;
   for (const d of state.districts) {
+    // Crime chases what the block is actually like: poverty and weak policing
+    // underneath, plus whatever heat and rival pressure sit on top of it.
+    const baseline = clamp01(0.62 - d.wealth * 0.45 - d.policing * 0.20);
+    const crimeTarget = clamp01(
+      baseline
+      + (d.heat / 100) * CRIME.fromHeat
+      + clamp01(d.rivalControl || 0) * CRIME.fromRivals
+      - d.policing * CRIME.policingRelief * 0.5
+    );
+    const wasCrime = d.crime == null ? baseline : d.crime;
+    d.crime = clamp01(wasCrime + (crimeTarget - wasCrime) * CRIME.driftPerDay * days);
     const legit = state.buildings.filter(
       (b) => b.districtId === d.id && b.kind === 'front' && b.active
     ).length;
@@ -630,7 +642,9 @@ function stepPropertyMarket(state, dt) {
       + rented * MARKET_PROPERTY.rentedMarketLift
       + clamp01(d.rep) * MARKET_PROPERTY.repLift
       - (d.heat / 100) * MARKET_PROPERTY.heatDrag
-      - clamp01(d.rivalControl || 0) * MARKET_PROPERTY.rivalDrag;
+      - clamp01(d.rivalControl || 0) * MARKET_PROPERTY.rivalDrag
+      // Nobody pays top money to live somewhere that gets turned over.
+      - d.crime * CRIME.valueDrag;
 
     const previous = d.marketIndex || 1;
     const drift = (target - previous) * MARKET_PROPERTY.driftPerDay * days;

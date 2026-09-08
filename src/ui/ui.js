@@ -20,14 +20,14 @@ import { summary as diagnosticsSummary, report as diagnosticsReport, clear as di
 import { unlockStatus, regionNote } from '../game/progression.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
-  maxRoutesFor,
+  maxRoutesFor, rentUpgrades,
 } from '../game/upgrades.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import {
   buildingById, courierById, districtById, clockOf, nextDriverHireFee, driverById,
 } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
-import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip } from './format.js';
+import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip, crimeLabel } from './format.js';
 import { clamp01 } from '../game/rng.js';
 
 export class GameUI {
@@ -235,6 +235,7 @@ export class GameUI {
       case 'upgrade-courier': g.upgradeCourier(id, type); break;
       case 'set-hq': g.setHeadquarters(id); break;
       case 'drop-line': g.dropLine(id, type); break;
+      case 'improve-rental': g.improveRental(id, type); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -1342,9 +1343,14 @@ export class GameUI {
         <div class="row"><span>Type</span><span>${esc(KIND_LABEL[lot.kind] || lot.kind)}</span></div>
         <div class="row"><span>Footprint</span><span>${Math.round(sqft(lot.areaM2)).toLocaleString()} ft²</span></div>
         <div class="row"><span></span><span style="color:var(--text-faint)">${Math.round(lot.areaM2).toLocaleString()} m²</span></div>
+        ${lot.levels > 1 ? `<div class="row"><span>Storeys</span><span>${lot.levels}</span></div>` : ''}
+        ${lot.units > 0 ? `<div class="row"><span>Lettings</span><span>${lot.units} ${lot.units === 1 ? 'home' : 'homes'}</span></div>` : ''}
+        ${lot.kind === 'parking' ? `<div class="row"><span>Spaces</span><span>${lot.spaces}</span></div>` : ''}
         <div class="row"><span>Block</span><span>${esc(d ? d.name : '—')}</span></div>
         <div class="row"><span>Local market</span>
           <span class="${idx >= 1 ? 'good' : 'bad'}">${(idx * 100).toFixed(0)}% ${rising ? '▲' : '▼'}</span></div>
+        ${d && d.crime != null ? `<div class="row"><span>Crime</span>
+          <span class="${d.crime > 0.55 ? 'bad' : d.crime > 0.3 ? 'warn' : 'good'}">${crimeLabel(d.crime)}</span></div>` : ''}
       </div>`;
 
     // What you're up or down, if you own it.
@@ -1397,6 +1403,7 @@ export class GameUI {
               : 'Let it out for quiet, legal income, or put an operation in it. Values move with the block, so a place you clean up is worth more later.'}
           </p>
         </div>
+        ${this.rentalWorkBlock(lot)}
         ${lot.rented ? '' : `<div class="sect">
           <div class="sect__title"><span>Put it to work</span></div>
           ${this.lotDevelopBlock(lot)}
@@ -1590,6 +1597,56 @@ export class GameUI {
           <button class="ghostbtn" data-action="dismiss-helper">I've got it from here</button>
         </div>
       </div>`;
+  }
+
+  /**
+   * Work you can do to a property you let out. Survives a change of tenant,
+   * because it's the building that got better.
+   */
+  rentalWorkBlock(lot) {
+    const s = this.game.state;
+    if (lot.buildingId) return '';
+    const list = rentUpgrades(lot);
+    if (!list.length) return '';
+
+    const d = districtById(s, lot.districtId);
+    const done = list.filter((u) => u.owned);
+    const open = list.filter((u) => !u.owned);
+    const nowRent = rentPerDay(lot, d);
+
+    const row = (u) => {
+      const short = s.cash.clean < u.cost;
+      // Show the actual difference this makes, not an abstract multiplier.
+      const after = rentPerDay({ ...lot, rentUpgrades: (lot.rentUpgrades || []).concat(u.id) }, d);
+      const gain = after - nowRent;
+      const payback = gain > 0 ? Math.ceil(u.cost / gain) : null;
+      return `
+        <button class="card ${short ? 'is-locked' : ''}"
+          data-action="improve-rental" data-id="${lot.id}" data-type="${u.id}" ${short ? 'disabled' : ''}>
+          <div class="card__head">
+            <span class="card__name">${esc(u.name)}</span>
+            <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(u.cost)}</span>
+          </div>
+          <div class="card__blurb">${esc(u.blurb)}</div>
+          <div class="card__meta">
+            <span class="good">+${money(gain)}/day</span>
+            ${payback ? `<span>pays back in ${payback} days</span>` : ''}
+            ${u.addUnits ? `<span>+${u.addUnits} letting</span>` : ''}
+          </div>
+        </button>`;
+    };
+
+    return `
+      <details class="upgrades" data-disc="rent-${lot.id}"
+        ${this.discOpen(`rent-${lot.id}`, open.length > 0) ? 'open' : ''}>
+        <summary><span>Improve it</span>
+          <span class="upgrades__count">${done.length}/${list.length} done · ${money(nowRent)}/day</span></summary>
+        <div class="upgrades__body">
+          ${open.length ? open.map(row).join('') : '<div class="empty">Nothing left worth doing.</div>'}
+          ${done.length ? `<div class="sect__title" style="margin-top:10px"><span>Done</span></div>
+            <div class="chips">${done.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}
+        </div>
+      </details>`;
   }
 
   /** Everything that can still be done to this building, priced and explained. */

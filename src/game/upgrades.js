@@ -355,3 +355,87 @@ export function maxRoutesFor(def, courier) {
   if (def.direct) return 2;          // air is fast but small
   return Math.max(1, Math.min(4, 1 + Math.floor(cap / 130)));
 }
+
+
+// --- Rental upgrades --------------------------------------------------------
+//
+// The design note asked for rented property to be improvable, with the work
+// showing up in the rent. What you can do depends on what the building is: you
+// refit a kitchen in a flat and you resurface a loading yard in a warehouse.
+
+const RESIDENTIAL_WORK = [
+  { id: 'decorate', name: 'Full Redecoration', cost: 5200,
+    blurb: 'New floors, new paint, new kitchen. Lets for more the day it is finished.',
+    rentMult: 1.18 },
+  { id: 'heating', name: 'Heating and Insulation', cost: 8600,
+    blurb: 'Warm, quiet and cheap to run. Tenants stay longer and pay for it.',
+    rentMult: 1.15 },
+  { id: 'security', name: 'Door Entry and Cameras', cost: 6400,
+    blurb: 'Controlled entry on the street door. Worth more on a rough block.',
+    rentMult: 1.12, crimeRelief: 0.15 },
+  { id: 'convert', name: 'Loft Conversion', cost: 14500,
+    blurb: 'Another front door under the same roof.',
+    rentMult: 1.1, addUnits: 1 },
+];
+
+const COMMERCIAL_WORK = [
+  { id: 'shopfront', name: 'New Shopfront', cost: 7400,
+    blurb: 'Glass, signage and a clean frontage. Better class of tenant.',
+    rentMult: 1.16 },
+  { id: 'services', name: 'Rewire and Plumbing', cost: 9800,
+    blurb: 'Brought up to standard, so a real business can actually trade from it.',
+    rentMult: 1.19 },
+  { id: 'aircon', name: 'Climate and Fit-out', cost: 12600,
+    blurb: 'Comfortable to work in all year. Commands an office rent.',
+    rentMult: 1.14 },
+];
+
+const YARD_WORK = [
+  { id: 'surface', name: 'Resurfaced Yard', cost: 6800,
+    blurb: 'Level, drained hardstanding. A haulier will pay for that.',
+    rentMult: 1.15 },
+  { id: 'dock', name: 'Loading Dock', cost: 15400,
+    blurb: 'Dock-height doors, so a lorry can back straight on.',
+    rentMult: 1.24 },
+  { id: 'threephase', name: 'Three-Phase Power', cost: 11200,
+    blurb: 'Enough supply to run real machinery.',
+    rentMult: 1.17 },
+];
+
+export const RENT_UPGRADES = {
+  apartment: RESIDENTIAL_WORK,
+  tower: RESIDENTIAL_WORK,
+  house: RESIDENTIAL_WORK,
+  rowhouse: RESIDENTIAL_WORK,
+  retail: COMMERCIAL_WORK,
+  office: COMMERCIAL_WORK,
+  kiosk: COMMERCIAL_WORK,
+  warehouse: YARD_WORK,
+  industrial: YARD_WORK,
+  garage: YARD_WORK,
+  shed: YARD_WORK,
+};
+
+/** What could still be done to this property, with what is already done marked. */
+export function rentUpgrades(lot) {
+  const list = RENT_UPGRADES[lot.kind] || [];
+  const owned = new Set(lot.rentUpgrades || []);
+  return list.map((u) => ({ ...u, owned: owned.has(u.id) }));
+}
+
+export function rentUpgradeById(kind, id) {
+  return (RENT_UPGRADES[kind] || []).find((u) => u.id === id) || null;
+}
+
+/** Everything the work adds up to on one property. */
+export function rentEffects(lot) {
+  const fx = { rentMult: 1, addUnits: 0, crimeRelief: 0 };
+  for (const id of lot.rentUpgrades || []) {
+    const u = rentUpgradeById(lot.kind, id);
+    if (!u) continue;
+    fx.rentMult *= u.rentMult ?? 1;
+    fx.addUnits += u.addUnits ?? 0;
+    fx.crimeRelief += u.crimeRelief ?? 0;
+  }
+  return fx;
+}

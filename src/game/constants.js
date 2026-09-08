@@ -695,6 +695,18 @@ export const COURIER_IDS = Object.keys(COURIERS);
 // things over, and heat sheds faster where you actually live.
 export const HQ_HEAT_RELIEF = 0.35;
 
+// Crime rate. The design note asked for it to affect market value and to be
+// dynamic — partly the neighbourhood, partly what the player is doing to it.
+export const CRIME = {
+  driftPerDay: 0.16,     // how fast it chases its target
+  fromHeat: 0.55,        // your own attention feeds it
+  fromRivals: 0.40,      // so does somebody else's crew
+  policingRelief: 0.45,  // a well-policed block runs cleaner
+  valueDrag: 0.30,       // how much a bad block knocks off property values
+  rentDrag: 0.22,        // and off what a tenant will pay
+  streetPremium: 0.12,   // rough blocks pay a little more on the street
+};
+
 export const HEAT = {
   // Proportional, not flat: a quiet block sheds almost nothing while a hot one
   // cools fast. Flat decay silently deleted heat once it spread out.
@@ -759,6 +771,7 @@ export const MARKET_PROPERTY = {
   // in it yourself — but it costs you nothing and risks nothing.
   rentYieldPerDay: 0.0062,   // share of market value, per day
   rentWealthSwing: 0.5,      // richer blocks pay proportionally more
+  crimeRentDrag: 0.22,       // a rough block lets for less
   tenancyBuyout: 0.35,       // share of a month's rent to end a tenancy early
   rentedMarketLift: 0.03,    // an occupied building helps the block a little
 };

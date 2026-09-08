@@ -2,7 +2,7 @@
 // pull real OSM footprints — these stand in for them with the same shape and a
 // realistic spread of sizes (rowhouse → warehouse).
 
-import { classify, lotPrice, parkingSpaces } from '../src/game/lots.js';
+import { classify, lotPrice, parkingSpaces, levelsOf, dwellingsIn } from '../src/game/lots.js';
 import { offsetKm } from '../src/game/geo.js';
 
 const SIZES = [70, 95, 140, 260, 340, 480, 700, 900, 2200];
@@ -28,6 +28,10 @@ export function syntheticLots(districts, perDistrict = 9) {
       const isParking = i === perDistrict - 1 || i === 2;
       const tags = isParking ? { amenity: 'parking', parking: 'surface' } : { building: 'yes' };
       const kind = classify(tags, areaM2);
+      // A believable spread of heights, so rent and value see real storeys.
+      if (!isParking) tags['building:levels'] = String(1 + (i % 5));
+      const levels = isParking ? 1 : levelsOf(tags, kind);
+      const units = dwellingsIn(kind, areaM2, levels);
       lots.push({
         id: `L${n++}`,
         osmId: n,
@@ -36,11 +40,14 @@ export function syntheticLots(districts, perDistrict = 9) {
         areaM2,
         kind,
         parkingType: isParking ? 'surface' : null,
+        levels,
+        units,
+        rentUpgrades: [],
         spaces: isParking ? parkingSpaces(tags, areaM2) : 0,
         address: `${100 + i * 7} Test Street`,
         districtId: d.id,
         name: `${100 + i * 7} Test Street`,
-        price: lotPrice(kind, areaM2, d),
+        price: lotPrice(kind, areaM2, d, levels),
         owned: false,
         buildingId: null,
       });

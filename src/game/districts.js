@@ -90,6 +90,8 @@ export function generateDistricts(origin, placeNames = [], countryCode = null) {
       density,
       wealth,
       policing,
+      // Where it starts: rough where it's poor and lightly policed.
+      crime: clamp01(0.62 - wealth * 0.45 - policing * 0.20),
       rentIndex,
       demandPerHour: demand,
       // Live state

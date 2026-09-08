@@ -294,6 +294,14 @@ game.dropLine = (vehicleId, routeId) => {
   game.ui.render();
 };
 
+game.improveRental = (lotId, upgradeId) => {
+  diag.trace('improve rental');
+  const r = A.improveRental(game.state, lotId, upgradeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.upgrade.name} done — rent now $${r.after.toLocaleString()}/day.`, 'good', 3600);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

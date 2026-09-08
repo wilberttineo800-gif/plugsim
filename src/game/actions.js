@@ -13,7 +13,7 @@ import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
-  maxRoutesFor,
+  maxRoutesFor, rentUpgradeById, rentUpgrades, rentEffects,
 } from './upgrades.js';
 import {
   buildingById,
@@ -274,6 +274,38 @@ export function setHeadquarters(state, buildingId) {
       : `${b.name} is your headquarters now. The block will run a little calmer.`,
     'good');
   return { ok: true, building: b, previous };
+}
+
+/**
+ * Do work on a property you let out. Unlike a fit-out this survives a change of
+ * tenant — it's the building that got better, not the operation.
+ */
+export function improveRental(state, lotId, upgradeId) {
+  const lot = lotById(state, lotId);
+  if (!lot) return { ok: false, error: 'No such property.' };
+  if (!lot.owned) return { ok: false, error: 'Buy the property first.' };
+  if (lot.buildingId) {
+    return { ok: false, error: 'Something is running in there. Rental work is for property you let out.' };
+  }
+
+  const u = rentUpgradeById(lot.kind, upgradeId);
+  if (!u) return { ok: false, error: 'That work does not apply to this building.' };
+  lot.rentUpgrades = lot.rentUpgrades || [];
+  if (lot.rentUpgrades.includes(upgradeId)) return { ok: false, error: 'Already done.' };
+  if (!canAfford(state, u.cost)) {
+    return { ok: false, error: `${u.name} costs $${u.cost.toLocaleString()} clean.` };
+  }
+
+  const d = districtById(state, lot.districtId);
+  const before = rentPerDay(lot, d);
+  spendClean(state, u.cost);
+  lot.rentUpgrades.push(upgradeId);
+  const after = rentPerDay(lot, d);
+
+  logEvent(state,
+    `${u.name} finished at ${lot.name}. Rent goes from $${before.toLocaleString()} to $${after.toLocaleString()} a day.`,
+    'good');
+  return { ok: true, upgrade: u, before, after, cost: u.cost };
 }
 
 export { availableUpgrades, effectsFor };

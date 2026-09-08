@@ -6,7 +6,8 @@ import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
-import { upkeepFor, vehicleStats, maxRoutesFor } from '../src/game/upgrades.js';
+import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
+import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
@@ -19,6 +20,8 @@ function check(name, ok, detail) {
   print((ok ? '  PASS  ' : '  FAIL  ') + name + (detail ? '   ' + detail : ''));
   ok ? pass++ : fail++;
 }
+
+function districtOf(st, lot) { return st.districts.find((d) => d.id === lot.districtId); }
 
 function world() {
   const origin = { lat: 39.2904, lng: -76.6122 };
@@ -405,6 +408,60 @@ print('=== 12. a big vehicle works a circuit ===');
   const depot = st.buildings.find((b) => b.kind === 'depot');
   check('a route does not move where a vehicle lives', v.homeBuildingId === depot.id,
         'home ' + v.homeBuildingId + ' vs depot ' + depot.id);
+}
+
+print('');
+print('=== 13. property has depth: storeys, flats, work and crime ===');
+{
+  const st = world();
+  const d = st.districts[4];
+
+  // Height is worth money, but not linearly.
+  const one = lotPrice('apartment', 400, d, 1);
+  const four = lotPrice('apartment', 400, d, 4);
+  check('storeys are worth money', four > one, '1 storey $' + one + ' vs 4 storeys $' + four);
+  check('but not four times as much', four < one * 4,
+        (four / one).toFixed(2) + 'x for 4x the floors');
+
+  // A block of flats is many front doors.
+  check('a block of flats has many lettings', dwellingsIn('apartment', 600, 5) > 5,
+        dwellingsIn('apartment', 600, 5) + ' flats in 600 m2 x5');
+  check('a house is one letting', dwellingsIn('house', 600, 2) === 1);
+  check('a warehouse is not a home', dwellingsIn('warehouse', 600, 1) === 0);
+
+  // Multi-let earns more than a single tenancy of the same value.
+  const flats = { kind: 'apartment', areaM2: 600, levels: 5, price: 400000,
+                  units: dwellingsIn('apartment', 600, 5), rentUpgrades: [], owned: true };
+  const single = { ...flats, units: 1 };
+  check('many lettings beat one', rentPerDay(flats, d) > rentPerDay(single, d),
+        '$' + rentPerDay(flats, d) + ' vs $' + rentPerDay(single, d));
+
+  // Work raises the rent, and the action charges for it.
+  const lot = st.lots.find((l) => !l.owned && (RENT_UPGRADES[l.kind] || []).length);
+  A.buyLot(st, lot.id);
+  const rentBefore = rentPerDay(lot, districtOf(st, lot));
+  const work = rentUpgrades(lot)[0];
+  const res = A.improveRental(st, lot.id, work.id);
+  check('rental work can be done', res.ok, res.ok ? res.upgrade.name : res.error);
+  check('and it raises the rent', rentPerDay(lot, districtOf(st, lot)) > rentBefore,
+        '$' + rentBefore + ' -> $' + rentPerDay(lot, districtOf(st, lot)));
+  check('the same work is not done twice', !A.improveRental(st, lot.id, work.id).ok);
+  check('rental work is refused on a working building',
+        !A.improveRental(st, open(st, 'grow_house').lotId, work.id).ok);
+
+  // Crime is dynamic, and a bad block is worth less.
+  const st2 = world();
+  const hot = st2.districts[6];
+  const calm = st2.districts[7];
+  hot.heat = 90; calm.heat = 0;
+  hot.wealth = calm.wealth; hot.policing = calm.policing;
+  hot.crime = calm.crime = 0.3;
+  hot.marketIndex = calm.marketIndex = 1;
+  for (let h = 0; h < 24 * 14; h += 6) stepSim(st2, 6, {});
+  check('crime rises where there is heat', hot.crime > calm.crime,
+        'hot ' + hot.crime.toFixed(2) + ' vs calm ' + calm.crime.toFixed(2));
+  check('a bad block is worth less', hot.marketIndex < calm.marketIndex,
+        'hot ' + hot.marketIndex.toFixed(2) + ' vs calm ' + calm.marketIndex.toFixed(2));
 }
 
 print('');

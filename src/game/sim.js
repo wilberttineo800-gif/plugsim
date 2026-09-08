@@ -196,9 +196,12 @@ function stepProduction(state, dt) {
       continue;
     }
 
-    // Buying in supplies kicks off a cycle.
+    // Buying in supplies kicks off a cycle. What you buy in has to match what
+    // the place can actually turn out — a room running at 70% of reference size
+    // does not buy a full room's worth of nutrient, and charging it as if it
+    // did made every small starter grow structurally unprofitable.
     if (!b.cycleStarted) {
-      const cost = def.supplyCostPerSlot * def.slots;
+      const cost = def.supplyCostPerSlot * def.slots * sizeScale(b);
       if (state.cash.dirty + state.cash.clean < cost) {
         b.stalledReason = 'Can’t cover supplies';
         continue;

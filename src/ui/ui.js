@@ -378,7 +378,7 @@ export class GameUI {
       costs += upkeepFor(b);
       if (def.kind === 'front') income += this.legitTakings(b);
       if (def.kind === 'production') {
-        costs += (def.supplyCostPerSlot * def.slots * 24) / def.cycleHours;
+        costs += (def.supplyCostPerSlot * def.slots * sizeScale(b) * 24) / def.cycleHours;
       }
     }
     for (const d of s.drivers || []) costs += d.wagePerDay;
@@ -1957,7 +1957,7 @@ export class GameUI {
           <div class="rows" style="margin-top:9px">
             <div class="row"><span>Yield per cycle</span><span>${units(perCycle)} ${esc(p.rawName.toLowerCase())}</span></div>
             <div class="row"><span>Cycle length</span><span>${duration(def.cycleHours)}</span></div>
-            <div class="row"><span>Supplies per cycle</span><span>${money(def.supplyCostPerSlot * def.slots)}</span></div>
+            <div class="row"><span>Supplies per cycle</span><span>${money(def.supplyCostPerSlot * def.slots * sizeScale(b))}</span></div>
           </div>
         </div>
         <div class="sect">

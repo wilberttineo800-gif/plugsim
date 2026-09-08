@@ -5,7 +5,7 @@
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
-import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld } from '../src/game/sim.js';
+import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld, sizeScale } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
@@ -20,7 +20,7 @@ import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
-import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS } from '../src/game/constants.js';
 import { fitsBuilding, operationOptions } from '../src/game/actions.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
@@ -30,6 +30,16 @@ const carried = (c) => PRODUCT_IDS.reduce((n, p) => n + c.cargo[p], 0);
 function check(name, ok, detail) {
   print((ok ? '  PASS  ' : '  FAIL  ') + name + (detail ? '   ' + detail : ''));
   ok ? pass++ : fail++;
+}
+
+function openIn(st, type, pick) {
+  const lot = (st.lots || []).filter((l) => !l.owned && l.kind !== 'parking'
+    && l.areaM2 >= BUILDINGS[type].minAreaM2
+    && (!BUILDINGS[type].maxAreaM2 || l.areaM2 <= BUILDINGS[type].maxAreaM2))
+    .filter(pick).sort((a, b) => a.price - b.price)[0];
+  if (!lot) return null;
+  A.buyLot(st, lot.id);
+  return A.developLot(st, lot.id, type).building;
 }
 
 function districtOf(st, lot) { return st.districts.find((d) => d.id === lot.districtId); }
@@ -978,6 +988,45 @@ print('=== 21. a backgrounded tab does not lose the world ===');
           g2.raw.weed > 0,
           'raw ' + g2.raw.weed.toFixed(2) + ', cycle at ' + g2.cycleProgress.toFixed(6));
   }
+}
+
+print('');
+print('=== 22. what a place buys in matches what it turns out ===');
+{
+  // Output scales with the floorplate. Supplies did not, so a small starter
+  // grow paid a full room's worth of nutrient for 70% of a room's yield and
+  // could never get out of the hole.
+  const st = world();
+  const small = openIn(st, 'grow_house', (l) => l.areaM2 < 100);
+  const big = openIn(st, 'grow_house', (l) => l.areaM2 > 300);
+  if (small && big) {
+    check('a small room turns out less', small.scale < big.scale,
+          'x' + small.scale.toFixed(2) + ' vs x' + big.scale.toFixed(2));
+
+    const costOf = (b) => BUILDINGS.grow_house.supplyCostPerSlot * BUILDINGS.grow_house.slots * sizeScale(b);
+    check('and buys in proportionately less', costOf(small) < costOf(big),
+          '$' + Math.round(costOf(small)) + ' vs $' + Math.round(costOf(big)) + ' per cycle');
+
+    // Margin per cycle should not punish you for starting small.
+    const marginOf = (b) => {
+      const yieldPer = BUILDINGS.grow_house.slots * BUILDINGS.grow_house.rawPerSlot * sizeScale(b);
+      return (yieldPer * PRODUCTS.weed.packsPerRaw * PRODUCTS.weed.basePrice) / costOf(b);
+    };
+    check('a small grow is not structurally worse off than a big one',
+          Math.abs(marginOf(small) - marginOf(big)) < 0.01,
+          marginOf(small).toFixed(2) + 'x vs ' + marginOf(big).toFixed(2) + 'x return on supplies');
+  }
+
+  // And the HUD must quote what the sim actually charges.
+  const st2 = world();
+  const g3 = open(st2, 'grow_house');
+  const charged = BUILDINGS.grow_house.supplyCostPerSlot * BUILDINGS.grow_house.slots * sizeScale(g3);
+  const cashBefore = st2.cash.dirty + st2.cash.clean;
+  g3.cycleStarted = false;
+  stepSim(st2, 0.05, {});
+  const spent = cashBefore - (st2.cash.dirty + st2.cash.clean);
+  check('the sim charges what the panel quotes', Math.abs(spent - charged) < 1,
+        'charged $' + Math.round(spent) + ', quoted $' + Math.round(charged));
 }
 
 print('');

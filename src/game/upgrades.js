@@ -353,7 +353,11 @@ export function describeEffects(fx = {}) {
 export function maxRoutesFor(def, courier) {
   const cap = courier ? vehicleStats(courier, def).capacity : def.capacity;
   if (def.direct) return 2;          // air is fast but small
-  return Math.max(1, Math.min(4, 1 + Math.floor(cap / 130)));
+  // A courier doing two drops on one round is ordinary. The threshold is set so
+  // the cheapest vehicle a new player can buy can work both legs of the chain —
+  // needing a second vehicle and a second driver just to get started was a wall
+  // nobody could see coming.
+  return Math.max(1, Math.min(4, 1 + Math.floor(cap / 60)));
 }
 
 

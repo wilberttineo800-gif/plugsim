@@ -29,7 +29,7 @@ export const SPEED_NOTES = {
 };
 
 export const START_CASH_DIRTY = 0;
-export const START_CASH_CLEAN = 24000;
+export const START_CASH_CLEAN = 30000;
 
 // --- Products ---------------------------------------------------------------
 // Each product moves through the chain as RAW units (harvested, unsellable)
@@ -304,7 +304,7 @@ export const BUILDINGS = {
     areaExponent: 0.6,
     upkeepPerDay: 210,
     rawPerHour: 3.2, // raw units consumed per game hour
-    costPerRaw: 30,
+    costPerRaw: 12,
     qualityBonus: 0.15,
     heatPerDay: 0.35,
     capacity: 400, // packaged units held on site
@@ -995,7 +995,10 @@ export const LEGIT_WEALTH_SWING = 0.55;
 // --- Market -----------------------------------------------------------------
 export const MARKET = {
   // Street supply above this many hours of demand crushes the price.
-  saturationHours: 8,
+  // A block will hold about half a day of demand as stock before the price
+  // starts to go. Eight hours was less than one vehicle-load, so the only
+  // delivery a new player could make always cratered its own price.
+  saturationHours: 12,
   minPriceMultiplier: 0.35,
   // How fast reputation in a district builds and decays.
   repGainPerSale: 0.0016,

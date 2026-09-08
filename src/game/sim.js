@@ -19,7 +19,7 @@ import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
-import { turfEffects, turfUpkeep } from './turf.js';
+import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
 import {
   RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
@@ -480,18 +480,43 @@ function unloadCargo(state, c, route, hooks = {}, def = null) {
     }
     // Whoever holds the block gets their cut before the customers see any of it.
     maybeShakedown(state, c, d, hooks);
+    let refused = 0;
     for (const pid of PRODUCT_IDS) {
       const amount = c.cargo[pid];
       if (amount <= 0) continue;
+
+      // A corner will hold about two days of stock and no more. A stash house
+      // has always respected a limit like this; a courier did not, so one line
+      // could pile up a fortnight of product on a single block and crush its
+      // own price permanently. You can still over-supply and pay for it in
+      // price — you just can't bury a block. Whatever won't fit stays aboard
+      // for the next stop on the circuit.
+      const room = Math.max(0, sellRatePerHour(d, pid) * MARKET.glutCap - d.supply[pid]);
+      const dropped = Math.min(amount, room);
+      if (dropped <= 0.0001) { refused += amount; continue; }
+
       // A refrigerated load doesn't degrade on the way.
       const arriving = def && def.preservesQuality
         ? c.cargoQuality[pid]
         : Math.max(0, c.cargoQuality[pid] - 0.02);
-      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], amount, arriving);
-      d.supply[pid] += amount;
-      c.cargo[pid] = 0;
+      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], dropped, arriving);
+      d.supply[pid] += dropped;
+      c.cargo[pid] -= dropped;
+      refused += amount - dropped;
     }
     d.discovered = true;
+
+    // Say it once per vehicle, so the player learns why rather than watching
+    // their price sink for no visible reason.
+    if (refused > 0.5 && !c.toldGlut) {
+      c.toldGlut = true;
+      logEvent(state,
+        `${districtName(d)} is already carrying all it can shift — ${Math.round(refused)} packs came back. ` +
+        `Send them somewhere else or the price here stays on the floor.`,
+        'warn');
+    } else if (refused <= 0.5) {
+      c.toldGlut = false;
+    }
   } else {
     const target = buildingById(state, route.toId);
     if (!target) return;

@@ -999,6 +999,9 @@ export const MARKET = {
   // starts to go. Eight hours was less than one vehicle-load, so the only
   // delivery a new player could make always cratered its own price.
   saturationHours: 12,
+  // The most a block will physically take in: about two days of its own
+  // demand. Past the saturation buffer above, the price is already falling.
+  glutCap: 48,
   minPriceMultiplier: 0.35,
   // How fast reputation in a district builds and decays.
   repGainPerSale: 0.0016,

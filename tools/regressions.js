@@ -8,6 +8,7 @@ import { createState, createRoute, saveGame, loadGame } from '../src/game/state.
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld, sizeScale } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
+import { sellRatePerHour, streetPrice as streetPriceOf } from '../src/game/economy.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
@@ -20,7 +21,7 @@ import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
-import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS } from '../src/game/constants.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS, MARKET } from '../src/game/constants.js';
 import { fitsBuilding, operationOptions } from '../src/game/actions.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
@@ -1055,6 +1056,59 @@ print('=== 23. going broke is loud ===');
   stepSim(st, 0.05, {});
   check('it clears once you can pay again', !g4.stalledBroke && !g4.stalledReason,
         g4.stalledReason || 'running');
+}
+
+print('');
+print('=== 24. you cannot bury a block ===');
+{
+  // A courier used to unload its whole load regardless of what the block could
+  // shift, so one line piled up a fortnight of stock on a single corner and
+  // pinned its own price at the floor for good. A stash house never did this.
+  const st = world();
+  const grow5 = open(st, 'grow_house');
+  const d = st.districts[9];
+  const r = wire(st, grow5.id, 'district', d.id, 'packs', 'any', 1);
+  r.active = true;
+  const v5 = A.buyVehicle(st, 'boxtruck').vehicle;
+  A.assignDriver(st, v5.id, A.hireDriver(st).driver.id);
+  A.assignCourier(st, v5.id, r.id);
+
+  // Force-feed it: plenty of stock, one small block.
+  grow5.packs.weed = 100000;
+  grow5.packQuality.weed = 0.6;
+  for (let h = 0; h < 24 * 40; h += 0.25) stepSim(st, 0.25, {});
+
+  const ceiling = sellRatePerHour(d, 'weed') * MARKET.glutCap;
+  check('a block never holds more than it can shift', d.supply.weed <= ceiling * 1.05,
+        Math.round(d.supply.weed) + ' packs, ceiling ' + Math.round(ceiling));
+  check('which is about two days of its own demand',
+        MARKET.glutCap / 24 >= 1.5 && MARKET.glutCap / 24 <= 3,
+        (MARKET.glutCap / 24).toFixed(1) + ' days');
+
+  // Over-supplying still costs you, it just isn't permanent ruin.
+  const price = streetPriceOf(d, 'weed');
+  const base = PRODUCTS.weed.basePrice;
+  check('glutting a block still hurts the price', price < base,
+        '$' + price.toFixed(0) + ' against a $' + base + ' base');
+  check('but not all the way to nothing', price > base * 0.2,
+        '$' + price.toFixed(0));
+
+  // What wouldn't fit stays on the vehicle rather than vanishing.
+  const st2 = world();
+  const grow6 = open(st2, 'grow_house');
+  const d2 = st2.districts[11];
+  d2.supply.weed = sellRatePerHour(d2, 'weed') * MARKET.glutCap; // already full
+  const r2 = wire(st2, grow6.id, 'district', d2.id, 'packs', 'any', 1);
+  r2.active = true;
+  const v6 = A.buyVehicle(st2, 'van').vehicle;
+  A.assignDriver(st2, v6.id, A.hireDriver(st2).driver.id);
+  A.assignCourier(st2, v6.id, r2.id);
+  grow6.packs.weed = 500;
+  const supplyBefore = d2.supply.weed;
+  for (let h = 0; h < 24 * 3; h += 0.25) stepSim(st2, 0.25, {});
+  const stillSomewhere = grow6.packs.weed + carried(v6) + (d2.supply.weed - supplyBefore);
+  check('product refused at the door is not destroyed', stillSomewhere > 0,
+        'still holding ' + Math.round(carried(v6)) + ' aboard');
 }
 
 print('');

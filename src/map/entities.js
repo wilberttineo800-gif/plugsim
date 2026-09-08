@@ -98,7 +98,9 @@ export class BuildingLayer {
     // The name sits above the chip and is part of the same marker, so reading
     // it and tapping it are the same gesture — clicking the label opens the
     // business exactly as clicking the building does.
-    const label = escapeHtml(b.name.split(' · ')[0]);
+    // The type is the useful half — "Machine Shop", not "Machine Shop ·
+    // Detached house · 308 m²" cut off after nine characters.
+    const label = escapeHtml(def.name);
     const art = def.product === 'iron'
       ? gunWithAttachments(b.line || 'handgun', this.fittedFor?.(b) || [], { size: 40 })
       : svgIcon(def.icon);

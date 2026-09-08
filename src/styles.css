@@ -74,8 +74,12 @@ button, input, select { font-family: inherit; color: inherit; }
    It used to be inverted into a near-black sheet, which killed every colour on
    it and made highlighted buildings glare. A light map under dark chrome reads
    far better, especially on a phone. */
+/* The map has to sit *inside* a dark console, not shine out of it. A light
+   OSM raster at full brightness makes the panels look like a different app.
+   This pulls it down and cools it without going back to the near-black that
+   made buildings unreadable on a phone. */
 .leaflet-tile-pane {
-  filter: saturate(1.12) brightness(.94) contrast(1.04);
+  filter: brightness(.62) saturate(.72) contrast(1.06) hue-rotate(184deg) invert(.06);
 }
 .leaflet-tile {
   image-rendering: -webkit-optimize-contrast;
@@ -912,11 +916,11 @@ kbd {
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   border: 1px solid var(--line);
   color: var(--text);
-  font: 600 10.5px/1.35 var(--font-display);
-  letter-spacing: .04em;
+  font: 600 11.5px/1.35 var(--font-display);
+  letter-spacing: .03em;
   text-transform: uppercase;
   white-space: nowrap;
-  max-width: 15ch;
+  max-width: 22ch;
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: auto;

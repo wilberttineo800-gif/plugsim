@@ -251,11 +251,9 @@ export async function fetchPlaceNames(south, west, north, east, onRetry) {
   // Real block names are most of what makes a city feel like itself, so this is
   // worth retrying rather than silently falling back to invented ones the first
   // time Overpass is busy.
-  const attempts = [
-    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 0 },
-    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 900 },
-    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 4500 },
-  ];
+  const attempts = MIRRORS.slice(0, 4).map((endpoint, i) => ({
+    endpoint, waitMs: [0, 900, 3000, 6500][i],
+  }));
   for (let i = 0; i < attempts.length; i++) {
     const { endpoint, waitMs } = attempts[i];
     if (waitMs) {
@@ -283,6 +281,23 @@ export async function fetchPlaceNames(south, west, north, east, onRetry) {
  * Every building footprint in the play area, with its tags. This is what makes
  * the properties real — actual traced outlines and actual street addresses.
  */
+/**
+ * Public Overpass instances, in the order worth trying.
+ *
+ * Overpass grants two query slots per IP and there is no key to raise that, so
+ * a busy moment refuses outright. Spreading across mirrors is the only lever
+ * available. Ordered by what actually answered when last checked — kumi.systems
+ * was timing out completely rather than refusing, which is worse than a refusal
+ * because it costs the full timeout before moving on.
+ */
+export const MIRRORS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+];
+
 // Set when Overpass tells us it is overloaded, so the caller can stop asking
 // for a while instead of hammering a service that is already refusing.
 let overpassCooldownUntil = 0;
@@ -308,12 +323,9 @@ export async function fetchBuildings(south, west, north, east, cap = 2600, onRet
   // Overpass grants two query slots per IP. When they're busy it refuses
   // outright, so a transient refusal has to back off and try again rather than
   // fail the whole survey.
-  const attempts = [
-    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 0 },
-    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 800 },
-    { endpoint: 'https://overpass-api.de/api/interpreter', waitMs: 4000 },
-    { endpoint: 'https://overpass.kumi.systems/api/interpreter', waitMs: 9000 },
-  ];
+  const attempts = MIRRORS.map((endpoint, i) => ({
+    endpoint, waitMs: [0, 800, 2600, 6000, 11000][i] ?? 11000,
+  }));
 
   let lastError = null;
   for (let i = 0; i < attempts.length; i++) {

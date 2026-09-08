@@ -946,4 +946,39 @@ print('=== 20. you find people by working the same ground ===');
 }
 
 print('');
+print('=== 21. a backgrounded tab does not lose the world ===');
+{
+  // A hidden tab is throttled by the browser, so the loop crawls. Coming back
+  // has to be treated like coming back to a closed tab: same catch-up, same
+  // result, so switching tabs is never the wrong thing to do.
+  const played = world();
+  const grow1 = open(played, 'grow_house');
+  for (let h = 0; h < 6; h += 0.05) stepSim(played, 0.05, {});
+
+  const backgrounded = world();
+  const grow2 = open(backgrounded, 'grow_house');
+  const report = catchUp(backgrounded, 6 * 3600000, {});
+
+  check('coming back from a hidden tab catches the time up', !!report && report.hours === 6,
+        report ? report.hours + 'h' : 'nothing');
+  const gap = Math.abs(grow2.raw.weed - grow1.raw.weed) / Math.max(1, grow1.raw.weed);
+  check('and lands where playing it would have', gap < 0.05,
+        'played ' + grow1.raw.weed.toFixed(1) + ' vs backgrounded ' + grow2.raw.weed.toFixed(1));
+  check('a brief switch is not worth reporting', catchUp(world(), 5000, {}) === null);
+
+  // The specific shape that broke it: a cycle length that divides evenly into
+  // the catch-up step size, so accumulated float progress lands a hair under 1.
+  for (const hours of [6, 12, 0.5, 24, 3]) {
+    const st = world();
+    const g2 = open(st, 'grow_house');
+    // Drive it exactly N whole cycles in one call.
+    stepSim(st, BUILDINGS.grow_house.cycleHours * (hours / BUILDINGS.grow_house.cycleHours), {});
+    stepSim(st, BUILDINGS.grow_house.cycleHours, {});
+    check(`a cycle completes cleanly over ${hours}h + one full cycle`,
+          g2.raw.weed > 0,
+          'raw ' + g2.raw.weed.toFixed(2) + ', cycle at ' + g2.cycleProgress.toFixed(6));
+  }
+}
+
+print('');
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

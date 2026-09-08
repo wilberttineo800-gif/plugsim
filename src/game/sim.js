@@ -86,6 +86,13 @@ export function sizeCapacity(b) {
 
 const MAX_STEP_HOURS = 0.25;
 
+// Accumulated progress is a sum of floats, so a cycle that divides evenly into
+// the step size lands a hair under 1 and never completes: 24 × (0.25/6) is
+// 0.9999999999999999, and a six-hour grow caught up in quarter-hour slices
+// would sit at "finished" forever without ever harvesting. Compare with a
+// tolerance rather than exactly.
+const DONE = 1 - 1e-9;
+
 /**
  * Advance the world. Large jumps are sliced: a courier only advances one phase
  * per tick, probabilities are computed per-tick, and capacity is checked at the
@@ -202,7 +209,7 @@ function stepProduction(state, dt) {
     }
 
     b.cycleProgress += dt / (def.cycleHours * researchEffects(state).cycleMult);
-    if (b.cycleProgress >= 1) {
+    if (b.cycleProgress >= DONE) {
       b.cycleProgress = 0;
       b.cycleStarted = false;
       // A firearms shop makes whatever it's tooled for, and a shotgun is not a
@@ -371,7 +378,7 @@ function stepCouriers(state, dt, hooks) {
           : pointAlongPath(route.points, clamp01(c.progress));
         // Nothing on the road to be pulled over by.
         if (!def.direct) maybeGetStopped(state, c, def, dt, hooks);
-        if (c.progress >= 1) {
+        if (c.progress >= DONE) {
           c.phase = 'unloading';
           c.dwellLeft = (def.unloadMinutes || 0) / 60;
         }
@@ -394,7 +401,7 @@ function stepCouriers(state, dt, hooks) {
         c.position = def.direct
           ? straightLine(ends[0], ends[1], 1 - clamp01(c.progress))
           : pointAlongPath(route.points, 1 - clamp01(c.progress));
-        if (c.progress >= 1) {
+        if (c.progress >= DONE) {
           c.phase = 'loading';
           c.progress = 0;
           // A vehicle big enough to hold several lines works round them in

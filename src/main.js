@@ -492,6 +492,7 @@ function bootGame(state) {
   game.routeLayer.sync(state);
 
   startLoop();
+  wireVisibility();
   wireKeys();
   scheduleTileSweep();
   game.autosave = setInterval(() => {
@@ -621,6 +622,44 @@ function startLoop() {
       }
     }
   }, TICK_MS);
+}
+
+/**
+ * A hidden tab is throttled by the browser, so the loop crawls rather than
+ * running — switch tabs for ten minutes and almost no time passes, which reads
+ * as the game being broken. Treat a hidden tab exactly like a closed one: the
+ * world runs on in real time and catches up when you come back.
+ */
+function wireVisibility() {
+  let hiddenAt = null;
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+      hiddenAt = Date.now();
+      return;
+    }
+    if (!hiddenAt || !game.state) return;
+    const away = Date.now() - hiddenAt;
+    hiddenAt = null;
+    // Under half a minute isn't worth reporting; the loop absorbs it.
+    if (away < 30000) { game.lastFrame = performance.now(); return; }
+
+    const report = catchUp(game.state, away, {});
+    game.lastFrame = performance.now();
+    if (!report) return;
+
+    const made = report.earnedClean + report.earnedDirty;
+    const span = report.hours >= 1.5
+      ? `${Math.round(report.hours)} hours`
+      : `${Math.round(report.hours * 60)} minutes`;
+    const bits = [`${span} passed while the tab was in the background`];
+    if (report.trips) bits.push(`${report.trips} deliveries`);
+    if (Math.abs(made) > 1) {
+      bits.push(`${made >= 0 ? 'took' : 'lost'} $${Math.abs(Math.round(made)).toLocaleString('en-US')}`);
+    }
+    logEvent(game.state, bits.join(' · ') + '.', made >= 0 ? 'good' : 'bad');
+    toast(bits.join(' · ') + '.', made >= 0 ? 'good' : 'info', 6000);
+    game.ui.render();
+  });
 }
 
 function isEditing() {

@@ -87,6 +87,12 @@
   // locked, with a reason, until the requirements are met.
   const wasUnlocked = s.adminUnlockAll;
   s.adminUnlockAll = false;
+  // Gates are relative to what you've built. On a session that has already
+  // grown rich, nothing is gated — so check from a poor position and put the
+  // money back afterwards.
+  const stash = { clean: s.cash.clean, dirty: s.cash.dirty };
+  s.cash.clean = 0;
+  s.cash.dirty = 0;
   const gateLot = s.lots.find((l) => l.kind !== 'parking' && l.owned && !l.buildingId && !l.rented)
     || s.lots.find((l) => l.kind !== 'parking' && !l.owned);
   g.select('lot', gateLot.id);
@@ -95,6 +101,8 @@
   ok('gated operations are shown but locked',
     /Machine Shop|Pill Press|Hash Press/.test(buildHtml) && /more propert|more banked/.test(buildHtml),
     'progression gates visible in the build menu');
+  s.cash.clean = stash.clean;
+  s.cash.dirty = stash.dirty;
   s.adminUnlockAll = wasUnlocked;
 
   out.push('');
@@ -149,9 +157,14 @@
   g.buyVehicle('scooter');
   ok('vehicles can be bought once there are bays', s.couriers.length >= 2,
     s.couriers.length + ' in the yard');
-  ok('parked vehicles sit in their own bay',
-    s.couriers.length < 2 || s.couriers[0].parkSlot !== s.couriers[1].parkSlot,
-    'slots ' + s.couriers.map((c) => c.parkSlot).join(', '));
+  // Bays are numbered per depot, so two vehicles in different yards may both
+  // sit in bay 0. What must never happen is a clash inside one depot.
+  const byDepot = {};
+  for (const c of s.couriers) (byDepot[c.homeBuildingId] ||= []).push(c.parkSlot);
+  const clashes = Object.entries(byDepot)
+    .filter(([, slots]) => new Set(slots).size !== slots.length);
+  ok('no two vehicles share a bay in the same depot', clashes.length === 0,
+    Object.entries(byDepot).map(([d, sl]) => d + '[' + sl.join(',') + ']').join(' '));
 
   out.push('');
   out.push('=== market ===');

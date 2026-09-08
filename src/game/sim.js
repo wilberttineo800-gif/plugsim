@@ -204,8 +204,19 @@ function stepProduction(state, dt) {
       const cost = def.supplyCostPerSlot * def.slots * sizeScale(b);
       if (state.cash.dirty + state.cash.clean < cost) {
         b.stalledReason = 'Can’t cover supplies';
+        // Say it out loud the first time. A site quietly stopping because you
+        // ran out of money is the one failure a player will not notice, and it
+        // ends the run without ever telling them why.
+        if (!b.stalledBroke) {
+          b.stalledBroke = true;
+          logEvent(state,
+            `${b.name.split(' · ')[0]} has stopped — nothing left to buy supplies with. ` +
+            `Sell something, or let what's already made get to a buyer.`,
+            'bad');
+        }
         continue;
       }
+      b.stalledBroke = false;
       paySoft(state, cost);
       b.cycleStarted = true;
       b.cycleProgress = 0;

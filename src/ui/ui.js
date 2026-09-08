@@ -333,6 +333,20 @@ export class GameUI {
     this.dom.dirty.textContent = money(s.cash.dirty);
 
     const flow = this.dailyNet();
+    // Anything stopped because the money ran out is the one thing that must not
+    // be quiet — it ends a run without the player ever seeing why.
+    const broke = s.buildings.filter((b) => b.stalledBroke);
+    const warn = document.getElementById('hudWarning');
+    if (warn) {
+      const show = broke.length > 0;
+      warn.hidden = !show;
+      if (show) {
+        const text = broke.length === 1
+          ? `${broke[0].name.split(' · ')[0]} has stopped — no money for supplies`
+          : `${broke.length} sites stopped — no money for supplies`;
+        if (warn.textContent !== text) warn.textContent = text;
+      }
+    }
     this.dom.flow.textContent = `${flow >= 0 ? '+' : ''}${moneyShort(flow)}`;
     this.dom.flow.style.color = flow >= 0 ? 'var(--good)' : 'var(--bad)';
 

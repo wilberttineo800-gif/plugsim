@@ -1030,4 +1030,32 @@ print('=== 22. what a place buys in matches what it turns out ===');
 }
 
 print('');
+print('=== 23. going broke is loud ===');
+{
+  const st = world();
+  const g4 = open(st, 'grow_house');
+  st.cash.clean = 0;
+  st.cash.dirty = 0;
+  g4.cycleStarted = false;
+
+  const logBefore = (st.log || []).length;
+  stepSim(st, 0.05, {});
+  check('a site that cannot buy supplies stops', /supplies/i.test(g4.stalledReason || ''),
+        g4.stalledReason);
+  check('and it says so out loud, once', (st.log || []).length > logBefore && g4.stalledBroke,
+        (st.log || [])[0] ? (st.log || [])[0].text.slice(0, 70) : 'nothing logged');
+
+  const logAfter = (st.log || []).length;
+  for (let i = 0; i < 20; i++) stepSim(st, 0.05, {});
+  check('it does not then repeat every tick', (st.log || []).length === logAfter,
+        (st.log || []).length - logAfter + ' extra lines over 20 ticks');
+
+  // And it clears once there's money again.
+  st.cash.clean = 100000;
+  stepSim(st, 0.05, {});
+  check('it clears once you can pay again', !g4.stalledBroke && !g4.stalledReason,
+        g4.stalledReason || 'running');
+}
+
+print('');
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

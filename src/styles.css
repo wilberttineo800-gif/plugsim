@@ -868,3 +868,22 @@ kbd {
   margin-left: -6px;
   margin-right: -6px;
 }
+
+/* Running out of money stops production silently. This is the one warning that
+   has to be visible without opening anything. */
+.hud__warning {
+  color: var(--bad);
+  font-weight: 600;
+  letter-spacing: .01em;
+  border: 1px solid color-mix(in srgb, var(--bad) 45%, transparent);
+  border-radius: 7px;
+  padding: 5px 10px;
+  background: color-mix(in srgb, var(--bad) 12%, transparent);
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 780px) {
+  .hud__warning { max-width: 100%; font-size: 11px; padding: 4px 8px; }
+}

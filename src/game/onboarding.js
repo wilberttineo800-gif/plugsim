@@ -41,8 +41,10 @@ export const STEPS = [
     title: 'Make something',
     brief:
       "Nobody buys an empty bag. Get a grow going — a spare room does it to " +
-      "start. Small building, small yield; that's just how space works.",
-    hint: 'Buy a building over 40 m² and fit it out as a Grow House.',
+      "start. Small building, small yield; that's just how space works. Keep " +
+      "a few thousand back when you do: a grow buys its supplies in every " +
+      "cycle, and it stops dead the day you can't cover them.",
+    hint: 'Buy a building over 55 m² and fit it out as a Grow House.',
     check: (s) => has(s, 'production'),
   },
   {
@@ -51,8 +53,10 @@ export const STEPS = [
     brief:
       "You'll want wheels, and wheels have to sit somewhere. Car parks are all " +
       "over this map — buy one and put a depot on it. How big it is decides how " +
-      "many motors you can run, so don't buy a broom cupboard.",
-    hint: 'Car parks draw in blue. Buy one and fit it out as a Depot.',
+      "many motors you can run, so buy for the fleet you've got, not the one " +
+      "you want. A handful of spaces is plenty to start, and a multi-storey " +
+      "will eat everything you have.",
+    hint: 'Car parks draw in blue. A small one is a few hundred; buy that.',
     check: (s) => has(s, 'depot'),
   },
   {

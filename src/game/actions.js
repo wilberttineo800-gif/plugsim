@@ -13,6 +13,7 @@ import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
 import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
+import { projectById, canResearch, ITEM_KINDS, itemValue } from './research.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgradeById, rentUpgrades, rentEffects,
@@ -428,6 +429,80 @@ export function endTurfUpgrade(state, districtId, upgradeId) {
   const u = turfUpgradeById(upgradeId);
   if (u) logEvent(state, `${u.name} on ${districtName(d)} stops.`, 'info');
   return { ok: true };
+}
+
+// --- Research and the things it makes ---------------------------------------
+
+/** Put a project on the bench. */
+export function startResearch(state, projectId) {
+  const p = projectById(projectId);
+  if (!p) return { ok: false, error: 'No such project.' };
+  if (!(state.buildings || []).some((b) => b.kind === 'research' && b.active)) {
+    return { ok: false, error: 'You need an R&D facility running first.' };
+  }
+  const gate = canResearch(state, projectId);
+  if (!gate.ok) return { ok: false, error: gate.reason };
+  if (!canAfford(state, p.cost)) {
+    return { ok: false, error: `${p.name} costs $${p.cost.toLocaleString()} clean to set up.` };
+  }
+
+  spendClean(state, p.cost);
+  state.researchActive = state.researchActive || [];
+  state.researchActive.push({ id: projectId, hoursDone: 0 });
+  logEvent(state, `${p.name} is on the bench.`, 'info');
+  return { ok: true, project: p };
+}
+
+/** Abandon a project. The money spent setting it up is gone. */
+export function cancelResearch(state, projectId) {
+  state.researchActive = (state.researchActive || []).filter((r) => r.id !== projectId);
+  const p = projectById(projectId);
+  if (p) logEvent(state, `${p.name} shelved.`, 'info');
+  return { ok: true };
+}
+
+/**
+ * Fit a one-off to something. A building item goes on a building, a vehicle
+ * item on a vehicle, and each thing carries one at a time.
+ */
+export function equipItem(state, itemId, targetId) {
+  const item = (state.items || []).find((it) => it.id === itemId);
+  if (!item) return { ok: false, error: 'No such item.' };
+  const kind = ITEM_KINDS[item.kind];
+  if (!kind) return { ok: false, error: 'Unknown item.' };
+
+  if (!targetId) {
+    item.equippedTo = null;
+    return { ok: true, item };
+  }
+
+  const target = kind.slot === 'vehicle'
+    ? (state.couriers || []).find((c) => c.id === targetId)
+    : buildingById(state, targetId);
+  if (!target) {
+    return { ok: false, error: `A ${kind.name.toLowerCase()} fits a ${kind.slot}.` };
+  }
+
+  // One at a time — take off whatever is already on it.
+  for (const other of state.items || []) {
+    if (other.id !== item.id && other.equippedTo === targetId) other.equippedTo = null;
+  }
+  item.equippedTo = targetId;
+  logEvent(state, `${item.name} fitted to ${target.name}.`, 'good');
+  return { ok: true, item, target };
+}
+
+/** Sell a one-off. Rarity and your standing set what it fetches. */
+export function sellItem(state, itemId) {
+  const idx = (state.items || []).findIndex((it) => it.id === itemId);
+  if (idx < 0) return { ok: false, error: 'No such item.' };
+  const item = state.items[idx];
+  const price = itemValue(state, item);
+  state.items.splice(idx, 1);
+  state.cash.clean += price;
+  state.stats.legalRevenue = (state.stats.legalRevenue || 0) + price;
+  logEvent(state, `Sold ${item.name} for $${price.toLocaleString()}.`, 'good');
+  return { ok: true, item, price };
 }
 
 export { availableUpgrades, effectsFor };

@@ -20,6 +20,10 @@ import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
 import { turfEffects, turfUpkeep } from './turf.js';
+import {
+  RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
+  researchQuality, researchYield, researchEffects,
+} from './research.js';
 import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
 import { rentPerDay } from './lots.js';
 import {
@@ -30,7 +34,15 @@ import {
   parkedPosition,
 } from './state.js';
 
-const rng = makeRng(Date.now() & 0xffffffff);
+let rng = makeRng(Date.now() & 0xffffffff);
+
+/**
+ * Fix the world's randomness. Only for harnesses that need to compare two runs
+ * that differ by one thing; the game never calls it.
+ */
+export function seedWorld(seed) {
+  rng = makeRng(seed >>> 0);
+}
 
 /** Pay an operating cost: street money first, clean money only if it must. */
 export function paySoft(state, amount) {
@@ -142,6 +154,7 @@ function stepOnce(state, dtHours, hooks = {}) {
   maybeRecordPrices(state);
   stepRents(state, dtHours);
   stepTurf(state, dtHours);
+  stepResearch(state, dtHours);
   stepHeat(state, dtHours);
   stepEnforcement(state, dtHours);
 
@@ -186,18 +199,25 @@ function stepProduction(state, dt) {
       b.cycleProgress = 0;
     }
 
-    b.cycleProgress += dt / def.cycleHours;
+    b.cycleProgress += dt / (def.cycleHours * researchEffects(state).cycleMult);
     if (b.cycleProgress >= 1) {
       b.cycleProgress = 0;
       b.cycleStarted = false;
       // A firearms shop makes whatever it's tooled for, and a shotgun is not a
       // suppressor: simpler things come off the line faster.
       const lineMult = def.product === 'iron' ? classOf(b).yieldMult : 1;
-      const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b) * lineMult;
+      // Anything you've developed applies to every site that makes that product,
+      // plus whatever one-off is fitted to this particular building.
+      const item = itemEffectsFor(state, b);
+      const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b)
+        * lineMult * researchYield(state, def.product) * item.yieldMult;
       // A rifle line turns out fewer, better units than a shotgun line; that
       // shows up as quality, which is what the market actually prices.
       const lineQuality = def.product === 'iron' ? (classOf(b).valueMult - 1) * 0.12 : 0;
-      const quality = clamp01(def.baseQuality + fx.qualityAdd + lineQuality);
+      const quality = clamp01(
+        def.baseQuality + fx.qualityAdd + lineQuality
+        + researchQuality(state, def.product) + item.qualityAdd
+      );
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);
       b.rawQuality[def.product] = blendQuality(
@@ -246,7 +266,9 @@ function stepLabs(state, dt) {
       const share = budget * (available / totalWaiting);
       const take = Math.min(available, share);
       if (take <= 0.0001) continue;
-      const cost = take * def.costPerRaw;
+      // Recovering your solvent is the biggest saving available in processing.
+      const cost = take * def.costPerRaw * researchEffects(state).processCostMult
+        * itemEffectsFor(state, b).costMult;
       if (state.cash.dirty + state.cash.clean < cost) {
         b.stalledReason = 'Can’t cover processing costs';
         break;
@@ -666,6 +688,87 @@ function stepLegit(state, dt) {
   }
 }
 
+/** What a one-off fitted to this building or vehicle does. */
+export function itemEffectsFor(state, target) {
+  const fx = { yieldMult: 1, qualityAdd: 0, costMult: 1, capacityMult: 1, paceMult: 1 };
+  for (const it of state.items || []) {
+    if (it.equippedTo !== target.id) continue;
+    const kind = ITEM_KINDS[it.kind];
+    if (!kind) continue;
+    // Rarity is the whole point: a one-of-one is worth several commons.
+    const power = 1 + (tierById(it.tier).value - 1) * 0.14;
+    const e = kind.effect || {};
+    if (e.yieldMult) fx.yieldMult *= 1 + (e.yieldMult - 1) * power;
+    if (e.qualityAdd) fx.qualityAdd += e.qualityAdd * power;
+    if (e.costMult) fx.costMult *= 1 - (1 - e.costMult) * power;
+    if (e.capacityMult) fx.capacityMult *= 1 + (e.capacityMult - 1) * power;
+    if (e.paceMult) fx.paceMult *= 1 - (1 - e.paceMult) * power;
+  }
+  return fx;
+}
+
+// --- Research ---------------------------------------------------------------
+
+/**
+ * Projects advance while a facility runs, and the work throws off the
+ * occasional one-off. Both are driven by the same building, because in practice
+ * a discovery is a by-product of doing the work.
+ */
+function stepResearch(state, dt) {
+  const labs = (state.buildings || []).filter((b) => b.kind === 'research' && b.active);
+  if (!labs.length) return;
+
+  // Several facilities work in parallel; the biggest carries the most weight.
+  const power = labs.reduce((n, b) => n + sizeScale(b), 0);
+  state.researchActive = state.researchActive || [];
+  state.research = state.research || [];
+
+  for (let i = state.researchActive.length - 1; i >= 0; i--) {
+    const job = state.researchActive[i];
+    const def = projectById(job.id);
+    if (!def) { state.researchActive.splice(i, 1); continue; }
+    job.hoursDone = (job.hoursDone || 0) + dt * RESEARCH.basePerHour * power;
+    if (job.hoursDone >= def.hours) {
+      state.researchActive.splice(i, 1);
+      state.research.push(def.id);
+      logEvent(state, `${def.name} is finished. ${def.result}`, 'good');
+    }
+  }
+}
+
+/** Once a day, see whether the benches turned anything up. */
+function rollResearchDiscoveries(state) {
+  const labs = (state.buildings || []).filter((b) => b.kind === 'research' && b.active);
+  for (const lab of labs) {
+    // A facility works whichever field its current project belongs to, and
+    // botany by default.
+    const job = (state.researchActive || [])[0];
+    const field = job && projectById(job.id) ? projectById(job.id).field : 'botany';
+    const found = rollDiscovery(state, { field }, sizeScale(lab), rng);
+    if (!found) continue;
+
+    const item = {
+      id: nextItemId(state),
+      kind: found.kind,
+      tier: found.tier,
+      name: nameFor(found.kind, rng),
+      madeAt: state.minutes,
+      equippedTo: null,
+    };
+    state.items = state.items || [];
+    state.items.push(item);
+    const tier = tierById(item.tier);
+    logEvent(state,
+      `${lab.name} turned something up: ${item.name} — ${tier.name.toLowerCase()} ${ITEM_KINDS[item.kind].name.toLowerCase()}.`,
+      tier.value >= 6 ? 'good' : 'info');
+  }
+}
+
+function nextItemId(state) {
+  state.itemCounter = (state.itemCounter || 0) + 1;
+  return `it${state.itemCounter}`;
+}
+
 // --- Property market --------------------------------------------------------
 
 /**
@@ -1023,6 +1126,7 @@ function settleDay(state) {
   state.fixerUsedToday = 0;
   checkUnlocks(state);
   stepLicences(state);
+  rollResearchDiscoveries(state);
 
   let upkeep = 0;
   for (const b of state.buildings) {

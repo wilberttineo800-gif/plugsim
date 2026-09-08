@@ -195,7 +195,7 @@
 
   out.push('');
   out.push('=== ui ===');
-  const tabs = ['build', 'market', 'blocks', 'fleet', 'routes', 'ledger', 'admin'];
+  const tabs = ['build', 'market', 'blocks', 'fleet', 'routes', 'lab', 'ledger', 'admin'];
   let tabErrors = 0;
   for (const t of tabs) {
     try { g.ui.goTab(t); if (!document.getElementById('railBody').innerHTML.length) tabErrors++; }

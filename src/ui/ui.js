@@ -14,6 +14,10 @@ import { HELPER, currentStep, progress as onboardingProgress } from '../game/onb
 import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import {
+  RESEARCH, PROJECTS, PROJECT_IDS, FIELDS, projectById, canResearch, isResearched,
+  ITEM_KINDS, tierById, itemValue,
+} from '../game/research.js';
+import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
 import { crewById } from '../game/crews.js';
@@ -211,6 +215,10 @@ export class GameUI {
       if (value) this.game.addLine(field.dataset.courier, value);
       return;
     }
+    if (name === 'equipItem') {
+      this.game.equipItem(field.dataset.item, value || null);
+      return;
+    }
     if (name === 'districtName') {
       this.game.renameDistrict(field.dataset.district, value);
       return;
@@ -247,6 +255,9 @@ export class GameUI {
       case 'set-line': g.setProductionLine(id, type); break;
       case 'improve-turf': g.improveTurf(id, type); break;
       case 'end-turf': g.endTurfUpgrade(id, type); break;
+      case 'start-research': g.startResearch(type); break;
+      case 'cancel-research': g.cancelResearch(type); break;
+      case 'sell-item': g.sellItem(id); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -394,6 +405,7 @@ export class GameUI {
       market: () => this.tabMarket(),
       fleet: () => this.tabFleet(),
       routes: () => this.tabRoutes(),
+      lab: () => this.tabLab(),
       ledger: () => this.tabLedger(),
       admin: () => this.tabAdmin(),
     };
@@ -934,6 +946,147 @@ export class GameUI {
       case 'returning': return 'Heading back';
       default: return 'Parked';
     }
+  }
+
+  // --- R&D tab ---------------------------------------------------------------
+
+  tabLab() {
+    const s = this.game.state;
+    const labs = (s.buildings || []).filter((b) => b.kind === 'research' && b.active);
+    if (!labs.length) {
+      return `<div class="empty">
+        No R&amp;D facility. Build one and you can develop your own strains,
+        processes and patterns — and the benches turn up the occasional thing
+        nobody else has.
+      </div>` + this.itemsSection();
+    }
+
+    const power = labs.reduce((n, b) => n + sizeScale(b), 0);
+    const active = (s.researchActive || []).map((job) => {
+      const p = projectById(job.id);
+      if (!p) return '';
+      const frac = Math.min(1, (job.hoursDone || 0) / p.hours);
+      const left = Math.max(0, p.hours - (job.hoursDone || 0));
+      const days = left / (RESEARCH.basePerHour * Math.max(0.1, power) * 24);
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${esc(p.name)}</span>
+          <span class="card__cost">${pct(frac)}</span>
+        </div>
+        <div class="meter"><i style="width:${frac * 100}%"></i></div>
+        <div class="card__meta">
+          <span>${days < 1 ? 'less than a day' : `about ${Math.ceil(days)} days`} to go</span>
+        </div>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="cancel-research" data-type="${p.id}">Shelve it</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    const byField = Object.values(FIELDS).map((field) => {
+      const rows = PROJECT_IDS
+        .filter((id) => PROJECTS[id].field === field.id)
+        .map((id) => {
+          const p = PROJECTS[id];
+          const done = isResearched(s, id);
+          const gate = canResearch(s, id);
+          const short = s.cash.clean < p.cost;
+          if (done) {
+            return `<div class="card">
+              <div class="card__head">
+                <span class="card__name">${esc(p.name)}</span>
+                <span class="card__cost good">done</span>
+              </div>
+              <div class="card__meta"><span class="good">${esc(p.result)}</span></div>
+            </div>`;
+          }
+          const blocked = !gate.ok || short;
+          return `<button class="card ${blocked ? 'is-locked' : ''}"
+            data-action="start-research" data-type="${id}" ${blocked ? 'disabled' : ''}>
+            <div class="card__head">
+              <span class="card__name">${esc(p.name)}</span>
+              <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(p.cost)}</span>
+            </div>
+            <div class="card__blurb">${esc(p.blurb)}</div>
+            <div class="card__meta">
+              <span>${esc(p.result)}</span>
+              ${!gate.ok ? `<span class="warn">${esc(gate.reason)}</span>` : ''}
+            </div>
+          </button>`;
+        }).join('');
+      return `<div class="sect">
+        <div class="sect__title"><span>${esc(field.name)}</span></div>${rows}</div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>On the bench</span>
+        <span>${(s.researchActive || []).length}/${RESEARCH.maxProjects}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        ${labs.length} ${labs.length === 1 ? 'facility' : 'facilities'} working.
+        A bigger floorplate gets through the work faster.
+      </p>
+      ${active || '<div class="empty">Nothing on the bench.</div>'}
+    </div>` + byField + this.itemsSection();
+  }
+
+  /** Things that exist only because you made them. */
+  itemsSection() {
+    const s = this.game.state;
+    const items = s.items || [];
+    if (!items.length) {
+      return `<div class="sect">
+        <div class="sect__title"><span>Your own work</span><span>0</span></div>
+        <p class="card__blurb" style="margin:0">
+          Every so often the benches turn something up that only exists because
+          you made it. The more property and money behind the work, the better
+          what comes out of it.
+        </p>
+      </div>`;
+    }
+
+    const cards = items.map((it) => {
+      const kind = ITEM_KINDS[it.kind];
+      const tier = tierById(it.tier);
+      const worth = itemValue(s, it);
+      const fittedTo = it.equippedTo
+        ? (s.buildings.find((b) => b.id === it.equippedTo)
+          || s.couriers.find((c) => c.id === it.equippedTo))
+        : null;
+
+      // Only things it actually fits.
+      const targets = kind.slot === 'vehicle' ? s.couriers : s.buildings.filter((b) => b.kind !== 'front');
+      const opts = ['<option value="">— not fitted —</option>']
+        .concat(targets.map((t) => `<option value="${t.id}" ${it.equippedTo === t.id ? 'selected' : ''}>${esc(clip(t.name, 26))}</option>`))
+        .join('');
+
+      return `<div class="card" style="cursor:default;border-left:3px solid ${esc(tier.color)}">
+        <div class="card__head">
+          <span class="card__name">${esc(it.name)}</span>
+          <span class="card__cost" style="color:${esc(tier.color)}">${esc(tier.name)}</span>
+        </div>
+        <div class="card__blurb">${esc(kind.blurb)}</div>
+        <div class="card__meta">
+          <span>${esc(kind.name)}</span>
+          <span>worth ${moneyShort(worth)}</span>
+          ${fittedTo ? `<span class="good">on ${esc(clip(fittedTo.name, 18))}</span>` : ''}
+        </div>
+        <div class="field" style="margin:8px 0 0">
+          <select data-field="equipItem" data-item="${it.id}">${opts}</select>
+        </div>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="sell-item" data-id="${it.id}">Sell for ${moneyShort(worth)}</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Your own work</span><span>${items.length}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        Rarity is what these are worth, and every copy you make of the same
+        thing is worth less than the last.
+      </p>
+      ${cards}
+    </div>`;
   }
 
   // --- Routes tab -----------------------------------------------------------

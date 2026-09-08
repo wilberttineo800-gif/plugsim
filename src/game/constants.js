@@ -541,6 +541,22 @@ export const BUILDINGS = {
     capacity: 0,
   },
 
+  research_lab: {
+    id: 'research_lab',
+    kind: 'research',
+    name: 'R&D Facility',
+    blurb: 'Benches, glassware and people who read. Develops new product properly, and every so often the work throws off something nobody else has.',
+    icon: 'flask',
+    unlock: { properties: 11, cash: 420000 },
+    cost: 96000,
+    minAreaM2: 320,
+    referenceAreaM2: 760,
+    areaExponent: 0.8,
+    upkeepPerDay: 3100,
+    heatPerDay: 0.2,
+    capacity: 0,
+  },
+
   // --- Corporate tier -------------------------------------------------------
   //
   // The design note put it plainly: setting up in Times Square should cost a

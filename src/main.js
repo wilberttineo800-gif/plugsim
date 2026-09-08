@@ -346,6 +346,33 @@ game.endTurfUpgrade = (districtId, upgradeId) => {
   game.ui.render();
 };
 
+game.startResearch = (projectId) => {
+  diag.trace('start research');
+  const r = A.startResearch(game.state, projectId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.project.name} is on the bench.`, 'good', 3000);
+  game.ui.render();
+};
+
+game.cancelResearch = (projectId) => {
+  A.cancelResearch(game.state, projectId);
+  game.ui.render();
+};
+
+game.equipItem = (itemId, targetId) => {
+  const r = A.equipItem(game.state, itemId, targetId);
+  if (!r.ok) return toast(r.error, 'bad');
+  if (r.target) toast(`${r.item.name} fitted to ${r.target.name}.`, 'good', 2800);
+  game.ui.render();
+};
+
+game.sellItem = (itemId) => {
+  const r = A.sellItem(game.state, itemId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Sold ${r.item.name} for $${r.price.toLocaleString()}.`, 'good', 3400);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

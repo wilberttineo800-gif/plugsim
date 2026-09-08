@@ -93,7 +93,7 @@ if (!g || !g.state) {
   out.push('');
   g.ui.openSheet('rail');
   const rail = document.getElementById('railBody');
-  for (const tab of ['build', 'market', 'blocks', 'fleet', 'routes', 'ledger', 'admin']) {
+  for (const tab of ['build', 'market', 'blocks', 'fleet', 'routes', 'lab', 'ledger', 'admin']) {
     g.ui.goTab(tab);
     record(`tab ${tab}`, rail);
   }

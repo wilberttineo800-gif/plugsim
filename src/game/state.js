@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 12;
+export const SAVE_VERSION = 13;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -43,6 +43,11 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     // delivery happen, not to start on.
     speedIndex: 3,
     cash: { clean: START_CASH_CLEAN, dirty: START_CASH_DIRTY },
+    hqBuildingId: null,
+    playerAt: origin ? { ...origin } : null,
+    followMe: false,
+    tutorialDone: [],
+    tutorialDismissed: false,
     stats: {
       packsSold: emptyProductMap(),
       grossRevenue: 0,
@@ -285,6 +290,15 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 13) {
+    // Onboarding and the HQ arrived in 13; a run in progress simply has none.
+    if (data.hqBuildingId === undefined) data.hqBuildingId = null;
+    if (!data.playerAt) data.playerAt = data.origin ? { ...data.origin } : null;
+    if (!Array.isArray(data.tutorialDone)) data.tutorialDone = [];
+    // An established run shouldn't be handed a beginner's checklist.
+    if ((data.buildings || []).length > 2) data.tutorialDismissed = true;
+  }
 
   if (data.version < 12) {
     // Depots and parking arrived in 12. Existing vehicles keep the home they

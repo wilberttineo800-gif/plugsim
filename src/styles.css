@@ -836,3 +836,25 @@ kbd {
 @media (max-width: 900px) and (max-height: 480px) {
   .rail, .inspector { height: 74vh; }
 }
+
+/* Ray's card. It should read as somebody talking to you, not as chrome. */
+.sect--helper {
+  border-left: 3px solid var(--sodium);
+  background: linear-gradient(90deg, rgba(255, 138, 61, 0.10), transparent 70%);
+}
+.sect--helper .sect__title { color: var(--sodium); }
+.sect--helper .card__blurb { line-height: 1.5; }
+
+/* Where you are, and where home is. */
+.pmark {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: #4ea8ff; border: 2px solid #fff;
+  box-shadow: 0 0 0 4px rgba(78, 168, 255, 0.28), 0 1px 4px rgba(0, 0, 0, 0.5);
+}
+.pmark--live { animation: pmark-pulse 2.2s ease-out infinite; }
+@keyframes pmark-pulse {
+  0%   { box-shadow: 0 0 0 3px rgba(78, 168, 255, 0.40), 0 1px 4px rgba(0, 0, 0, 0.5); }
+  70%  { box-shadow: 0 0 0 16px rgba(78, 168, 255, 0), 0 1px 4px rgba(0, 0, 0, 0.5); }
+  100% { box-shadow: 0 0 0 3px rgba(78, 168, 255, 0), 0 1px 4px rgba(0, 0, 0, 0.5); }
+}
+@media (prefers-reduced-motion: reduce) { .pmark--live { animation: none; } }

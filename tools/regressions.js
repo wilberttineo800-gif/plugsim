@@ -8,6 +8,7 @@ import { createState, createRoute, saveGame, loadGame } from '../src/game/state.
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats } from '../src/game/upgrades.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
+import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
@@ -291,6 +292,65 @@ print('=== 10. the world keeps running while you are away ===');
   const noStamp = { ...reloaded };
   delete noStamp.savedAt;
   check('a save with no stamp is left alone', noStamp.savedAt === undefined);
+}
+
+print('');
+print('=== 11. the first hour has a shape ===');
+{
+  const st = world();
+  st.cash.clean = 300000;
+
+  // A brand new player is on step one, and it is the base.
+  const first = currentStep(st);
+  check('a new player is told what to do first', first && first.id === 'hq', first && first.id);
+
+  // A genuinely empty start has nothing ticked. (The shared fixture world
+  // already owns a depot, so it starts one step in.)
+  const bare = world();
+  bare.buildings = [];
+  bare.couriers = [];
+  bare.routes = [];
+  bare.cash.dirty = 0;
+  bare.stats.grossRevenue = 0;
+  check('an empty start has nothing ticked', onboardingProgress(bare).done === 0,
+        onboardingProgress(bare).done + '/' + onboardingProgress(bare).total);
+
+  // Steps read the world, so doing the thing advances them.
+  const b = open(st, 'grow_house');
+  A.setHeadquarters(st, b.id);
+  check('setting a base advances the list', currentStep(st).id !== 'hq', currentStep(st).id);
+  check('making something is now ticked',
+        !STEPS.find((x) => x.id === 'produce') || STEPS.find((x) => x.id === 'produce').check(st));
+
+  check('two bases are not allowed', !A.setHeadquarters(st, b.id).ok);
+
+  // Working all the way through leaves nobody nagging.
+  open(st, 'depot');
+  const v = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, v.id, A.hireDriver(st).driver.id);
+  const r = wire(st, b.id, 'district', st.districts[3].id, 'packs', 'any', 2);
+  r.active = true;
+  st.cash.dirty = 10;
+  open(st, 'laundromat');
+  check('the list finishes', currentStep(st) === null,
+        onboardingProgress(st).done + '/' + onboardingProgress(st).total);
+
+  // And it can be waved away at any point.
+  const st2 = world();
+  st2.tutorialDismissed = true;
+  check('it can be dismissed', currentStep(st2) === null);
+
+  // Your own block runs calmer than the rest.
+  const st3 = world();
+  const home = open(st3, 'grow_house');
+  const d = st3.districts.find((x) => x.id === home.districtId);
+  const other = st3.districts.find((x) => x.id !== home.districtId);
+  d.heat = 60; other.heat = 60;
+  home.active = false; // isolate decay from production heat
+  A.setHeadquarters(st3, home.id);
+  stepSim(st3, 12, {});
+  check('heat sheds faster where you live', d.heat < other.heat,
+        'home ' + d.heat.toFixed(1) + ' vs ' + other.heat.toFixed(1));
 }
 
 print('');

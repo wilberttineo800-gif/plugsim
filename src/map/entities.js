@@ -381,3 +381,36 @@ export class PlacementGhost {
 }
 
 export { svgIcon, escapeHtml, buildingById, districtById };
+
+
+/**
+ * Where you are on the map. Defaults to your headquarters; if you turn on
+ * following, it tracks your real position so walking around town moves you in
+ * the game.
+ */
+export class PlayerMarker {
+  constructor(map) {
+    this.map = map;
+    this.marker = null;
+    this.live = false;
+  }
+
+  set(latlng, { live = false } = {}) {
+    if (!latlng) return this.clear();
+    const html = `<div class="pmark ${live ? 'pmark--live' : ''}"></div>`;
+    const icon = L.divIcon({ className: '', html, iconSize: [16, 16], iconAnchor: [8, 8] });
+    if (!this.marker) {
+      this.marker = L.marker([latlng.lat, latlng.lng], {
+        icon, zIndexOffset: 1200, interactive: false,
+      }).addTo(this.map);
+    } else {
+      this.marker.setLatLng([latlng.lat, latlng.lng]);
+      if (live !== this.live) this.marker.setIcon(icon);
+    }
+    this.live = live;
+  }
+
+  clear() {
+    if (this.marker) { this.map.removeLayer(this.marker); this.marker = null; }
+  }
+}

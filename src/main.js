@@ -13,6 +13,7 @@ import {
   buildingById, districtById,
 } from './game/state.js';
 import { stepSim, recordPrices, catchUp } from './game/sim.js';
+import { HELPER, newlyDone } from './game/onboarding.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, pingIncident } from './map/entities.js';
@@ -216,6 +217,72 @@ async function startNewGame(origin, cityName) {
   bootGame(state);
 }
 
+/**
+ * Put the "you are here" dot where it belongs: your real position if you've
+ * turned following on, otherwise your headquarters, otherwise where you started.
+ */
+function syncPlayerMarker() {
+  const s = game.state;
+  if (!s || !game.playerMarker) return;
+  let at = s.playerAt;
+  if (!s.followMe) {
+    const hq = s.hqBuildingId ? buildingById(s, s.hqBuildingId) : null;
+    at = hq ? hq.latlng : (s.playerAt || s.origin);
+  }
+  game.playerMarker.set(at, { live: !!s.followMe });
+}
+
+/**
+ * Track the player's real position. The note asked for walking around town to
+ * move you on the map; where the browser won't allow it, the HQ stands in.
+ */
+game.toggleFollowMe = () => {
+  const s = game.state;
+  if (!s) return;
+  if (s.followMe) {
+    if (game.geoWatch != null) navigator.geolocation.clearWatch(game.geoWatch);
+    game.geoWatch = null;
+    s.followMe = false;
+    syncPlayerMarker();
+    toast('Back to following your HQ.', 'info');
+    game.ui.render();
+    return;
+  }
+  if (!navigator.geolocation) return toast('This browser won\u2019t share a location.', 'bad');
+  toast('Asking for your location\u2026', 'info');
+  game.geoWatch = navigator.geolocation.watchPosition(
+    (pos) => {
+      s.followMe = true;
+      s.playerAt = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      syncPlayerMarker();
+      game.ui.render();
+    },
+    () => {
+      s.followMe = false;
+      game.geoWatch = null;
+      toast('Couldn\u2019t get a location. Staying on your HQ.', 'bad');
+      game.ui.render();
+    },
+    { enableHighAccuracy: true, maximumAge: 10000, timeout: 12000 }
+  );
+};
+
+game.setHeadquarters = (id) => {
+  diag.trace('set hq');
+  const r = A.setHeadquarters(game.state, id);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.building.name} is home now.`, 'good', 3200);
+  syncPlayerMarker();
+  game.buildingLayer.sync(game.state);
+  game.ui.render();
+};
+
+game.dismissHelper = () => {
+  game.state.tutorialDismissed = true;
+  toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);
+  game.ui.render();
+};
+
 function bootGame(state) {
   if (game.map) return; // already running; a second boot would corrupt it
   rehydrateCrews(state);
@@ -239,6 +306,8 @@ function bootGame(state) {
   game.lotLayer.setDistricts(state.districts);
   game.lotLayer.setAll(state.lots || []);
   game.ghost = new PlacementGhost(game.map);
+  game.playerMarker = new PlayerMarker(game.map);
+  syncPlayerMarker();
   fitToDistricts(game.map, state.districts);
 
   game.map.on('click', () => game.select(null));
@@ -390,6 +459,15 @@ function startLoop() {
       sincePanelRender = 0;
       game.lotLayer.refresh(game.state.lots || []);
       game.ui.renderTicker();
+
+      // Say something when a step lands, rather than silently ticking a box.
+      if (!game.state.tutorialDismissed) {
+        for (const step of newlyDone(game.state)) {
+          toast(`${HELPER.name}: that's "${step.title.toLowerCase()}" done.`, 'good', 4200);
+        }
+        // The build tab holds Ray's card, so keep it current as steps complete.
+        if (game.ui.tab === 'build') game.ui.renderRail();
+      }
       // Don't yank a panel out from under someone mid-interaction.
       if (!isEditing()) {
         game.ui.renderInspector();

@@ -10,6 +10,7 @@ import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } f
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
+import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -167,6 +168,18 @@ export class GameUI {
     document.getElementById('inspectorGrip').addEventListener('click', () => this.closeSheets());
     this.phone.addEventListener('change', () => this.syncLayout());
 
+    // Tap to go to where you are; hold (or tap again when already there) to
+    // follow your real position around town.
+    document.getElementById('btnWhereAmI').addEventListener('click', () => {
+      const g = this.game;
+      const s = g.state;
+      const hq = s.hqBuildingId ? s.buildings.find((b) => b.id === s.hqBuildingId) : null;
+      const at = s.followMe ? s.playerAt : (hq ? hq.latlng : s.playerAt || s.origin);
+      const alreadyThere = at && g.map.getZoom() >= 17
+        && g.map.distance([at.lat, at.lng], g.map.getCenter()) < 120;
+      if (alreadyThere) { g.toggleFollowMe(); return; }
+      if (at) g.map.setView([at.lat, at.lng], Math.max(17, g.map.getZoom()));
+    });
     document.getElementById('btnSave').addEventListener('click', () => this.game.save());
     document.getElementById('btnHelp').addEventListener('click', () => this.game.toggleHelp(true));
     document.getElementById('helpClose').addEventListener('click', () => this.game.toggleHelp(false));
@@ -219,6 +232,8 @@ export class GameUI {
       case 'fire': g.fireCourier(id); break;
       case 'upgrade': g.upgradeBuilding(id, type); break;
       case 'upgrade-courier': g.upgradeCourier(id, type); break;
+      case 'set-hq': g.setHeadquarters(id); break;
+      case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
       case 'sell-building': g.sellBuilding(id); break;
@@ -400,6 +415,7 @@ export class GameUI {
       : '';
 
     return (
+      this.helperCard() +
       `<div class="sect">
         <div class="sect__title"><span>Property</span><span>${owned.length} owned</span></div>
         ${intro}
@@ -1509,10 +1525,47 @@ export class GameUI {
         ${b.kind !== 'front' ? `<button class="primarybtn" data-action="route-from" data-id="${b.id}" data-tab="routes">Ship from here</button>` : ''}
       </div>
       <div class="btnrow">
+        ${s.hqBuildingId === b.id
+          ? '<button class="ghostbtn" disabled>★ Your headquarters</button>'
+          : `<button class="ghostbtn" data-action="set-hq" data-id="${b.id}">Make this my HQ</button>`}
+      </div>
+      <div class="btnrow">
         <button class="ghostbtn" data-action="toggle" data-id="${b.id}">${b.active ? 'Shut down' : 'Reopen'}</button>
         <button class="ghostbtn" data-action="sell-building" data-id="${b.id}">Sell up</button>
       </div>`
     );
+  }
+
+  /**
+   * Ray's card. The first thing a new player should read, and the thing that
+   * tells them what to do next without a wall of tutorial text.
+   */
+  helperCard() {
+    const s = this.game.state;
+    const step = currentStep(s);
+    const p = onboardingProgress(s);
+    if (!step) return '';
+
+    const first = p.done === 0;
+    return `
+      <div class="sect sect--helper">
+        <div class="sect__title">
+          <span>${esc(HELPER.name)} · ${esc(HELPER.role)}</span>
+          <span>${p.done}/${p.total}</span>
+        </div>
+        ${first ? `<p class="card__blurb" style="margin:0 0 10px">${esc(HELPER.greeting)}</p>` : ''}
+        <div class="meter"><i style="width:${(p.done / p.total) * 100}%"></i></div>
+        <div class="card" style="margin-top:10px">
+          <div class="card__head">
+            <span class="card__name">${esc(step.title)}</span>
+          </div>
+          <div class="card__blurb">${esc(step.brief)}</div>
+          <div class="card__meta"><span class="good">${esc(step.hint)}</span></div>
+        </div>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="dismiss-helper">I've got it from here</button>
+        </div>
+      </div>`;
   }
 
   /** Everything that can still be done to this building, priced and explained. */

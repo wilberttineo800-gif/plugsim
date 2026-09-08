@@ -272,6 +272,20 @@ export const BUILDINGS = {
   // street cash on the side. They're never raided and they cool a block down.
   // Legal income is the patient way to afford property; the chain is the fast
   // way, and it costs you heat.
+  hq: {
+    id: 'hq',
+    kind: 'hq',
+    name: 'Headquarters',
+    blurb: 'Somewhere that is yours. People know where to find you, and the block stays calmer because of who you know.',
+    icon: 'star',
+    cost: 0,
+    minAreaM2: 20,
+    referenceAreaM2: 120,
+    areaExponent: 0.5,
+    upkeepPerDay: 40,
+    heatPerDay: 0,
+    capacity: 0,
+  },
   depot: {
     id: 'depot',
     kind: 'depot',
@@ -677,6 +691,10 @@ export const COURIERS = {
 export const COURIER_IDS = Object.keys(COURIERS);
 
 // --- Heat & enforcement -----------------------------------------------------
+// How much calmer your own block runs. You know the neighbours, you smooth
+// things over, and heat sheds faster where you actually live.
+export const HQ_HEAT_RELIEF = 0.35;
+
 export const HEAT = {
   // Proportional, not flat: a quiet block sheds almost nothing while a hot one
   // cools fast. Flat decay silently deleted heat once it spread out.

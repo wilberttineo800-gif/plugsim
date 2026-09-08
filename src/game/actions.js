@@ -255,6 +255,26 @@ export function upgradeCourier(state, vehicleId, upgradeId) {
   return { ok: true, upgrade: u, cost, discount };
 }
 
+/**
+ * Make a building you own your headquarters. Only one at a time — moving house
+ * is allowed, having two homes is not.
+ */
+export function setHeadquarters(state, buildingId) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such property.' };
+  if (state.hqBuildingId === buildingId) {
+    return { ok: false, error: 'That is already your base.' };
+  }
+  const previous = state.hqBuildingId ? buildingById(state, state.hqBuildingId) : null;
+  state.hqBuildingId = buildingId;
+  logEvent(state,
+    previous
+      ? `Moved base from ${previous.name} to ${b.name}.`
+      : `${b.name} is your headquarters now. The block will run a little calmer.`,
+    'good');
+  return { ok: true, building: b, previous };
+}
+
 export { availableUpgrades, effectsFor };
 
 export function toggleBuilding(state, buildingId) {

@@ -5,6 +5,7 @@ import {
   BUILDINGS,
   COURIERS,
   HEAT,
+  HQ_HEAT_RELIEF,
   MARKET,
   PRODUCTS,
   PRODUCT_IDS,
@@ -685,8 +686,15 @@ function maybeShakedown(state, courier, district, hooks) {
 // --- Heat -------------------------------------------------------------------
 
 function stepHeat(state, dt) {
+  // Knowing people where you live is worth something.
+  const hq = state.hqBuildingId ? buildingById(state, state.hqBuildingId) : null;
+  const homeDistrict = hq ? hq.districtId : null;
+
   for (const d of state.districts) {
-    d.heat = clamp(d.heat * (1 - HEAT.decayPerDay * (dt / 24)), 0, HEAT.max);
+    const decay = d.id === homeDistrict
+      ? HEAT.decayPerDay * (1 + HQ_HEAT_RELIEF)
+      : HEAT.decayPerDay;
+    d.heat = clamp(d.heat * (1 - decay * (dt / 24)), 0, HEAT.max);
     d.rep = clamp01(d.rep - MARKET.repDecayPerDay * (dt / 24));
   }
 

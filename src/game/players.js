@@ -292,8 +292,12 @@ export function offerForProduct(player, productId, streetUnit) {
   return Math.round(streetUnit * appetite * depth * 100) / 100;
 }
 
-/** How much of a product an operation can absorb in one go. */
+/**
+ * How much of a product an operation can absorb in one go. Sized so a trade is
+ * worth crossing the room for — a small operation takes a few hours of street
+ * selling off your hands, a large one takes most of a day's.
+ */
 export function appetiteFor(player, productId) {
   const appetite = (APPETITE[player.style] || APPETITE.volume)[productId] || 1;
-  return Math.max(8, Math.round((player.worth / 9000) * appetite));
+  return Math.max(25, Math.round((player.worth / 3600) * appetite));
 }

@@ -244,12 +244,36 @@ function stepLabs(state, dt) {
 
 // --- Logistics --------------------------------------------------------------
 
+/**
+ * The line this vehicle is working. Kept honest against the circuit, so a
+ * deleted route or a stale pointer resolves rather than stalling the vehicle.
+ */
+function currentRoute(state, c) {
+  const circuit = (c.routeIds || []).filter((id) => routeById(state, id));
+  if (circuit.length !== (c.routeIds || []).length) {
+    c.routeIds = circuit;
+    c.routeIndex = 0;
+  }
+  if (!circuit.length) { c.routeId = null; return null; }
+  if (c.routeIndex >= circuit.length) c.routeIndex = 0;
+  c.routeId = circuit[c.routeIndex];
+  return routeById(state, c.routeId);
+}
+
+/** Move to the next line on the circuit. */
+function advanceCircuit(state, c) {
+  const circuit = c.routeIds || [];
+  if (circuit.length < 2) return;
+  c.routeIndex = (c.routeIndex + 1) % circuit.length;
+  c.routeId = circuit[c.routeIndex];
+}
+
 function stepCouriers(state, dt, hooks) {
   for (const c of state.couriers) {
     const base = COURIERS[c.type];
     // Whatever is fitted to this vehicle changes what it can do.
     const def = { ...base, ...vehicleStats(c, base) };
-    const route = routeById(state, c.routeId);
+    const route = currentRoute(state, c);
 
     // An asset with nobody driving it just sits in its bay.
     if (!c.driverId || !route || !route.active) {
@@ -275,10 +299,14 @@ function stepCouriers(state, dt, hooks) {
       case 'idle':
       case 'loading': {
         c.position = source.latlng;
-        // Nothing to pick up yet — wait at the source rather than leaving empty.
+        // Nothing to pick up yet. With a circuit there's somewhere else to be,
+        // so try the next line instead of standing at an empty door.
         if (!c.dwellLeft) {
           const loaded = loadCargo(state, c, def, route, source);
-          if (loaded <= 0) break;
+          if (loaded <= 0) {
+            advanceCircuit(state, c);
+            break;
+          }
           c.dwellLeft = (def.loadMinutes || 0) / 60;
         }
         c.dwellLeft -= dt;
@@ -322,6 +350,9 @@ function stepCouriers(state, dt, hooks) {
         if (c.progress >= 1) {
           c.phase = 'loading';
           c.progress = 0;
+          // A vehicle big enough to hold several lines works round them in
+          // turn, rather than running one forever.
+          advanceCircuit(state, c);
         }
         break;
       }
@@ -789,7 +820,13 @@ function stepEnforcement(state, dt, hooks = {}) {
       state.buildings.splice(i, 1);
       state.routes = state.routes.filter((r) => r.fromId !== b.id && r.toId !== b.id);
       for (const c of state.couriers) {
-        if (!routeById(state, c.routeId)) { c.routeId = null; c.phase = 'idle'; }
+        // Drop the dead lines from the circuit, keep whatever survives.
+        c.routeIds = (c.routeIds || []).filter((id) => routeById(state, id));
+        if (!routeById(state, c.routeId)) {
+          c.routeIndex = 0;
+          c.routeId = c.routeIds[0] || null;
+          if (!c.routeId) c.phase = 'idle';
+        }
       }
       logEvent(state, `RAID — ${b.name} in ${d.name} was seized and shut down.`, 'bad');
     } else {

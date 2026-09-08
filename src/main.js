@@ -277,6 +277,23 @@ game.setHeadquarters = (id) => {
   game.ui.render();
 };
 
+game.addLine = (vehicleId, routeId) => {
+  diag.trace('add line');
+  const r = A.addRouteToVehicle(game.state, vehicleId, routeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`On ${r.count} line${r.count === 1 ? '' : 's'} now.`, 'good', 2400);
+  game.routeLayer.sync(game.state);
+  game.ui.render();
+};
+
+game.dropLine = (vehicleId, routeId) => {
+  diag.trace('drop line');
+  const r = A.removeRouteFromVehicle(game.state, vehicleId, routeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  game.routeLayer.sync(game.state);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

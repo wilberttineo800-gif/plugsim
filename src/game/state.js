@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -113,7 +113,9 @@ export function createVehicle(typeId, homeBuildingId) {
     type: typeId,
     name: def.name,
     driverId: null,
-    routeId: null,
+    routeId: null,      // the line it's working right now
+    routeIds: [],       // the circuit it's been given
+    routeIndex: 0,
     phase: 'idle', // idle | loading | outbound | unloading | returning
     progress: 0, // 0..1 along the current leg
     position: null,
@@ -290,6 +292,15 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 14) {
+    // Vehicles gained a circuit in 14; an existing one keeps the single line
+    // it was already running.
+    for (const c of data.couriers || []) {
+      if (!Array.isArray(c.routeIds)) c.routeIds = c.routeId ? [c.routeId] : [];
+      if (typeof c.routeIndex !== 'number') c.routeIndex = 0;
+    }
+  }
 
   if (data.version < 13) {
     // Onboarding and the HQ arrived in 13; a run in progress simply has none.

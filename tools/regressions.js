@@ -6,7 +6,7 @@ import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
-import { upkeepFor, vehicleStats } from '../src/game/upgrades.js';
+import { upkeepFor, vehicleStats, maxRoutesFor } from '../src/game/upgrades.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
@@ -351,6 +351,60 @@ print('=== 11. the first hour has a shape ===');
   stepSim(st3, 12, {});
   check('heat sheds faster where you live', d.heat < other.heat,
         'home ' + d.heat.toFixed(1) + ' vs ' + other.heat.toFixed(1));
+}
+
+print('');
+print('=== 12. a big vehicle works a circuit ===');
+{
+  const st = world();
+  const grow = open(st, 'grow_house');
+  const r1 = wire(st, grow.id, 'district', st.districts[2].id, 'packs', 'any', 2);
+  const r2 = wire(st, grow.id, 'district', st.districts[5].id, 'packs', 'any', 2);
+  const r3 = wire(st, grow.id, 'district', st.districts[8].id, 'packs', 'any', 2);
+
+  // Size decides how many lines you can hold.
+  check('a runner on foot works one line at a time',
+        maxRoutesFor(COURIERS.runner || COURIERS.foot_runner || { capacity: 12, class: 'foot' }) === 1);
+  const truckMax = maxRoutesFor(COURIERS.boxtruck || COURIERS.box_truck);
+  const bikeMax = maxRoutesFor(COURIERS.bike);
+  check('a bigger vehicle holds more lines', truckMax > bikeMax,
+        'truck ' + truckMax + ' vs bike ' + bikeMax);
+
+  const v = A.buyVehicle(st, 'sedan').vehicle;
+  A.assignDriver(st, v.id, A.hireDriver(st).driver.id);
+  A.assignCourier(st, v.id, r1.id);
+  check('one line assigned', v.routeIds.length === 1);
+
+  const add = A.addRouteToVehicle(st, v.id, r2.id);
+  check('a second line can be added', add.ok, add.ok ? add.count + '/' + add.max : add.error);
+  check('the same line cannot be added twice', !A.addRouteToVehicle(st, v.id, r2.id).ok);
+
+  // Fill it past capacity and it should refuse rather than silently take it.
+  const cap = maxRoutesFor(COURIERS.sedan, v);
+  let refused = null;
+  for (let i = v.routeIds.length; i < cap + 2; i++) {
+    const res = A.addRouteToVehicle(st, v.id, r3.id);
+    if (!res.ok) { refused = res.error; break; }
+  }
+  check('it refuses more lines than it can hold', v.routeIds.length <= cap,
+        v.routeIds.length + ' of ' + cap + (refused ? ' — ' + refused : ''));
+
+  // Working it should visit more than one line.
+  const seen = new Set();
+  for (let h = 0; h < 48; h += 0.05) { stepSim(st, 0.05, {}); if (v.routeId) seen.add(v.routeId); }
+  check('it works round the circuit rather than one line forever', seen.size > 1,
+        'visited ' + seen.size + ' of ' + v.routeIds.length);
+
+  // Deleting a line should not strand the vehicle.
+  A.removeRoute(st, v.routeIds[0]);
+  check('removing a line leaves the rest running',
+        v.routeIds.length >= 1 && v.routeId && v.routeIds.includes(v.routeId),
+        v.routeIds.length + ' left, on ' + v.routeId);
+
+  // A vehicle still lives at its depot, not at whatever it collects from.
+  const depot = st.buildings.find((b) => b.kind === 'depot');
+  check('a route does not move where a vehicle lives', v.homeBuildingId === depot.id,
+        'home ' + v.homeBuildingId + ' vs depot ' + depot.id);
 }
 
 print('');

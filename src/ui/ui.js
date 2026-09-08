@@ -20,6 +20,7 @@ import { summary as diagnosticsSummary, report as diagnosticsReport, clear as di
 import { unlockStatus, regionNote } from '../game/progression.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
+  maxRoutesFor,
 } from '../game/upgrades.js';
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import {
@@ -205,7 +206,7 @@ export class GameUI {
       return;
     }
     if (name === 'courierRoute') {
-      this.game.assignCourier(field.dataset.courier, value || null);
+      if (value) this.game.addLine(field.dataset.courier, value);
       return;
     }
     if (name === 'overlay') {
@@ -233,6 +234,7 @@ export class GameUI {
       case 'upgrade': g.upgradeBuilding(id, type); break;
       case 'upgrade-courier': g.upgradeCourier(id, type); break;
       case 'set-hq': g.setHeadquarters(id); break;
+      case 'drop-line': g.dropLine(id, type); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -780,12 +782,29 @@ export class GameUI {
         .map((d) => `<option value="${d.id}" ${c.driverId === d.id ? 'selected' : ''}>${esc(d.name)} · ${money(d.wagePerDay)}/d</option>`))
       .join('');
 
-    const routeOpts = ['<option value="">— no route —</option>']
-      .concat(s.routes.map((r) => {
+    // A vehicle holds a circuit now, so the picker adds a line rather than
+    // replacing the lot.
+    const circuit = c.routeIds || (c.routeId ? [c.routeId] : []);
+    const max = maxRoutesFor(def, c);
+    const spare = s.routes.filter((r) => !circuit.includes(r.id));
+    const routeOpts = [`<option value="">— add a line (${circuit.length}/${max}) —</option>`]
+      .concat(spare.map((r) => {
         const info = routeLabel(s, r);
-        return `<option value="${r.id}" ${c.routeId === r.id ? 'selected' : ''}>${esc(clip(info.from, 16))} → ${esc(clip(info.to, 16))}</option>`;
+        return `<option value="${r.id}">${esc(clip(info.from, 16))} → ${esc(clip(info.to, 16))}</option>`;
       }))
       .join('');
+
+    const circuitChips = circuit.length
+      ? `<div class="chips" style="margin-top:8px">${circuit.map((id) => {
+          const r = s.routes.find((x) => x.id === id);
+          if (!r) return '';
+          const info = routeLabel(s, r);
+          const live = c.routeId === id;
+          return `<button class="chip ${live ? 'chip--good' : ''}"
+            data-action="drop-line" data-id="${c.id}" data-type="${id}"
+            title="Take this line off ${esc(c.name)}">${live ? '▸ ' : ''}${esc(clip(info.to, 14))} ✕</button>`;
+        }).join('')}</div>`
+      : '';
 
     return (
       `<div class="card" style="cursor:default">
@@ -801,9 +820,14 @@ export class GameUI {
         <div class="field" style="margin:8px 0 0">
           <select data-field="vehicleDriver" data-vehicle="${c.id}">${driverOpts}</select>
         </div>
+        ${circuitChips}
         <div class="field" style="margin:6px 0 0">
-          <select data-field="courierRoute" data-courier="${c.id}" ${driver ? '' : 'disabled'}>${routeOpts}</select>
+          <select data-field="courierRoute" data-courier="${c.id}"
+            ${driver && circuit.length < max && spare.length ? '' : 'disabled'}>${routeOpts}</select>
         </div>
+        ${circuit.length >= max && max > 1
+          ? '<p class="card__blurb" style="margin:4px 0 0">Full circuit. Something bigger would carry more lines.</p>'
+          : ''}
         <div class="btnrow">
           <button class="ghostbtn" data-action="select-courier" data-id="${c.id}">Details</button>
           <button class="ghostbtn" data-action="sell-vehicle" data-id="${c.id}">Sell</button>

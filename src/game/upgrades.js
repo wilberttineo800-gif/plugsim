@@ -343,3 +343,15 @@ export function describeEffects(fx = {}) {
   if (fx.upkeepAdd) bits.push(`+$${fx.upkeepAdd}/day upkeep`);
   return bits;
 }
+
+
+/**
+ * How many supply lines one vehicle can hold at once. Bigger vehicles carry
+ * more in one go, so they're worth sending round a circuit; a runner on foot
+ * does one thing at a time.
+ */
+export function maxRoutesFor(def, courier) {
+  const cap = courier ? vehicleStats(courier, def).capacity : def.capacity;
+  if (def.direct) return 2;          // air is fast but small
+  return Math.max(1, Math.min(4, 1 + Math.floor(cap / 130)));
+}

@@ -13,6 +13,7 @@ import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
+  maxRoutesFor,
 } from './upgrades.js';
 import {
   buildingById,
@@ -482,25 +483,72 @@ export function removeRoute(state, routeId) {
   if (idx < 0) return { ok: false, error: 'Route is gone.' };
   const [route] = state.routes.splice(idx, 1);
   for (const c of state.couriers) {
-    if (c.routeId === route.id) { c.routeId = null; c.phase = 'idle'; c.progress = 0; }
+    c.routeIds = (c.routeIds || []).filter((id) => id !== route.id);
+    if (c.routeId === route.id) {
+      c.routeIndex = 0;
+      c.routeId = c.routeIds[0] || null;
+      c.progress = 0;
+      if (!c.routeId) c.phase = 'idle';
+    }
   }
   return { ok: true };
 }
 
+/** Put a vehicle on one line, replacing whatever circuit it had. */
 export function assignCourier(state, courierId, routeId) {
   const c = courierById(state, courierId);
   if (!c) return { ok: false, error: 'Courier is gone.' };
   const route = routeId ? routeById(state, routeId) : null;
   if (routeId && !route) return { ok: false, error: 'Route is gone.' };
 
+  c.routeIds = route ? [route.id] : [];
+  c.routeIndex = 0;
   c.routeId = route ? route.id : null;
   c.phase = route ? 'loading' : 'idle';
   c.progress = 0;
+  // The vehicle still lives at its depot; a route is work, not an address.
   if (route) {
     const from = buildingById(state, route.fromId);
-    if (from) { c.homeBuildingId = from.id; c.position = from.latlng; }
+    if (from) c.position = from.latlng;
   }
   return { ok: true };
+}
+
+/** Add another line to a vehicle's circuit, if it's big enough to carry one. */
+export function addRouteToVehicle(state, courierId, routeId) {
+  const c = courierById(state, courierId);
+  if (!c) return { ok: false, error: 'Vehicle is gone.' };
+  const route = routeById(state, routeId);
+  if (!route) return { ok: false, error: 'Route is gone.' };
+
+  c.routeIds = Array.isArray(c.routeIds) ? c.routeIds : (c.routeId ? [c.routeId] : []);
+  if (c.routeIds.includes(routeId)) return { ok: false, error: 'Already on that line.' };
+
+  const def = COURIERS[c.type];
+  const max = maxRoutesFor(def, c);
+  if (c.routeIds.length >= max) {
+    return {
+      ok: false,
+      error: `A ${def.name} can only work ${max} line${max === 1 ? '' : 's'} at once. Something bigger would carry more.`,
+    };
+  }
+  c.routeIds.push(routeId);
+  if (!c.routeId) { c.routeId = routeId; c.routeIndex = c.routeIds.length - 1; c.phase = 'loading'; }
+  return { ok: true, count: c.routeIds.length, max };
+}
+
+/** Take a line off a vehicle's circuit. */
+export function removeRouteFromVehicle(state, courierId, routeId) {
+  const c = courierById(state, courierId);
+  if (!c) return { ok: false, error: 'Vehicle is gone.' };
+  c.routeIds = (c.routeIds || []).filter((id) => id !== routeId);
+  if (c.routeId === routeId) {
+    c.routeIndex = 0;
+    c.routeId = c.routeIds[0] || null;
+    c.phase = c.routeId ? 'loading' : 'idle';
+    c.progress = 0;
+  }
+  return { ok: true, count: c.routeIds.length };
 }
 
 /** What it costs to run a crew off a block — dearer the harder they hold it. */

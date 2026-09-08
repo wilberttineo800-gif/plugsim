@@ -3,6 +3,7 @@
 // well the neighbourhood knows you.
 
 import { MARKET, PRODUCTS, RIVALS } from './constants.js';
+import { rhythmFactor } from './rhythm.js';
 import { clamp01, lerp } from './rng.js';
 
 export function wealthMultiplier(district) {
@@ -53,13 +54,16 @@ export function baselinePrice(district, productId) {
  * Units per game-hour this district will actually absorb. Customers buy less
  * when the block is crawling with police, and buy faster when they trust you.
  */
-export function sellRatePerHour(district, productId) {
+export function sellRatePerHour(district, productId, minutes = null) {
   const demand = district.demandPerHour[productId];
   const heatFear = clamp01(district.heat / 100) * 0.55;
   const trust = 1 + clamp01(district.rep) * 0.35;
   // Whoever already works this block is serving these customers first.
   const theirs = clamp01(district.rivalControl || 0) * RIVALS.demandCapture;
-  return demand * (1 - heatFear) * (1 - theirs) * trust;
+  // A Friday night is not a Tuesday morning. Averages out over a week, so this
+  // changes *when* the city buys, never how much.
+  const now = minutes == null ? 1 : rhythmFactor(minutes, productId);
+  return demand * (1 - heatFear) * (1 - theirs) * trust * now;
 }
 
 /** The slice of a block's trade a rival crew is currently taking. */

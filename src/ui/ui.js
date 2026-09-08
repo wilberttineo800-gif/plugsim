@@ -13,6 +13,7 @@ import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, 
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
+import { rhythmNote, rhythmFactor, darkness, cityClock, DAY_NAMES } from '../game/rhythm.js';
 import {
   RESEARCH, PROJECTS, PROJECT_IDS, FIELDS, projectById, canResearch, isResearched,
   ITEM_KINDS, tierById, itemValue,
@@ -40,6 +41,7 @@ import {
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import {
   buildingById, courierById, districtById, clockOf, nextDriverHireFee, driverById,
+  buildingLabel,
 } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
 import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip, crimeLabel } from './format.js';
@@ -296,6 +298,10 @@ export class GameUI {
       this.game.equipItem(field.dataset.item, value || null);
       return;
     }
+    if (name === 'buildingName') {
+      this.game.renameBuilding(field.dataset.building, value);
+      return;
+    }
     if (name === 'districtName') {
       this.game.renameDistrict(field.dataset.district, value);
       return;
@@ -398,6 +404,15 @@ export class GameUI {
     this.dom.clean.textContent = money(s.cash.clean);
     this.dom.dirty.textContent = money(s.cash.dirty);
 
+    // What the city is doing right now — a Friday night trades very differently
+    // from a Tuesday morning, and that should be visible without arithmetic.
+    const pulse = document.getElementById('hudPulse');
+    if (pulse) {
+      const note = rhythmNote(s.minutes);
+      if (pulse.textContent !== note) pulse.textContent = note;
+      pulse.classList.toggle('is-busy', /busy|payday|filling/.test(note));
+    }
+
     const flow = this.dailyNet();
     // Anything stopped because the money ran out is the one thing that must not
     // be quiet — it ends a run without the player ever seeing why.
@@ -448,7 +463,7 @@ export class GameUI {
     for (const d of s.districts) {
       for (const pid of PRODUCT_IDS) {
         if (d.supply[pid] <= 0.01) continue;
-        income += sellRatePerHour(d, pid) * 24 * streetPrice(d, pid);
+        income += sellRatePerHour(d, pid, s.minutes) * 24 * streetPrice(d, pid);
       }
     }
     let costs = 0;
@@ -617,7 +632,7 @@ export class GameUI {
 
       // Where it sells best right now.
       const ranked = [...s.districts]
-        .map((d) => ({ d, price: streetPrice(d, pid), rate: sellRatePerHour(d, pid) }))
+        .map((d) => ({ d, price: streetPrice(d, pid), rate: sellRatePerHour(d, pid, s.minutes) }))
         .sort((a, b) => b.price - a.price);
       const top = ranked.slice(0, 3);
       // Demand-weighted, matching how the history series is recorded.
@@ -904,7 +919,7 @@ export class GameUI {
             </div>
             <div class="meter"><i style="width:${Math.round(v * 100)}%;background:${esc(overlayColor(d, overlay))}"></i></div>
             <div class="card__meta">
-              <span>absorbs ${units(sellRatePerHour(d, product))}/h</span>
+              <span>absorbs ${units(sellRatePerHour(d, product, s.minutes))}/h</span>
               ${held ? `<span style="color:${esc(crew ? crew.color : 'var(--bad)')}">${pct(d.rivalControl)} held</span>` : '<span style="color:var(--good)">open</span>'}
               ${mine ? `<span style="color:var(--sodium)">${mine} yours</span>` : ''}
             </div>
@@ -1738,7 +1753,7 @@ export class GameUI {
             <span class="money">${money(price)}<span style="color:var(--text-faint)">/pack</span></span></div>
           <div class="rows">
             <div class="row"><span>vs. baseline</span><span class="${delta >= 0 ? 'good' : 'bad'}">${delta >= 0 ? '+' : ''}${pct(delta)}</span></div>
-            <div class="row"><span>Absorbs</span><span>${units(sellRatePerHour(d, pid))}/h</span></div>
+            <div class="row"><span>Absorbs</span><span>${units(sellRatePerHour(d, pid, s.minutes))}/h</span></div>
             <div class="row"><span>On the block now</span><span>${units(d.supply[pid])} packs</span></div>
             <div class="row"><span>Saturation</span>
               <span class="${sat > 1.2 ? 'bad' : sat > 0.8 ? 'warn' : 'good'}">${pct(Math.min(sat, 3))}</span></div>
@@ -2138,6 +2153,11 @@ export class GameUI {
           <div class="row"><span>Heat added</span><span class="${def.heatPerDay > 0 ? 'warn' : 'good'}">${def.heatPerDay > 0 ? '+' : ''}${(def.heatPerDay * effectsFor(b).heatMult).toFixed(2)}/day</span></div>
           ${effectsFor(b).raidResist > 0 ? `<div class="row"><span>Raid resistance</span><span class="good">${pct(effectsFor(b).raidResist)}</span></div>` : ''}
         </div>
+      </div>
+      <div class="field" style="margin:0 0 12px">
+        <label>What you call it</label>
+        <input type="text" data-field="buildingName" data-building="${b.id}"
+          value="${esc(buildingLabel(b))}" maxlength="32" placeholder="${esc(BUILDINGS[b.type].name)}">
       </div>
       ${this.firearmLineBlock(b)}
       ${this.upgradeBlock(b)}

@@ -3,7 +3,7 @@
 
 import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
 import { gunWithAttachments } from '../ui/art.js';
-import { buildingById, districtById } from '../game/state.js';
+import { buildingById, districtById, buildingLabel } from '../game/state.js';
 import { escapeHtml, overlayColor } from './mapView.js';
 
 const ICONS = {
@@ -98,9 +98,9 @@ export class BuildingLayer {
     // The name sits above the chip and is part of the same marker, so reading
     // it and tapping it are the same gesture — clicking the label opens the
     // business exactly as clicking the building does.
-    // The type is the useful half — "Machine Shop", not "Machine Shop ·
-    // Detached house · 308 m²" cut off after nine characters.
-    const label = escapeHtml(def.name);
+    // What the player calls it — every place gets a name on opening and can be
+    // renamed, so this is the one they'll recognise.
+    const label = escapeHtml(buildingLabel(b));
     const art = def.product === 'iron'
       ? gunWithAttachments(b.line || 'handgun', this.fittedFor?.(b) || [], { size: 40 })
       : svgIcon(def.icon);

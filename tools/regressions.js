@@ -4,11 +4,12 @@
 
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
-import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
+import { createState, createRoute, saveGame, loadGame, buildingLabel } from '../src/game/state.js';
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld, sizeScale } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { sellRatePerHour, streetPrice as streetPriceOf } from '../src/game/economy.js';
+import { rhythmFactor, rhythmNote, cityClock, darkness } from '../src/game/rhythm.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
@@ -1176,6 +1177,71 @@ print('=== 25. every product has its own chain, end to end ===');
   const cokeFinishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes('coke'));
   check('cocaine is washed in one place only', cokeFinishers.length === 1,
         cokeFinishers.map((id) => BUILDINGS[id].name).join(', '));
+}
+
+print('');
+print('=== 26. the city has a rhythm, and it costs nothing ===');
+{
+  // Demand moves through the day and the week, but a full cycle has to average
+  // out — otherwise the rhythm quietly rebalances the entire economy.
+  for (const pid of PRODUCT_IDS) {
+    let sum = 0, n = 0, lo = Infinity, hi = 0;
+    for (let m = 0; m < 210 * 1440; m += 30) {
+      const f = rhythmFactor(m, pid);
+      sum += f; n++; lo = Math.min(lo, f); hi = Math.max(hi, f);
+    }
+    const avg = sum / n;
+    check(PRODUCTS[pid].name + ' averages out over a full cycle',
+          Math.abs(avg - 1) < 0.01, 'avg ' + avg.toFixed(3) + ', swings ' +
+          lo.toFixed(2) + '-' + hi.toFixed(2) + 'x');
+  }
+
+  // And it actually swings, or there was no point.
+  const fri = rhythmFactor(4 * 1440 + 23 * 60, 'coke');   // Friday, 11pm
+  const tue = rhythmFactor(1 * 1440 + 8 * 60, 'coke');    // Tuesday, 8am
+  check('a Friday night is not a Tuesday morning', fri > tue * 5,
+        'x' + fri.toFixed(2) + ' vs x' + tue.toFixed(2));
+  check('and firearms do not follow nightlife',
+        rhythmFactor(4 * 1440 + 23 * 60, 'iron') < rhythmFactor(1 * 1440 + 12 * 60, 'iron'),
+        'iron peaks in the daytime');
+
+  // A block can still be stocked ahead of a busy night — otherwise nobody could
+  // supply a Friday, and the opening stops paying for itself.
+  const st = world();
+  const d = st.districts[5];
+  const quiet = 3 * 60;        // 3am, nobody buying
+  const roomAt = (m) => sellRatePerHour(d, 'weed') * MARKET.glutCap - d.supply.weed;
+  check('a block can be stocked when it is quiet', roomAt(quiet) > 0,
+        Math.round(roomAt(quiet)) + ' packs of room at 3am');
+
+  // Places are named on opening, and the name is the player's to change.
+  const st3 = world();
+  const b3 = open(st3, 'grow_house');
+  check('a place is given a name when you open it',
+        !!b3.label && b3.label !== BUILDINGS.grow_house.name, b3.label);
+  check('and it reads by that name', buildingLabel(b3) === b3.label);
+  A.renameBuilding(st3, b3.id, 'The Back Room');
+  check('you can call it what you like', buildingLabel(b3) === 'The Back Room');
+  A.renameBuilding(st3, b3.id, '');
+  check('clearing it falls back to the type',
+        buildingLabel(b3) === BUILDINGS.grow_house.name, buildingLabel(b3));
+  const names = new Set();
+  for (let i = 0; i < 24; i++) {
+    const st4 = world();
+    const b4 = open(st4, 'grow_house');
+    if (b4) names.add(b4.label);
+  }
+  check('names vary between runs', names.size > 3, names.size + ' different names in 24 openings');
+
+  // Night falls and lifts.
+  check('the map darkens overnight',
+        darkness(3 * 60) > 0.8 && darkness(13 * 60) < 0.2,
+        '3am ' + darkness(3 * 60).toFixed(2) + ', 1pm ' + darkness(13 * 60).toFixed(2));
+
+  // The note reads like a person wrote it.
+  const notes = [0, 4 * 1440 + 23 * 60, 5 * 1440 + 20 * 60, 3 * 60].map((m) => rhythmNote(m));
+  check('the city says what it is doing', notes.every((n) => n && n.length > 6),
+        notes[1]);
 }
 
 print('');

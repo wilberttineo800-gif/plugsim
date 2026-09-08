@@ -33,6 +33,7 @@ import {
   createRoute,
   courierById,
   districtById,
+  buildingLabel,
   logEvent,
   routeById,
   spendClean,
@@ -621,6 +622,19 @@ export function sellProductTo(state, buildingId, playerId, productId, amount) {
     `${buyer.name} took ${Math.round(move)} packs off you for $${Math.round(gross).toLocaleString()}.`,
     'good');
   return { ok: true, buyer, moved: move, unit, gross };
+}
+
+/** Call a place whatever you like. Blank puts its given name back. */
+export function renameBuilding(state, buildingId, name) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such place.' };
+  const clean = String(name || '').trim().slice(0, 32);
+  const was = buildingLabel(b);
+  b.label = clean || (BUILDINGS[b.type] || {}).name || 'The Place';
+  if (buildingLabel(b) !== was) {
+    logEvent(state, `${was} goes by ${buildingLabel(b)} now.`, 'info');
+  }
+  return { ok: true, name: buildingLabel(b) };
 }
 
 export { availableUpgrades, effectsFor };

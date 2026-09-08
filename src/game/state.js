@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 19;
+export const SAVE_VERSION = 20;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -77,6 +77,29 @@ export function createState({ origin, cityName, countryCode = null, districts, c
   };
 }
 
+// Names for the places you run. A grow called "The Greenhouse" is somewhere you
+// remember; "Grow House · Detached house · 122 m²" is a database row.
+const PLACE_WORDS = {
+  production: ['The Greenhouse', 'Eden', 'The Allotment', 'Backroom', 'The Nursery',
+    'Long Acre', 'The Glasshouse', 'Sunnyside', 'The Patch', 'Verdant'],
+  processing: ['The Kitchen', 'The Bench', 'Cold Room', 'The Works', 'Alchemy',
+    'The Still', 'Reduction', 'The Dry Room', 'Fractions', 'The Line'],
+  storage: ['The Vault', 'Lock-Up', 'The Hold', 'Safe House', 'The Cellar',
+    'Deep Store', 'The Annexe', 'Cold Storage', 'The Rack', 'The Pantry'],
+  front: ['Marlow & Sons', 'The Corner', 'Halcyon', 'Fairweather', 'The Ivy',
+    'Kestrel & Co', 'Bright Street', 'The Meridian', 'Pemberton', 'Silverline'],
+  depot: ['The Yard', 'Motor Pool', 'The Garage', 'Dispatch', 'The Lot',
+    'Wheelhouse', 'The Depot', 'Transit', 'The Ramp', 'Roadside'],
+  research: ['The Lab', 'Skunkworks', 'The Study', 'Blue Sky', 'The Workshop',
+    'Prototype', 'The Drawing Room', 'Test Bench'],
+  hq: ['Home', 'The Office', 'Head Office', 'The House', 'Base', 'The Room'],
+};
+
+function placeName(def) {
+  const list = PLACE_WORDS[def.kind] || PLACE_WORDS.front;
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 export function createBuilding(typeId, latlng, districtId) {
   const def = BUILDINGS[typeId];
   return {
@@ -84,6 +107,8 @@ export function createBuilding(typeId, latlng, districtId) {
     type: typeId,
     kind: def.kind,
     name: def.name,
+    // What the player calls it. Given one on opening, theirs to change.
+    label: placeName(def),
     latlng,
     districtId,
     level: 1,
@@ -212,6 +237,12 @@ export function parkedPosition(state, vehicle) {
   return { lat: centre.lat + dy * latPerM, lng: centre.lng + dx * lngPerM };
 }
 
+/** What to call a place: the player's name for it, falling back to its type. */
+export function buildingLabel(b) {
+  if (!b) return '';
+  return b.label || (BUILDINGS[b.type] || {}).name || b.name || '';
+}
+
 export function buildingById(state, id) {
   return state.buildings.find((b) => b.id === id) || null;
 }
@@ -300,6 +331,13 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 20) {
+    // Places got names you can change. Anything already built gets one.
+    for (const b of data.buildings || []) {
+      if (!b.label) b.label = (BUILDINGS[b.type] || {}).name || 'The Place';
+    }
+  }
 
   if (data.version < 19) {
     // Cocaine arrived, and pills moved onto their own chain. Existing product

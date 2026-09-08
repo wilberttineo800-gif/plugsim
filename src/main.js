@@ -14,6 +14,7 @@ import {
 } from './game/state.js';
 import { stepSim, recordPrices, catchUp } from './game/sim.js';
 import { HELPER, newlyDone } from './game/onboarding.js';
+import { darkness, rhythmNote } from './game/rhythm.js';
 import { generatePlayers, placePlayers } from './game/players.js';
 import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
@@ -421,6 +422,13 @@ game.sellProductTo = (buildingId, playerId, productId) => {
   game.ui.render();
 };
 
+game.renameBuilding = (buildingId, name) => {
+  const r = A.renameBuilding(game.state, buildingId, name);
+  if (!r.ok) return toast(r.error, 'bad');
+  game.buildingLayer.sync(game.state);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);
@@ -614,6 +622,7 @@ function startLoop() {
       sincePanelRender = 0;
       game.lotLayer.refresh(game.state.lots || []);
       game.ui.renderTicker();
+      syncDaylight();
 
       // Say something when a step lands, rather than silently ticking a box.
       if (!game.state.tutorialDismissed) {
@@ -668,6 +677,29 @@ function wireVisibility() {
     toast(bits.join(' · ') + '.', made >= 0 ? 'good' : 'info', 6000);
     game.ui.render();
   });
+}
+
+/**
+ * The map darkens overnight and lifts at dawn. Purely atmosphere, but it makes
+ * the clock something you feel rather than read, and a 3am run look like one.
+ */
+let lastDark = -1;
+function syncDaylight() {
+  const s = game.state;
+  if (!s) return;
+  const d = darkness(s.minutes);
+  // Only touch the DOM when it would actually change; this runs twice a second.
+  if (Math.abs(d - lastDark) < 0.02) return;
+  lastDark = d;
+  const pane = document.querySelector('.leaflet-tile-pane');
+  if (!pane) return;
+  // Midday sits at the daytime filter; midnight goes down and blue.
+  const brightness = (0.72 - d * 0.22).toFixed(3);
+  const saturate = (0.82 - d * 0.24).toFixed(3);
+  const hue = (176 + d * 22).toFixed(0);
+  pane.style.filter =
+    `brightness(${brightness}) saturate(${saturate}) contrast(1.06) hue-rotate(${hue}deg) invert(.06)`;
+  document.body.classList.toggle('is-night', d > 0.62);
 }
 
 function isEditing() {

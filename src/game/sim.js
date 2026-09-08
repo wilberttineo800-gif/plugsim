@@ -670,7 +670,7 @@ function stepMarkets(state, dt) {
       const stock = d.supply[pid];
       if (stock <= 0.0001) continue;
 
-      const sold = Math.min(stock, sellRatePerHour(d, pid) * dt);
+      const sold = Math.min(stock, sellRatePerHour(d, pid, state.minutes) * dt);
       if (sold <= 0) continue;
 
       const price = streetPrice(d, pid);

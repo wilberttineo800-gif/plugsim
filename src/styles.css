@@ -76,11 +76,16 @@ button, input, select { font-family: inherit; color: inherit; }
    far better, especially on a phone. */
 /* The map has to sit *inside* a dark console, not shine out of it. A light
    OSM raster at full brightness makes the panels look like a different app.
-   This pulls it down and cools it without going back to the near-black that
-   made buildings unreadable on a phone. */
+   The filter is driven from the clock at runtime — this is the daytime value
+   and the starting point before the first tick. */
 .leaflet-tile-pane {
-  filter: brightness(.62) saturate(.72) contrast(1.06) hue-rotate(184deg) invert(.06);
+  filter: brightness(.72) saturate(.82) contrast(1.06) hue-rotate(176deg) invert(.06);
+  transition: filter 1.2s linear;
 }
+
+/* Overnight, the streetlights are the only thing on. */
+body.is-night .bmark__chip { box-shadow: 0 0 14px rgba(255, 138, 61, .35); }
+body.is-night .cmark { filter: drop-shadow(0 0 6px rgba(255, 200, 120, .45)); }
 .leaflet-tile {
   image-rendering: -webkit-optimize-contrast;
 }
@@ -1044,3 +1049,22 @@ kbd {
   .showcase { padding: 11px; gap: 10px; }
   .showcase__art .art { max-width: 150px; }
 }
+
+/* What the city is doing right now. Quiet most of the time; lit when it isn't. */
+.hud__pulse {
+  font: 600 11.5px/1.4 var(--font-display);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 5px 11px;
+  border: 1px solid var(--line-soft);
+  border-radius: 999px;
+  white-space: nowrap;
+  transition: color .4s ease, border-color .4s ease, background .4s ease;
+}
+.hud__pulse.is-busy {
+  color: var(--sodium);
+  border-color: color-mix(in srgb, var(--sodium) 45%, transparent);
+  background: color-mix(in srgb, var(--sodium) 12%, transparent);
+}
+@media (max-width: 780px) { .hud__pulse { display: none; } }

@@ -17,6 +17,7 @@ import {
   RESEARCH, PROJECTS, PROJECT_IDS, FIELDS, projectById, canResearch, isResearched,
   ITEM_KINDS, tierById, itemValue,
 } from '../game/research.js';
+import { leaderboard, trendOf } from '../game/players.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -215,6 +216,10 @@ export class GameUI {
       if (value) this.game.addLine(field.dataset.courier, value);
       return;
     }
+    if (name === 'playerName') {
+      this.game.setPlayerName(value);
+      return;
+    }
     if (name === 'equipItem') {
       this.game.equipItem(field.dataset.item, value || null);
       return;
@@ -258,6 +263,7 @@ export class GameUI {
       case 'start-research': g.startResearch(type); break;
       case 'cancel-research': g.cancelResearch(type); break;
       case 'sell-item': g.sellItem(id); break;
+      case 'toggle-ai': g.toggleAI(); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -638,6 +644,44 @@ export class GameUI {
         more, and it's the hottest thing you can move.
       </p>
       ${rows}
+    </div>`;
+  }
+
+  /**
+   * The board. Other operations in the same city, and where you stand against
+   * them. AI for now; the shape doesn't change when they're real people.
+   */
+  leaderboardSection() {
+    const s = this.game.state;
+    const board = leaderboard(s, (lot) => lotResale(lot, districtById(s, lot.districtId)));
+    const you = board.find((e) => e.isYou);
+
+    const rows = board.map((e) => {
+      const t = trendOf(e);
+      const arrow = t == null ? '' : t >= 0.005 ? '▲' : t <= -0.005 ? '▼' : '·';
+      const cls = t == null ? '' : t > 0 ? 'good' : t < 0 ? 'bad' : '';
+      return `<div class="row ${e.isYou ? 'row--you' : ''}">
+        <span>${e.rank}. ${esc(e.name)}${e.isYou ? ' <b>(you)</b>' : ''}
+          <span style="color:var(--text-faint)"> · ${esc(e.styleLabel)}</span></span>
+        <span class="money">${moneyShort(e.worth)}
+          <span class="${cls}">${arrow}</span></span>
+      </div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title">
+        <span>Wealth board</span>
+        <span>${you ? `#${you.rank} of ${board.length}` : ''}</span>
+      </div>
+      <div class="field">
+        <label>What they call you</label>
+        <input type="text" data-field="playerName" maxlength="24"
+          value="${esc((s.playerProfile && s.playerProfile.name) || '')}" placeholder="You">
+      </div>
+      <div class="rows" style="margin-top:9px">${rows}</div>
+      ${s.aiDisabled
+        ? '<p class="card__blurb" style="margin:8px 0 0">Other operations are switched off.</p>'
+        : '<p class="card__blurb" style="margin:8px 0 0">Everyone here is building the same kind of business. Net worth is money plus what your property would fetch.</p>'}
     </div>`;
   }
 
@@ -1287,6 +1331,7 @@ export class GameUI {
         Shortcuts for trying things out. None of this is reachable in normal play.
       </p>
       <div class="btnrow">
+        <button class="ghostbtn" data-action="toggle-ai">${s.aiDisabled ? 'Enable' : 'Disable'} other operations</button>
         <button class="ghostbtn" data-action="admin-cash" data-type="100000">+$100k clean</button>
         <button class="ghostbtn" data-action="admin-cash" data-type="1000000">+$1M clean</button>
       </div>
@@ -1340,6 +1385,7 @@ export class GameUI {
       .join('') || '<div class="empty">No sales yet.</div>';
 
     return (
+      this.leaderboardSection() +
       `<div class="sect">
         <div class="sect__title"><span>The fixer</span><span>${money(room)} left today</span></div>
         <p class="card__blurb" style="margin:0 0 8px">

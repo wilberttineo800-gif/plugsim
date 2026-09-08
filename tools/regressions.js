@@ -11,6 +11,8 @@ import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
+import { generatePlayers, leaderboard, playerWorth } from '../src/game/players.js';
+import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
@@ -740,6 +742,51 @@ print('=== 17. research, and things only you have made ===');
           sold.ok ? '+$' + sold.price.toLocaleString() : sold.error);
     check('and it is gone once sold', !st.items.some((i) => i.id === item.id));
   }
+}
+
+print('');
+print('=== 18. other operations, and where you stand ===');
+{
+  seedWorld(77);
+  const st = world();
+  st.players = generatePlayers(makeRng(4242));
+  check('a field of operations is seeded', st.players.length > 3, st.players.length + ' others');
+  check('they are all different people',
+        new Set(st.players.map((p) => p.name)).size === st.players.length);
+  check('they start at a spread of sizes',
+        new Set(st.players.map((p) => p.worth)).size > 3);
+
+  // You are always on the board, marked.
+  const board = leaderboard(st);
+  const you = board.find((e) => e.isYou);
+  check('you are on the board', !!you, you && ('#' + you.rank + ' of ' + board.length));
+  check('the board is sorted by worth',
+        board.every((e, i) => i === 0 || board[i - 1].worth >= e.worth));
+
+  // Net worth counts property, not just cash.
+  const cashOnly = playerWorth(st);
+  const lot = st.lots.find((l) => !l.owned);
+  A.buyLot(st, lot.id);
+  check('property counts toward what you are worth',
+        Math.abs(playerWorth(st) - cashOnly) < lot.price * 0.5,
+        'spent $' + lot.price + ', worth moved $' + Math.abs(playerWorth(st) - cashOnly));
+
+  // They move over time, and the board reshuffles.
+  const before = st.players.map((p) => p.worth);
+  for (let d = 0; d < 30; d++) stepSim(st, 24, {});
+  check('other operations grow over time',
+        st.players.some((p, i) => p.worth !== before[i]),
+        'top is now $' + Math.max(...st.players.map((p) => p.worth)).toLocaleString());
+
+  // And the admin switch actually switches them off.
+  st.aiDisabled = true;
+  const solo = leaderboard(st);
+  check('they can be switched off', solo.length === 1 && solo[0].isYou,
+        solo.length + ' on the board');
+  const frozen = st.players.map((p) => p.worth);
+  for (let d = 0; d < 10; d++) stepSim(st, 24, {});
+  check('and they stop moving when off',
+        st.players.every((p, i) => p.worth === frozen[i]));
 }
 
 print('');

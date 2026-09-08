@@ -14,6 +14,7 @@ import {
 } from './game/state.js';
 import { stepSim, recordPrices, catchUp } from './game/sim.js';
 import { HELPER, newlyDone } from './game/onboarding.js';
+import { generatePlayers } from './game/players.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, pingIncident } from './map/entities.js';
@@ -185,6 +186,8 @@ async function startNewGame(origin, cityName) {
   // by area as you explore. Only the blocks around the start are loaded now.
   setStatus('Surveying the buildings around you…');
   const state = createState({ origin, cityName, countryCode, districts, crews, lots: [] });
+  // Other people running the same game in the same city.
+  state.players = generatePlayers(Math.random);
 
   const startPad = 0.001; // one tile is plenty to open on
   const startTiles = tilesForBounds(
@@ -370,6 +373,21 @@ game.sellItem = (itemId) => {
   const r = A.sellItem(game.state, itemId);
   if (!r.ok) return toast(r.error, 'bad');
   toast(`Sold ${r.item.name} for $${r.price.toLocaleString()}.`, 'good', 3400);
+  game.ui.render();
+};
+
+game.setPlayerName = (name) => {
+  const s = game.state;
+  s.playerProfile = s.playerProfile || {};
+  const clean = String(name || '').trim().slice(0, 24);
+  s.playerProfile.name = clean || null;
+  game.ui.render();
+};
+
+game.toggleAI = () => {
+  const s = game.state;
+  s.aiDisabled = !s.aiDisabled;
+  toast(s.aiDisabled ? 'Other operations off.' : 'Other operations back on.', 'info');
   game.ui.render();
 };
 

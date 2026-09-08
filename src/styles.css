@@ -858,3 +858,13 @@ kbd {
   100% { box-shadow: 0 0 0 3px rgba(78, 168, 255, 0), 0 1px 4px rgba(0, 0, 0, 0.5); }
 }
 @media (prefers-reduced-motion: reduce) { .pmark--live { animation: none; } }
+
+/* Your line on the board should be findable without reading every row. */
+.row--you {
+  background: rgba(255, 138, 61, 0.12);
+  border-radius: 6px;
+  padding-left: 6px;
+  padding-right: 6px;
+  margin-left: -6px;
+  margin-right: -6px;
+}

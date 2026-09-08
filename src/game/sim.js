@@ -20,6 +20,7 @@ import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
 import { turfEffects, turfUpkeep } from './turf.js';
+import { stepPlayers, snapshotPlayers } from './players.js';
 import {
   RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
   researchQuality, researchYield, researchEffects,
@@ -32,6 +33,7 @@ import {
   logEvent,
   routeById,
   parkedPosition,
+  clockOf,
 } from './state.js';
 
 let rng = makeRng(Date.now() & 0xffffffff);
@@ -108,7 +110,7 @@ export function catchUp(state, awayMs, hooks = {}) {
     clean: state.cash.clean,
     dirty: state.cash.dirty,
     trips: (state.couriers || []).reduce((n, c) => n + (c.tripsCompleted || 0), 0),
-    day: state.clock ? state.clock.day : 0,
+    day: clockOf(state.minutes).day,
   };
   const events = [];
   stepSim(state, hours, {
@@ -123,7 +125,7 @@ export function catchUp(state, awayMs, hooks = {}) {
     earnedClean: state.cash.clean - before.clean,
     earnedDirty: state.cash.dirty - before.dirty,
     trips: (state.couriers || []).reduce((n, c) => n + (c.tripsCompleted || 0), 0) - before.trips,
-    days: (state.clock ? state.clock.day : 0) - before.day,
+    days: clockOf(state.minutes).day - before.day,
     incidents: events.length,
   };
 }
@@ -1124,6 +1126,9 @@ function stepLicences(state) {
 
 function settleDay(state) {
   state.fixerUsedToday = 0;
+  stepPlayers(state, rng);
+  // A week's snapshot, so the board can show which way people are going.
+  if (clockOf(state.minutes).day % 7 === 0) snapshotPlayers(state);
   checkUnlocks(state);
   stepLicences(state);
   rollResearchDiscoveries(state);

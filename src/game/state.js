@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 16;
+export const SAVE_VERSION = 17;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -48,6 +48,9 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     research: [],        // projects finished
     researchActive: [],  // projects under way
     items: [],           // things only you have made
+    players: [],         // other operations, AI for now
+    aiDisabled: false,
+    playerProfile: { name: null, lastWeekWorth: null, history: [] },
 
     playerAt: origin ? { ...origin } : null,
     followMe: false,
@@ -297,6 +300,13 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 17) {
+    // Other operations and the board arrived in 17.
+    if (!Array.isArray(data.players)) data.players = [];
+    if (typeof data.aiDisabled !== 'boolean') data.aiDisabled = false;
+    if (!data.playerProfile) data.playerProfile = { name: null, lastWeekWorth: null, history: [] };
+  }
 
   if (data.version < 16) {
     // Research and one-off items arrived in 16.

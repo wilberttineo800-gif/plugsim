@@ -51,11 +51,16 @@
   const plot = premises.filter((l) => l.areaM2 > 120 && l.areaM2 < 400)
     .sort((a, b) => a.price - b.price)[0];
   const before = s.cash.clean;
-  const bought = g.buyLot(plot.id);
+  g.buyLot(plot.id);
+  // You pay what it's worth today, not its standing assessment — the block's
+  // market index moves, so these must compare against what was actually paid.
   ok('buying a building works', plot.owned === true,
-    plot.name + ' for ' + money(plot.price));
-  ok('it charges clean money', Math.abs((before - s.cash.clean) - plot.price) < 1);
-  ok('what you paid is remembered', plot.paidPrice === plot.price);
+    plot.name + ' for ' + money(plot.paidPrice || 0));
+  ok('it charges clean money',
+    Math.abs((before - s.cash.clean) - (plot.paidPrice || 0)) < 1,
+    'charged ' + money(before - s.cash.clean));
+  ok('what you paid is remembered', typeof plot.paidPrice === 'number' && plot.paidPrice > 0,
+    money(plot.paidPrice || 0) + ' vs ' + money(plot.price) + ' assessed');
 
   out.push('');
   out.push('=== operations ===');
@@ -229,9 +234,14 @@
     ok('the you-are-here marker is on the map', !!(g.playerMarker && g.playerMarker.marker));
     g.ui.goTab('build');
     const buildTab = document.getElementById('railBody').innerText;
-    ok('the helper briefs you or has been dismissed',
-      /Ray|got it from here/.test(buildTab) || s.tutorialDismissed,
-      s.tutorialDismissed ? 'dismissed' : 'Ray is talking');
+    // Three valid states: he's briefing you, you waved him off, or you've done
+    // everything he asked and he's gone.
+    const talking = /ray ·/i.test(buildTab);
+    const finished = (s.tutorialDone || []).length >= 5
+      || s.buildings.some((b) => BUILDINGS[b.type] && BUILDINGS[b.type].kind === 'front');
+    ok('the helper briefs you, is dismissed, or is done',
+      talking || s.tutorialDismissed || finished,
+      talking ? 'briefing you' : s.tutorialDismissed ? 'dismissed' : 'list finished');
   }
 
   out.push('');

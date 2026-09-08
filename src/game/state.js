@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -300,6 +300,17 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 18) {
+    // Operations gained a place on the map, and you gained a way to meet them.
+    // placePlayers fills the blocks in at boot when they're empty.
+    for (const p of data.players || []) {
+      if (!Array.isArray(p.blocks)) p.blocks = [];
+      if (typeof p.known !== 'boolean') p.known = false;
+      if (typeof p.knowsYou !== 'boolean') p.knowsYou = false;
+      if (!Array.isArray(p.offers)) p.offers = [];
+    }
+  }
 
   if (data.version < 17) {
     // Other operations and the board arrived in 17.

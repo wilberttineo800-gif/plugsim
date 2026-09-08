@@ -346,6 +346,57 @@
   }
 
   out.push('');
+  out.push('=== other people ===');
+  {
+    const field = s.players || [];
+    ok('operations have a place on the map',
+      field.length > 0 && field.every((p) => (p.blocks || []).length > 0),
+      field.length + ' operations across ' +
+        new Set(field.flatMap((p) => p.blocks || [])).size + ' blocks');
+
+    // Buying onto somebody's ground should introduce you.
+    const withBlock = field.find((p) => (p.blocks || []).length);
+    if (withBlock) {
+      const theirLot = s.lots.find((l) => !l.owned && l.kind !== 'parking'
+        && l.districtId === withBlock.blocks[0]);
+      if (theirLot) {
+        s.cash.clean = Math.max(s.cash.clean, 100000);
+        g.buyLot(theirLot.id);
+        ok('buying onto their block introduces you',
+          withBlock.known && withBlock.knowsYou,
+          withBlock.name + ' on ' + withBlock.blocks[0]);
+      }
+      g.select('district', withBlock.blocks[0]);
+      const dp = document.getElementById('inspectorBody').innerText;
+      ok('their presence shows on the block',
+        !withBlock.known || /somebody else|already work/i.test(dp),
+        withBlock.known ? 'shown' : 'not met yet');
+    }
+
+    // And you can actually deal with somebody you've met.
+    const met = field.filter((p) => p.known);
+    if (met.length) {
+      const stocked = s.buildings.find((b) => b.packs
+        && Object.keys(b.packs).some((k) => b.packs[k] > 0.5));
+      if (stocked) {
+        const pid = Object.keys(stocked.packs).find((k) => stocked.packs[k] > 0.5);
+        const before = stocked.packs[pid];
+        g.sellProductTo(stocked.id, met[0].id, pid);
+        ok('you can move product to somebody you know', stocked.packs[pid] < before,
+          Math.round(before - stocked.packs[pid]) + ' packs to ' + met[0].name);
+      } else {
+        out.push('  skip  bulk trade (nothing packaged yet in this session)');
+      }
+      g.ui.goTab('ledger');
+      const led = document.getElementById('railBody').innerText;
+      ok('people you know are listed', /people you know/i.test(led),
+        met.length + ' met');
+    } else {
+      out.push('  skip  trading (nobody met yet in this session)');
+    }
+  }
+
+  out.push('');
   out.push('=== size realism ===');
   {
     const tiny = s.lots.filter((l) => l.kind !== 'parking' && l.areaM2 < 30)[0];

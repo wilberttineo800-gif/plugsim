@@ -11,7 +11,11 @@ import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
-import { generatePlayers, leaderboard, playerWorth } from '../src/game/players.js';
+import {
+  generatePlayers, leaderboard, playerWorth, placePlayers, knownOperations,
+  stepDiscovery, offerForProduct,
+} from '../src/game/players.js';
+import { attachLocal, connection } from '../src/game/net.js';
 import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
@@ -848,6 +852,97 @@ print('=== 19. an operation has to fit the building ===');
   check('gated operations are still offered, marked locked',
         operationOptions(mid, st2).some((o) => o.locked),
         operationOptions(mid, st2).filter((o) => o.locked).map((o) => o.id).join(', '));
+}
+
+print('');
+print('=== 20. you find people by working the same ground ===');
+{
+  seedWorld(31);
+  const st = world();
+  st.players = generatePlayers(makeRng(909));
+  placePlayers(st, makeRng(303));
+
+  check('every operation works somewhere real',
+        st.players.every((p) => (p.blocks || []).length > 0),
+        st.players.map((p) => (p.blocks || []).length).join(','));
+  check('they are not all on one block',
+        new Set(st.players.flatMap((p) => p.blocks)).size > 2);
+  check('you start knowing nobody', knownOperations(st).length === 0);
+
+  // Buying onto somebody's ground introduces you both, immediately.
+  const target = st.players[0];
+  const theirBlock = target.blocks[0];
+  const lot = st.lots.find((l) => !l.owned && l.districtId === theirBlock && l.kind !== 'parking');
+  if (lot) {
+    A.buyLot(st, lot.id);
+    check('buying onto their block introduces you', target.known && target.knowsYou,
+          target.name + ' met on ' + theirBlock);
+  }
+
+  // And working near somebody turns them up over time without buying in.
+  const st2 = world();
+  st2.players = generatePlayers(makeRng(11));
+  placePlayers(st2, makeRng(22));
+  const other = st2.players[1];
+  const blk = st2.districts.find((d) => d.id === other.blocks[0]);
+  blk.supply.weed = 40;                    // you are selling on their corner
+  let met = 0;
+  for (let d = 0; d < 60 && !other.known; d++) {
+    met += stepDiscovery(st2, 1, Math.random).length;
+  }
+  check('working their corner turns them up', other.known,
+        other.known ? 'found ' + other.name : 'never found them');
+
+  // Trading: they pay against the street, by what they deal in.
+  const st3 = world();
+  st3.players = generatePlayers(makeRng(55));
+  placePlayers(st3, makeRng(66));
+  const ironDealer = st3.players.find((p) => p.style === 'iron');
+  const cleanSkin = st3.players.find((p) => p.style === 'legit');
+  if (ironDealer && cleanSkin) {
+    check('somebody who deals in iron pays more for it',
+          offerForProduct(ironDealer, 'iron', 100) > offerForProduct(cleanSkin, 'iron', 100),
+          '$' + offerForProduct(ironDealer, 'iron', 100) + ' vs $' + offerForProduct(cleanSkin, 'iron', 100));
+  }
+
+  // Selling in bulk to somebody you know moves stock and pays street money.
+  const st4 = world();
+  st4.players = generatePlayers(makeRng(77));
+  placePlayers(st4, makeRng(88));
+  const buyer = st4.players[0];
+  const stash = open(st4, 'stash');
+  stash.packs.weed = 200;
+  check('you cannot deal with somebody you have not met',
+        !A.sellProductTo(st4, stash.id, buyer.id, 'weed').ok);
+  buyer.known = true;
+  const dirtyBefore = st4.cash.dirty;
+  const sale = A.sellProductTo(st4, stash.id, buyer.id, 'weed');
+  check('you can move product to somebody you know', sale.ok,
+        sale.ok ? Math.round(sale.moved) + ' packs at $' + sale.unit : sale.error);
+  check('it pays street money', st4.cash.dirty > dirtyBefore,
+        '+$' + Math.round(st4.cash.dirty - dirtyBefore));
+  check('and it comes off the shelf', stash.packs.weed < 200,
+        stash.packs.weed.toFixed(0) + ' left of 200');
+  check('they can only take so much', stash.packs.weed > 0 || sale.moved <= 200);
+
+  // One-offs go to whoever wants them most.
+  const st5 = world();
+  st5.players = generatePlayers(makeRng(99));
+  const collector = st5.players[0];
+  collector.known = true;
+  st5.items = [{ id: 'it1', kind: 'pattern', tier: 'rare', name: 'Test Pattern', equippedTo: null }];
+  const cleanBefore = st5.cash.clean;
+  const gone = A.sellItemTo(st5, 'it1', collector.id);
+  check('a one-off can be sold to somebody', gone.ok,
+        gone.ok ? '$' + gone.price.toLocaleString() : gone.error);
+  check('it pays clean money', st5.cash.clean > cleanBefore);
+  check('and it leaves your hands', st5.items.length === 0);
+
+  // The adapter seam: the game only ever talks to one of these.
+  const local = attachLocal(st5);
+  check('the game talks to other operations through an adapter',
+        typeof local.list === 'function' && connection().kind === 'local',
+        connection().label);
 }
 
 print('');

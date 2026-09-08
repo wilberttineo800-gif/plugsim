@@ -17,7 +17,11 @@ import {
   RESEARCH, PROJECTS, PROJECT_IDS, FIELDS, projectById, canResearch, isResearched,
   ITEM_KINDS, tierById, itemValue,
 } from '../game/research.js';
-import { leaderboard, trendOf } from '../game/players.js';
+import {
+  leaderboard, trendOf, knownOperations, operationsIn, turfWarning,
+  offerForItem, offerForProduct,
+} from '../game/players.js';
+import { connection } from '../game/net.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -216,6 +220,10 @@ export class GameUI {
       if (value) this.game.addLine(field.dataset.courier, value);
       return;
     }
+    if (name === 'sellItemTo') {
+      if (value) this.game.sellItemTo(value, field.dataset.player);
+      return;
+    }
     if (name === 'playerName') {
       this.game.setPlayerName(value);
       return;
@@ -264,6 +272,11 @@ export class GameUI {
       case 'cancel-research': g.cancelResearch(type); break;
       case 'sell-item': g.sellItem(id); break;
       case 'toggle-ai': g.toggleAI(); break;
+      case 'sell-to': {
+        const [pid, product] = String(type).split(':');
+        g.sellProductTo(id, pid, product);
+        break;
+      }
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -681,7 +694,105 @@ export class GameUI {
       <div class="rows" style="margin-top:9px">${rows}</div>
       ${s.aiDisabled
         ? '<p class="card__blurb" style="margin:8px 0 0">Other operations are switched off.</p>'
-        : '<p class="card__blurb" style="margin:8px 0 0">Everyone here is building the same kind of business. Net worth is money plus what your property would fetch.</p>'}
+        : `<p class="card__blurb" style="margin:8px 0 0">
+            Everyone here is building the same kind of business. Net worth is
+            money plus what your property would fetch.
+            <span style="color:var(--text-faint)">${esc(connection().label)}.</span>
+          </p>`}
+    </div>` + this.contactsSection();
+  }
+
+  /**
+   * The people you've actually met, and what they'll take off you. You only
+   * find somebody by working the same ground as them, which is why this fills
+   * up slowly rather than being handed to you.
+   */
+  contactsSection() {
+    const s = this.game.state;
+    if (s.aiDisabled) return '';
+    const met = knownOperations(s);
+    const total = (s.players || []).length;
+
+    if (!met.length) {
+      return `<div class="sect">
+        <div class="sect__title"><span>People you know</span><span>0 of ${total}</span></div>
+        <p class="card__blurb" style="margin:0">
+          You haven't run into anybody yet. Work the same blocks as somebody
+          else — sell there, buy there — and you'll find each other. They'll
+          take product in bulk and pay properly for anything you've made.
+        </p>
+      </div>`;
+    }
+
+    // What you could actually hand over right now.
+    const items = s.items || [];
+    const stocked = s.buildings.filter(
+      (b) => b.packs && PRODUCT_IDS.some((p) => b.packs[p] > 0.5)
+    );
+
+    const cards = met.map((p) => {
+      const where = (p.blocks || [])
+        .map((id) => districtById(s, id))
+        .filter(Boolean)
+        .map((d) => districtName(d));
+
+      // Best product offer they'd make against the street, for the headline.
+      let best = null;
+      for (const b of stocked) {
+        for (const pid of PRODUCT_IDS) {
+          if (b.packs[pid] <= 0.5) continue;
+          const d = districtById(s, b.districtId);
+          const street = streetPrice(d, pid);
+          const offer = offerForProduct(p, pid, street);
+          if (!best || offer / street > best.ratio) {
+            best = { building: b, pid, offer, street, ratio: offer / street };
+          }
+        }
+      }
+
+      const itemOpts = items.length
+        ? `<div class="field" style="margin:8px 0 0">
+            <select data-field="sellItemTo" data-player="${p.id}">
+              <option value="">— sell them something you made —</option>
+              ${items.map((it) => `<option value="${it.id}">${esc(clip(it.name, 22))} · ${moneyShort(offerForItem(p, itemValue(s, it)))}</option>`).join('')}
+            </select>
+          </div>`
+        : '';
+
+      return `<div class="card" style="cursor:default">
+        <div class="card__head">
+          <span class="card__name">${esc(p.name)}</span>
+          <span class="card__cost">${moneyShort(p.worth)}</span>
+        </div>
+        <div class="card__blurb">${esc(p.styleLabel[0].toUpperCase() + p.styleLabel.slice(1))}.
+          ${where.length ? `Works ${esc(where.slice(0, 2).join(' and '))}.` : ''}</div>
+        <div class="card__meta">
+          <span>${p.properties} properties</span>
+          <span class="${p.knowsYou ? 'warn' : 'good'}">${p.knowsYou ? 'knows about you' : "doesn't know you yet"}</span>
+        </div>
+        ${best ? `<div class="card__meta">
+          <span class="${best.ratio >= 1 ? 'good' : 'warn'}">
+            pays ${money(best.offer)}/pack for ${esc(PRODUCTS[best.pid].name.toLowerCase())}
+            (street ${money(best.street)})</span>
+        </div>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="sell-to" data-id="${best.building.id}"
+            data-type="${p.id}:${best.pid}">
+            Move ${esc(PRODUCTS[best.pid].name.toLowerCase())} to ${esc(p.name)}
+          </button>
+        </div>` : ''}
+        ${itemOpts}
+      </div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>People you know</span><span>${met.length} of ${total}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        They take product in bulk and pay properly for things you've made —
+        better than grinding it out on a corner, which is the point of knowing
+        anybody.
+      </p>
+      ${cards}
     </div>`;
   }
 
@@ -1567,6 +1678,8 @@ export class GameUI {
         <div class="meter meter--rep"><i style="width:${d.rep * 100}%"></i></div>
       </div>
 
+      ${this.operationsHere(d)}
+
       ${this.turfSection(d)}
 
       ${products}
@@ -1587,6 +1700,29 @@ export class GameUI {
   }
 
   /** Who else works this block, and what it would take to move them. */
+  /**
+   * Somebody else already works here. Only shown once you've actually found
+   * them — walking into an established operation should be a discovery, not
+   * something the interface hands you in advance.
+   */
+  operationsHere(d) {
+    const s = this.game.state;
+    const here = operationsIn(s, d.id).filter((p) => p.known);
+    if (!here.length) return '';
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Somebody else's ground</span><span class="warn">${here.length}</span></div>
+      <p class="card__blurb" style="margin:0 0 8px">${esc(turfWarning(s, d.id) || '')}</p>
+      <div class="chips">
+        ${here.map((p) => `<span class="chip ${p.knowsYou ? 'chip--warn' : ''}">
+          ${esc(p.name)} · ${moneyShort(p.worth)}${p.knowsYou ? ' · knows you' : ''}</span>`).join('')}
+      </div>
+      <p class="card__blurb" style="margin:8px 0 0">
+        You can still build here. They'll notice, and so will you.
+      </p>
+    </div>`;
+  }
+
   /**
    * A block you actually hold: yours to name, and yours to put standing
    * arrangements on. Until you hold it this only says what's missing.

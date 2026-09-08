@@ -20,7 +20,7 @@ import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
 import { turfEffects, turfUpkeep } from './turf.js';
-import { stepPlayers, snapshotPlayers } from './players.js';
+import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
 import {
   RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
   researchQuality, researchYield, researchEffects,
@@ -1127,6 +1127,14 @@ function stepLicences(state) {
 function settleDay(state) {
   state.fixerUsedToday = 0;
   stepPlayers(state, rng);
+  // People find out about each other by working the same ground.
+  for (const met of stepDiscovery(state, 1, rng)) {
+    logEvent(state,
+      met.how === 'ran into'
+        ? `You've run into ${met.player.name} — they work the same blocks you do. ${met.player.styleLabel[0].toUpperCase()}${met.player.styleLabel.slice(1)}.`
+        : `Word going round about ${met.player.name}. Somebody else building the same thing.`,
+      'info');
+  }
   // A week's snapshot, so the board can show which way people are going.
   if (clockOf(state.minutes).day % 7 === 0) snapshotPlayers(state);
   checkUnlocks(state);

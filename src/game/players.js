@@ -36,6 +36,20 @@ const STYLES = [
   { id: 'iron', label: 'deals in iron', growth: 1.4, volatility: 1.9 },
 ];
 
+/**
+ * Where an operation is. Other people are somewhere real on this map, and you
+ * find them the way you'd find them in life: by expanding into a block they're
+ * already working, or by hearing about them.
+ */
+export const PRESENCE = {
+  // Blocks each operation works, at the start.
+  blocksEach: [1, 3],
+  // Chance per day that being active in the same block gets you noticed.
+  noticePerDay: 0.22,
+  // How far a rumour travels without you doing anything.
+  rumourPerDay: 0.02,
+};
+
 /** Seed a field of players for a new city. */
 export function generatePlayers(rand, count = AI.count) {
   const used = new Set();
@@ -59,6 +73,14 @@ export function generatePlayers(rand, count = AI.count) {
       growthMult: style.growth,
       volatilityMult: style.volatility,
       properties: 2 + Math.floor(rand() * 9),
+      // Where they work. Filled in by placePlayers once districts are known.
+      blocks: [],
+      // Whether you've found out about them yet, and whether they know you.
+      known: false,
+      knowsYou: false,
+      metOn: null,
+      // What they'll trade, refreshed as the market moves.
+      offers: [],
       // What they were worth a week ago, for the trend arrow.
       lastWeekWorth: null,
       history: [],
@@ -135,4 +157,143 @@ export function trendOf(entry) {
   if (!entry.lastWeekWorth) return null;
   return clamp01(Math.abs(entry.worth - entry.lastWeekWorth) / Math.max(1, entry.lastWeekWorth)) *
     (entry.worth >= entry.lastWeekWorth ? 1 : -1);
+}
+
+
+/**
+ * Put every operation somewhere on the map. They settle where a business would:
+ * dense blocks with real demand, spread out so they aren't all on one corner.
+ */
+export function placePlayers(state, rand) {
+  const districts = state.districts || [];
+  if (!districts.length) return;
+
+  const ranked = districts
+    .map((d) => ({
+      d,
+      worth: d.density * 0.6
+        + ((d.demandPerHour?.weed || 0) + (d.demandPerHour?.shrooms || 0)) * 0.05
+        - d.policing * 0.3
+        + rand() * 0.4,
+    }))
+    .sort((a, b) => b.worth - a.worth);
+
+  const taken = new Set();
+  const [lo, hi] = PRESENCE.blocksEach;
+  for (const p of state.players || []) {
+    const want = lo + Math.floor(rand() * (hi - lo + 1));
+    p.blocks = [];
+    for (const entry of ranked) {
+      if (p.blocks.length >= want) break;
+      // Operations overlap sometimes, but not everybody on one street.
+      if (taken.has(entry.d.id) && rand() > 0.3) continue;
+      p.blocks.push(entry.d.id);
+      taken.add(entry.d.id);
+    }
+  }
+}
+
+/** Everybody working this block, whether or not you've noticed them. */
+export function operationsIn(state, districtId) {
+  if (state.aiDisabled) return [];
+  return (state.players || []).filter((p) => (p.blocks || []).includes(districtId));
+}
+
+/** Everybody you've actually found out about. */
+export function knownOperations(state) {
+  if (state.aiDisabled) return [];
+  return (state.players || []).filter((p) => p.known);
+}
+
+/**
+ * Finding out about each other. You notice somebody by working the same ground
+ * — selling there, or buying property there — and they notice you the same way.
+ * Neither of you is told; it just becomes apparent, which is the point.
+ */
+export function stepDiscovery(state, days, rand) {
+  if (state.aiDisabled) return [];
+  const found = [];
+
+  for (const p of state.players || []) {
+    const blocks = p.blocks || [];
+    if (!blocks.length) continue;
+
+    // Are you actually doing anything where they are?
+    const activeThere = blocks.some((id) => {
+      const d = (state.districts || []).find((x) => x.id === id);
+      if (!d) return false;
+      const selling = Object.values(d.supply || {}).some((v) => v > 0.5);
+      const owning = (state.lots || []).some((l) => l.owned && l.districtId === id);
+      return selling || owning;
+    });
+
+    const chance = activeThere
+      ? PRESENCE.noticePerDay * days
+      : PRESENCE.rumourPerDay * days;
+
+    if (!p.known && rand() < chance) {
+      p.known = true;
+      p.metOn = blocks[0];
+      found.push({ player: p, how: activeThere ? 'ran into' : 'heard about' });
+    }
+    // They find out about you on the same terms, from their side.
+    if (!p.knowsYou && activeThere && rand() < chance) p.knowsYou = true;
+  }
+
+  return found;
+}
+
+/**
+ * Somebody else already works this block. Told plainly, because walking into
+ * an established operation should feel like walking into one.
+ */
+export function turfWarning(state, districtId) {
+  const here = operationsIn(state, districtId).filter((p) => p.known);
+  if (!here.length) return null;
+  return here.length === 1
+    ? `${here[0].name} already works this block.`
+    : `${here.map((p) => p.name).join(' and ')} already work this block.`;
+}
+
+
+// --- Trading with them ------------------------------------------------------
+//
+// The design note wanted a player market: things you make sold to other people
+// rather than to nobody. NPC prices are deliberately poor, exactly as SEED does
+// it, so dealing with an operation is the good option and finding one matters.
+
+/** How much better than the street a given operation pays, by what they do. */
+const APPETITE = {
+  property: { iron: 0.9, weed: 1.0, shrooms: 1.0, hash: 1.05, pills: 1.0, item: 1.25 },
+  volume:   { iron: 1.0, weed: 1.35, shrooms: 1.3, hash: 1.25, pills: 1.2, item: 1.0 },
+  legit:    { iron: 0.8, weed: 0.85, shrooms: 0.9, hash: 0.95, pills: 1.0, item: 1.4 },
+  iron:     { iron: 1.55, weed: 0.9, shrooms: 0.9, hash: 1.0, pills: 1.15, item: 1.1 },
+};
+
+/**
+ * What an operation will pay for a one-off. Somebody who buys buildings wants
+ * a pattern less than somebody who deals in iron does.
+ */
+export function offerForItem(player, baseValue) {
+  const appetite = (APPETITE[player.style] || APPETITE.volume).item;
+  // Bigger operations can afford to pay closer to what a thing is worth.
+  const depth = 0.75 + Math.min(0.45, player.worth / 4000000);
+  return Math.round(baseValue * appetite * depth);
+}
+
+/**
+ * What they'll pay per pack, against the street price you'd otherwise get.
+ * Selling in bulk to somebody who wants it beats grinding it out on a corner —
+ * that's the whole reason to look for people.
+ */
+export function offerForProduct(player, productId, streetUnit) {
+  const appetite = (APPETITE[player.style] || APPETITE.volume)[productId] || 1;
+  const depth = 0.8 + Math.min(0.4, player.worth / 5000000);
+  return Math.round(streetUnit * appetite * depth * 100) / 100;
+}
+
+/** How much of a product an operation can absorb in one go. */
+export function appetiteFor(player, productId) {
+  const appetite = (APPETITE[player.style] || APPETITE.volume)[productId] || 1;
+  return Math.max(8, Math.round((player.worth / 9000) * appetite));
 }

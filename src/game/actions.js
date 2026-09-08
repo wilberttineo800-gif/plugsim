@@ -10,10 +10,12 @@ import {
 } from './lots.js';
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
+import { streetPrice } from './economy.js';
 import { unlockStatus } from './progression.js';
 import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
 import { projectById, canResearch, ITEM_KINDS, itemValue } from './research.js';
+import { offerForItem, offerForProduct, appetiteFor, operationsIn } from './players.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgradeById, rentUpgrades, rentEffects,
@@ -51,6 +53,19 @@ export function buyLot(state, lotId) {
   // What you actually paid, so profit or loss on the way out is real.
   lot.paidPrice = price;
   if (district) district.discovered = true;
+
+  // Buying onto somebody's ground is how they find out about you, and how you
+  // find out about them if you hadn't already.
+  for (const other of operationsIn(state, lot.districtId)) {
+    other.knowsYou = true;
+    if (!other.known) {
+      other.known = true;
+      other.metOn = lot.districtId;
+      logEvent(state,
+        `Buying here put you on ${other.name}'s doorstep — they already work this block.`,
+        'info');
+    }
+  }
   logEvent(
     state,
     `Bought ${lot.name} in ${district ? district.name : 'the city'} for $${price.toLocaleString()}.`,
@@ -517,6 +532,67 @@ export function sellItem(state, itemId) {
   state.stats.legalRevenue = (state.stats.legalRevenue || 0) + price;
   logEvent(state, `Sold ${item.name} for $${price.toLocaleString()}.`, 'good');
   return { ok: true, item, price };
+}
+
+// --- Dealing with other operations ------------------------------------------
+
+/**
+ * Sell a one-off to somebody who actually wants it. Better than putting it on
+ * the open market, which is the point of knowing people.
+ */
+export function sellItemTo(state, itemId, playerId) {
+  const idx = (state.items || []).findIndex((it) => it.id === itemId);
+  if (idx < 0) return { ok: false, error: 'No such item.' };
+  const buyer = (state.players || []).find((p) => p.id === playerId);
+  if (!buyer) return { ok: false, error: 'No such operation.' };
+  if (!buyer.known) return { ok: false, error: "You haven't met them." };
+
+  const item = state.items[idx];
+  const price = offerForItem(buyer, itemValue(state, item));
+  state.items.splice(idx, 1);
+  state.cash.clean += price;
+  state.stats.legalRevenue = (state.stats.legalRevenue || 0) + price;
+  state.stats.tradedWithPlayers = (state.stats.tradedWithPlayers || 0) + price;
+  logEvent(state, `${buyer.name} took ${item.name} for $${price.toLocaleString()}.`, 'good');
+  return { ok: true, item, price, buyer };
+}
+
+/**
+ * Move product in bulk to another operation. Street money, because it is, but
+ * without grinding it out a pack at a time — and they can only take so much.
+ */
+export function sellProductTo(state, buildingId, playerId, productId, amount) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such premises.' };
+  const buyer = (state.players || []).find((p) => p.id === playerId);
+  if (!buyer) return { ok: false, error: 'No such operation.' };
+  if (!buyer.known) return { ok: false, error: "You haven't met them." };
+
+  const have = (b.packs && b.packs[productId]) || 0;
+  if (have <= 0.01) return { ok: false, error: 'Nothing packaged to sell there.' };
+
+  const d = districtById(state, b.districtId);
+  const room = appetiteFor(buyer, productId);
+  const move = Math.min(have, amount || have, room);
+  if (move <= 0.01) {
+    return { ok: false, error: `${buyer.name} can't take any more of that right now.` };
+  }
+
+  const unit = offerForProduct(buyer, productId, streetPrice(d, productId));
+  const gross = move * unit;
+  b.packs[productId] -= move;
+  state.cash.dirty += gross;
+  state.stats.grossRevenue = (state.stats.grossRevenue || 0) + gross;
+  state.stats.tradedWithPlayers = (state.stats.tradedWithPlayers || 0) + gross;
+  state.stats.packsSold[productId] = (state.stats.packsSold[productId] || 0) + move;
+
+  // A wholesale handoff is quieter than serving a street, but it isn't nothing.
+  if (d) d.heat = Math.min(100, d.heat + move * 0.01);
+
+  logEvent(state,
+    `${buyer.name} took ${Math.round(move)} packs off you for $${Math.round(gross).toLocaleString()}.`,
+    'good');
+  return { ok: true, buyer, moved: move, unit, gross };
 }
 
 export { availableUpgrades, effectsFor };

@@ -14,7 +14,8 @@ import {
 } from './game/state.js';
 import { stepSim, recordPrices, catchUp } from './game/sim.js';
 import { HELPER, newlyDone } from './game/onboarding.js';
-import { generatePlayers } from './game/players.js';
+import { generatePlayers, placePlayers } from './game/players.js';
+import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import {
@@ -188,8 +189,9 @@ async function startNewGame(origin, cityName) {
   // by area as you explore. Only the blocks around the start are loaded now.
   setStatus('Surveying the buildings around you…');
   const state = createState({ origin, cityName, countryCode, districts, crews, lots: [] });
-  // Other people running the same game in the same city.
+  // Other people running the same game in the same city, and where they work.
   state.players = generatePlayers(Math.random);
+  placePlayers(state, Math.random);
 
   const startPad = 0.001; // one tile is plenty to open on
   const startTiles = tilesForBounds(
@@ -397,6 +399,24 @@ game.toggleAI = () => {
 // calls this.
 game.__boot = (state) => bootGame(state);
 
+game.sellItemTo = (itemId, playerId) => {
+  diag.trace('sell item to operation');
+  const r = A.sellItemTo(game.state, itemId, playerId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.buyer.name} took ${r.item.name} for $${r.price.toLocaleString()}.`, 'good', 3600);
+  game.ui.render();
+};
+
+game.sellProductTo = (buildingId, playerId, productId) => {
+  diag.trace('sell product to operation');
+  const r = A.sellProductTo(game.state, buildingId, playerId, productId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(
+    `${r.buyer.name} took ${Math.round(r.moved)} packs for $${Math.round(r.gross).toLocaleString()}.`,
+    'good', 3800);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);
@@ -449,6 +469,12 @@ function bootGame(state) {
   }
 
   if (!Object.keys(state.priceHistory || {}).length) recordPrices(state);
+  // Other operations come through an adapter, so a real backend is a swap.
+  attachLocal(state);
+  // Saves from before operations had a place on the map need one.
+  if ((state.players || []).some((p) => !(p.blocks || []).length)) {
+    placePlayers(state, Math.random);
+  }
 
   // The world doesn't stop because you closed the tab. Run it forward over the
   // time you were away, then say what happened while you were gone.

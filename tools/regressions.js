@@ -5,7 +5,7 @@
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
-import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
+import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
@@ -624,6 +624,54 @@ print('=== 15. blocks you hold are yours to name and to run ===');
         bare + ' raids bare vs ' + bought + ' with the precinct paid');
   check('but it is not immunity', TURF_UPGRADES.patrol.effects.policeSuppression < 1,
         pctOf(TURF_UPGRADES.patrol.effects.policeSuppression));
+}
+
+print('');
+print('=== 16. the corporate tier is a different league ===');
+{
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 12000000;
+
+  const CORP = ['holding_co', 'members_club', 'terminal', 'pharma_plant'];
+  for (const id of CORP) {
+    const def = BUILDINGS[id];
+    check(id + ' needs a serious building', def.minAreaM2 >= 420, def.minAreaM2 + ' m2 minimum');
+    check(id + ' is gated behind a real empire',
+          def.unlock && def.unlock.cash >= 900000,
+          '$' + def.unlock.cash.toLocaleString() + ' and ' + def.unlock.properties + ' properties');
+  }
+
+  // It out-earns the tier below it, which is the whole point.
+  check('a members club out-earns a nightclub',
+        BUILDINGS.members_club.revenuePerDay > BUILDINGS.nightclub.revenuePerDay * 2,
+        '$' + BUILDINGS.members_club.revenuePerDay + ' vs $' + BUILDINGS.nightclub.revenuePerDay);
+  check('a terminal holds far more than a stash',
+        BUILDINGS.terminal.capacity > BUILDINGS.stash.capacity * 5,
+        BUILDINGS.terminal.capacity + ' vs ' + BUILDINGS.stash.capacity);
+  check('a pharma plant out-processes a lab',
+        BUILDINGS.pharma_plant.rawPerHour > BUILDINGS.lab.rawPerHour * 10,
+        BUILDINGS.pharma_plant.rawPerHour + '/h vs ' + BUILDINGS.lab.rawPerHour + '/h');
+
+  // A holding company genuinely lifts the rent it collects.
+  const lot = st.lots.find((l) => !l.owned && l.areaM2 > 200);
+  A.buyLot(st, lot.id);
+  A.rentOut(st, lot.id);
+  const cleanBefore = st.cash.clean;
+  stepSim(st, 24, {});
+  const plain = st.cash.clean - cleanBefore;
+
+  const st2 = world();
+  st2.adminUnlockAll = true;
+  st2.cash.clean = 12000000;
+  const lot2 = st2.lots.find((l) => l.id === lot.id) || st2.lots.find((l) => !l.owned && l.areaM2 > 200);
+  A.buyLot(st2, lot2.id);
+  A.rentOut(st2, lot2.id);
+  const holding = open(st2, 'holding_co');
+  check('a holding company can actually be built', !!holding, holding && holding.name);
+  check('and it lifts what you collect', rentBonusFor(st2) > 0,
+        Math.round(rentBonusFor(st2) * 100) + '% on every tenancy');
+  check('nothing lifts it without one', rentBonusFor(st) === 0);
 }
 
 print('');

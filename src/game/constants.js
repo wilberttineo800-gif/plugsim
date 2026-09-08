@@ -540,6 +540,90 @@ export const BUILDINGS = {
     heatPerDay: 0.35,
     capacity: 0,
   },
+
+  // --- Corporate tier -------------------------------------------------------
+  //
+  // The design note put it plainly: setting up in Times Square should cost a
+  // great deal more than Long Island, because of the floorplate and the height.
+  // These need both — a big building with real storeys, on an expensive block —
+  // and they pay accordingly. The property market already prices the address;
+  // these are what you put in it once you can afford one.
+
+  holding_co: {
+    id: 'holding_co',
+    kind: 'front',
+    name: 'Property Holding Company',
+    blurb: 'A name on a brass plate and a portfolio behind it. Rent from everything you let comes in bigger, and the books absorb a great deal.',
+    icon: 'bank',
+    unlock: { properties: 14, cash: 900000 },
+    cost: 210000,
+    minAreaM2: 420,
+    referenceAreaM2: 900,
+    areaExponent: 0.9,
+    upkeepPerDay: 4200,
+    revenuePerDay: 6800,
+    wealthSensitivity: 1.6,
+    launderPerDay: 42000,
+    cut: 0.11,
+    heatPerDay: 0.12,
+    capacity: 0,
+    // What makes it corporate rather than just expensive.
+    rentBonus: 0.22,
+  },
+  members_club: {
+    id: 'members_club',
+    kind: 'front',
+    name: "Private Members' Club",
+    blurb: 'Subscriptions, a dining room and nobody at the door taking names. The largest legitimate earner in the game, on the right address.',
+    icon: 'disc',
+    unlock: { properties: 18, cash: 1600000 },
+    cost: 340000,
+    minAreaM2: 620,
+    referenceAreaM2: 1400,
+    areaExponent: 1.0,
+    upkeepPerDay: 7600,
+    revenuePerDay: 14500,
+    wealthSensitivity: 2.4,
+    launderPerDay: 58000,
+    cut: 0.13,
+    heatPerDay: 0.28,
+    capacity: 0,
+  },
+  terminal: {
+    id: 'terminal',
+    kind: 'storage',
+    name: 'Logistics Terminal',
+    blurb: 'Racking, dock doors and a yard. Holds more than anything else and turns vehicles round in a fraction of the time.',
+    icon: 'box',
+    unlock: { properties: 16, cash: 1100000 },
+    cost: 265000,
+    minAreaM2: 1200,
+    referenceAreaM2: 2600,
+    areaExponent: 1.0,
+    upkeepPerDay: 5400,
+    heatPerDay: 0.5,
+    capacity: 5200,
+    // A terminal is a hub, not a shop front — it holds, it doesn't sell.
+    sellsPerHour: 0,
+  },
+  pharma_plant: {
+    id: 'pharma_plant',
+    kind: 'processing',
+    name: 'Pharmaceutical Plant',
+    blurb: 'Reactors, a clean suite and a quality lab. Processes at a scale no back-room operation can touch, and the product is consistent.',
+    icon: 'flask',
+    unlock: { properties: 20, cash: 2200000 },
+    cost: 480000,
+    minAreaM2: 1500,
+    referenceAreaM2: 3200,
+    areaExponent: 0.85,
+    upkeepPerDay: 11200,
+    rawPerHour: 46,
+    costPerRaw: 24,
+    qualityBonus: 0.26,
+    heatPerDay: 1.6,
+    capacity: 3400,
+  },
 };
 
 export const BUILDING_IDS = Object.keys(BUILDINGS);

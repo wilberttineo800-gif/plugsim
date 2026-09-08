@@ -714,13 +714,28 @@ function stepPropertyMarket(state, dt) {
   }
 }
 
+/**
+ * What a corporate landlord adds on top. Owning the structure that holds the
+ * portfolio is worth more than owning the buildings one at a time.
+ */
+export function rentBonusFor(state) {
+  let best = 0;
+  for (const b of state.buildings || []) {
+    if (!b.active) continue;
+    const def = BUILDINGS[b.type];
+    if (def && def.rentBonus) best = Math.max(best, def.rentBonus);
+  }
+  return best;
+}
+
 /** Rent from anything you've let out. Clean money, no heat, no risk. */
 function stepRents(state, dt) {
   const days = dt / 24;
   for (const lot of state.lots || []) {
     if (!lot.owned || !lot.rented) continue;
     const d = districtById(state, lot.districtId);
-    const daily = rentPerDay(lot, d);
+    // A holding company gets better terms on everything you let.
+    const daily = rentPerDay(lot, d) * (1 + rentBonusFor(state));
     const amount = daily * days;
     state.cash.clean += amount;
     state.stats.rentCollected = (state.stats.rentCollected || 0) + amount;

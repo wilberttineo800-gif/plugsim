@@ -8,7 +8,7 @@ import {
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
-import { sizeScale, sizeCapacity } from '../game/sim.js';
+import { sizeScale, sizeCapacity, rentBonusFor } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
@@ -354,8 +354,11 @@ export class GameUI {
     for (const d of s.drivers || []) costs += d.wagePerDay;
     for (const v of s.couriers) costs += COURIERS[v.type].upkeepPerDay;
     // Rent you collect and arrangements you pay for are both real daily money.
+    const rentLift = 1 + rentBonusFor(s);
     for (const lot of s.lots || []) {
-      if (lot.owned && lot.rented) income += rentPerDay(lot, districtById(s, lot.districtId));
+      if (lot.owned && lot.rented) {
+        income += rentPerDay(lot, districtById(s, lot.districtId)) * rentLift;
+      }
     }
     costs += turfUpkeep(s);
     return income - costs;

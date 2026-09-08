@@ -93,14 +93,19 @@
   const stash = { clean: s.cash.clean, dirty: s.cash.dirty };
   s.cash.clean = 0;
   s.cash.dirty = 0;
-  const gateLot = s.lots.find((l) => l.kind !== 'parking' && l.owned && !l.buildingId && !l.rented)
-    || s.lots.find((l) => l.kind !== 'parking' && !l.owned);
+  // Gated operations only show on a building big enough to host one, so pick a
+  // mid-size unit rather than whatever happens to be free.
+  const gateLot = s.lots.find((l) => l.kind !== 'parking' && l.areaM2 > 280 && l.areaM2 < 900
+      && l.owned && !l.buildingId && !l.rented)
+    || s.lots.find((l) => l.kind !== 'parking' && l.areaM2 > 280 && l.areaM2 < 900 && !l.owned);
   g.select('lot', gateLot.id);
   g.ui.goTab('build');
   const buildHtml = document.getElementById('railBody').innerHTML;
   ok('gated operations are shown but locked',
-    /Machine Shop|Pill Press|Hash Press/.test(buildHtml) && /more propert|more banked/.test(buildHtml),
-    'progression gates visible in the build menu');
+    /machine shop|pill press|hash press|gunsmith/i.test(buildHtml)
+      && /more propert|more banked/i.test(buildHtml),
+    Math.round(gateLot.areaM2) + ' m² lot: ' +
+      ((buildHtml.match(/more propert[^<]*|more banked[^<]*/i) || ['no gate text'])[0]));
   s.cash.clean = stash.clean;
   s.cash.dirty = stash.dirty;
   s.adminUnlockAll = wasUnlocked;
@@ -253,15 +258,15 @@
     const homes = s.lots.filter((l) => l.units > 0);
     ok('residential buildings have lettings', homes.length > 0,
       homes.length ? 'up to ' + Math.max(...homes.map((l) => l.units)) + ' homes in one' : 'none');
+    // Any of the three sets could apply, depending on what kind of building it
+    // is; and on a re-run the work may already be done.
     const rentedLot = s.lots.find((l) => l.rented);
     if (rentedLot) {
-      const work = window.plugsimRentUpgrades || null;
-      const before = rentedLot.rentUpgrades ? rentedLot.rentUpgrades.length : 0;
-      g.improveRental(rentedLot.id, 'decorate');
-      g.improveRental(rentedLot.id, 'shopfront');
-      g.improveRental(rentedLot.id, 'surface');
-      ok('rental work can be done', (rentedLot.rentUpgrades || []).length > before,
-        (rentedLot.rentUpgrades || []).join(', ') || 'none applied');
+      for (const id of ['decorate', 'heating', 'shopfront', 'services', 'surface', 'dock']) {
+        g.improveRental(rentedLot.id, id);
+      }
+      ok('rental work can be done', (rentedLot.rentUpgrades || []).length > 0,
+        (rentedLot.rentUpgrades || []).join(', ') || 'nothing applied');
     }
     ok('blocks have a crime rate', s.districts.every((d) => typeof d.crime === 'number'),
       'range ' + Math.min(...s.districts.map((d) => d.crime)).toFixed(2) +
@@ -272,15 +277,16 @@
   out.push('=== firearms ===');
   {
     for (const d of s.districts) d.heat = 0;
-    const before = JSON.stringify(s.licences || {});
     g.applyForLicence('ffl01');
-    ok('a licence can be applied for', JSON.stringify(s.licences || {}) !== before,
-      s.licences && s.licences.ffl01 ? s.licences.ffl01.status : 'nothing filed');
+    const rec = (s.licences || {}).ffl01;
+    ok('a licence can be applied for',
+      !!rec && (rec.status === 'pending' || rec.status === 'active'),
+      rec ? rec.status + (rec.daysLeft ? ` — ${Math.ceil(rec.daysLeft)} days to go` : '') : 'nothing filed');
     ok('a manufacturer licence is refused first',
       !s.licences || !s.licences.ffl07 || s.licences.ffl07.status !== 'pending');
     g.ui.goTab('market');
     const mk = document.getElementById('railBody').innerText;
-    ok('licensing is visible in the market tab', /Firearms licensing|FFL/.test(mk));
+    ok('licensing is visible in the market tab', /firearms licensing|ffl/i.test(mk));
   }
 
   out.push('');
@@ -290,7 +296,8 @@
     blk.rivalControl = 0; blk.rep = 0.8;
     g.select('district', blk.id);
     const panel = document.getElementById('inspectorBody').innerText;
-    ok('a held block offers arrangements', /Arrangements|Your block/.test(panel));
+    ok('a held block offers arrangements', /arrangements|your block/i.test(panel),
+      'panel shows the held-block controls');
     g.renameDistrict(blk.id, 'Test Yard');
     ok('a held block can be renamed', blk.customName === 'Test Yard', blk.customName);
     g.improveTurf(blk.id, 'lookouts');
@@ -305,6 +312,9 @@
     g.ui.goTab('lab');
     const lab = document.getElementById('railBody').innerText;
     ok('the R&D tab renders', lab.length > 40, lab.slice(0, 60).replace(/\s+/g, ' '));
+    const wasUnlockedLab = s.adminUnlockAll;
+    s.adminUnlockAll = true;                 // it is gated behind 11 properties
+    s.cash.clean = Math.max(s.cash.clean, 400000);
     const rlot = s.lots.filter((l) => !l.owned && l.kind !== 'parking'
       && l.areaM2 >= 320 && l.areaM2 <= 3200).sort((a, b) => a.price - b.price)[0];
     if (rlot) {
@@ -318,6 +328,7 @@
     } else {
       out.push('  skip  R&D (no suitable building on the market)');
     }
+    s.adminUnlockAll = wasUnlockedLab;
   }
 
   out.push('');
@@ -325,7 +336,8 @@
   {
     g.ui.goTab('ledger');
     const led = document.getElementById('railBody').innerText;
-    ok('the wealth board renders', /Wealth board/.test(led));
+    ok('the wealth board renders', /wealth board/i.test(led),
+      (led.match(/#\d+ of \d+/i) || [''])[0]);
     ok('you are on it', /\(you\)/.test(led));
     const was = s.aiDisabled;
     g.toggleAI();

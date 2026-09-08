@@ -17,7 +17,9 @@ import { HELPER, newlyDone } from './game/onboarding.js';
 import { generatePlayers } from './game/players.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
-import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, pingIncident } from './map/entities.js';
+import {
+  BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker, pingIncident,
+} from './map/entities.js';
 import { GameUI } from './ui/ui.js';
 import { toast } from './ui/toast.js';
 import { esc } from './ui/format.js';
@@ -390,6 +392,10 @@ game.toggleAI = () => {
   toast(s.aiDisabled ? 'Other operations off.' : 'Other operations back on.', 'info');
   game.ui.render();
 };
+
+// Exposed so the headless load check can run a real boot; nothing in the game
+// calls this.
+game.__boot = (state) => bootGame(state);
 
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;

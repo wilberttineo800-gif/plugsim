@@ -61,7 +61,9 @@ export function cheapestLotFor(state, def, districtFilter = null) {
   const need = def.requiresKind || null;
   return (state.lots || [])
     .filter((l) => (need ? l.kind === need : l.kind !== 'parking'))
-    .filter((l) => !l.owned && l.areaM2 >= def.minAreaM2)
+    // Operations now have a ceiling as well as a floor.
+    .filter((l) => !l.owned && l.areaM2 >= def.minAreaM2
+      && (!def.maxAreaM2 || l.areaM2 <= def.maxAreaM2))
     .filter((l) => !districtFilter || l.districtId === districtFilter)
     .sort((a, b) => a.price - b.price)[0] || null;
 }

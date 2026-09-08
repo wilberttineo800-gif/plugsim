@@ -758,16 +758,30 @@ export class GameUI {
     };
 
     // The two money paths are the central choice, so they're shown as such.
+    // Only what actually belongs in a building this size is listed.
     const opts = operationOptions(lot, s);
     const illegal = opts.filter((o) => o.def.kind !== 'front');
     const legal = opts.filter((o) => o.def.kind === 'front');
 
+    if (!opts.length) {
+      return `<div class="empty">
+        Nothing sensible runs in ${Math.round(lot.areaM2).toLocaleString()} m².
+        ${lot.areaM2 < 30
+          ? 'Too small for anything but storage — and you already have the option of letting it.'
+          : 'Too big for the small operations and too small for the large ones. Let it out, or hold it and sell it on.'}
+      </div>`;
+    }
+
     return (
-      `<div class="sect__title" style="margin-top:4px">
+      `<p class="card__blurb" style="margin:0 0 8px">
+        Only what actually fits ${Math.round(lot.areaM2).toLocaleString()} m² is
+        listed — the rest either needs more room or makes no sense at this size.
+      </p>` +
+      (illegal.length ? `<div class="sect__title" style="margin-top:4px">
         <span>The chain</span><span style="color:var(--text-faint)">street money</span>
       </div>
-      ${illegal.map(card).join('')}
-      <div class="sect__title" style="margin-top:12px">
+      ${illegal.map(card).join('')}` : '') +
+      (legal.length ? `<div class="sect__title" style="margin-top:12px">
         <span>Legitimate business</span><span style="color:var(--good)">clean money</span>
       </div>
       <p class="card__blurb" style="margin:0 0 8px">
@@ -775,7 +789,7 @@ export class GameUI {
         moment it lands, never raided, and it cools the block down. Washes
         street cash on the side.
       </p>
-      ${legal.map(card).join('')}`
+      ${legal.map(card).join('')}` : '')
     );
   }
 

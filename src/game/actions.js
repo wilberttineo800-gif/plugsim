@@ -124,25 +124,43 @@ export function endTenancy(state, lotId) {
 }
 
 /** What can legally go into a building you own, and why not. */
+/** Whether an operation makes sense in a building this size, and why not. */
+export function fitsBuilding(def, lot) {
+  if (lot.areaM2 < def.minAreaM2) {
+    return { fits: false, reason: `Needs ${def.minAreaM2} m² — this is ${Math.round(lot.areaM2)} m²` };
+  }
+  if (def.maxAreaM2 && lot.areaM2 > def.maxAreaM2) {
+    return {
+      fits: false,
+      reason: `Only makes sense up to ${def.maxAreaM2.toLocaleString()} m² — this is ${Math.round(lot.areaM2).toLocaleString()} m²`,
+    };
+  }
+  return { fits: true, reason: null };
+}
+
+/**
+ * What you could run in this building. Operations that physically don't belong
+ * in a space this size are left out entirely rather than shown greyed — you
+ * don't run a closet grow in a warehouse, and the menu shouldn't pretend
+ * otherwise. Things gated by progression stay visible, because those are goals.
+ */
 export function operationOptions(lot, state = null) {
   return BUILDING_IDS.filter((id) => {
     // A car park takes a depot and nothing else; premises take everything but.
     const need = BUILDINGS[id].requiresKind || null;
-    return need ? lot.kind === need : lot.kind !== 'parking';
+    if (need ? lot.kind !== need : lot.kind === 'parking') return false;
+    return fitsBuilding(BUILDINGS[id], lot).fits;
   }).map((id) => {
     const def = BUILDINGS[id];
-    const fits = lot.areaM2 >= def.minAreaM2;
     const gate = state ? unlockStatus(state, id) : null;
     const locked = !!(gate && gate.locked);
     return {
       id,
       def,
-      fits,
+      fits: true,
       locked,
       gate,
-      reason: locked
-        ? gate.reason
-        : fits ? null : `Needs ${def.minAreaM2} m² — this is ${Math.round(lot.areaM2)} m²`,
+      reason: locked ? gate.reason : null,
       scale: areaScale(lot, def.referenceAreaM2, def.areaExponent),
       capScale: areaCapacityScale(lot, def.referenceAreaM2),
     };
@@ -165,12 +183,8 @@ export function developLot(state, lotId, typeId) {
   if (!def.requiresKind && lot.kind === 'parking') {
     return { ok: false, error: 'A car park is only good for a depot.' };
   }
-  if (lot.areaM2 < def.minAreaM2) {
-    return {
-      ok: false,
-      error: `${def.name} needs ${def.minAreaM2} m². ${lot.name} is ${Math.round(lot.areaM2)} m².`,
-    };
-  }
+  const size = fitsBuilding(def, lot);
+  if (!size.fits) return { ok: false, error: `${def.name}: ${size.reason}.` };
   if (!canAfford(state, def.cost)) {
     return { ok: false, error: `Fitting out a ${def.name} costs $${def.cost.toLocaleString()} clean.` };
   }

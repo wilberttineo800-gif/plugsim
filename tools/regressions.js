@@ -16,7 +16,8 @@ import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
-import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
+import { fitsBuilding, operationOptions } from '../src/game/actions.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
 
@@ -787,6 +788,66 @@ print('=== 18. other operations, and where you stand ===');
   for (let d = 0; d < 10; d++) stepSim(st, 24, {});
   check('and they stop moving when off',
         st.players.every((p, i) => p.worth === frozen[i]));
+}
+
+print('');
+print('=== 19. an operation has to fit the building ===');
+{
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 20000000;
+
+  // Every building has both ends of a range, and they make sense.
+  const noCeiling = BUILDING_IDS.filter((id) => !BUILDINGS[id].maxAreaM2);
+  check('every operation has a ceiling', noCeiling.length === 0,
+        noCeiling.join(', ') || BUILDING_IDS.length + ' checked');
+  const inverted = BUILDING_IDS.filter((id) => BUILDINGS[id].maxAreaM2 <= BUILDINGS[id].minAreaM2);
+  check('no ceiling sits under its own floor', inverted.length === 0, inverted.join(', '));
+
+  // The note's example: a closet grow is a wardrobe, not a warehouse.
+  const closet = BUILDINGS.closet_grow;
+  check('a closet grow stays a closet', closet.maxAreaM2 <= closet.minAreaM2 * 3,
+        closet.minAreaM2 + '-' + closet.maxAreaM2 + ' m2');
+  check('a closet grow is refused in a big unit',
+        !fitsBuilding(closet, { areaM2: 400, kind: 'warehouse' }).fits,
+        fitsBuilding(closet, { areaM2: 400, kind: 'warehouse' }).reason);
+  check('and allowed in a flat', fitsBuilding(closet, { areaM2: 22, kind: 'apartment' }).fits);
+
+  // And the other end: a plant does not go in a terraced house.
+  check('a pharmaceutical plant is refused at 150 m2',
+        !fitsBuilding(BUILDINGS.pharma_plant, { areaM2: 150, kind: 'house' }).fits);
+  check('a machine shop is refused at 150 m2',
+        !fitsBuilding(BUILDINGS.machine_shop, { areaM2: 150, kind: 'house' }).fits);
+
+  // The menu only lists what fits, so nothing unusable is ever offered.
+  const tiny = { id: 'x1', areaM2: 24, kind: 'apartment', districtId: st.districts[0].id, owned: true };
+  const huge = { id: 'x2', areaM2: 5200, kind: 'warehouse', districtId: st.districts[0].id, owned: true };
+  const tinyOpts = operationOptions(tiny, st);
+  const hugeOpts = operationOptions(huge, st);
+  check('a tiny flat is not offered a nightclub',
+        !tinyOpts.some((o) => o.id === 'nightclub'),
+        tinyOpts.map((o) => o.id).join(', ') || 'nothing');
+  check('a big shed is not offered a closet grow',
+        !hugeOpts.some((o) => o.id === 'closet_grow'),
+        hugeOpts.length + ' options at 5,200 m2');
+  check('everything offered actually fits',
+        tinyOpts.concat(hugeOpts).every((o) => fitsBuilding(o.def, o.def === BUILDINGS[o.id] && tinyOpts.includes(o) ? tiny : huge).fits));
+
+  // The action refuses it too, not just the menu.
+  const big = st.lots.find((l) => !l.owned && l.areaM2 > 600 && l.kind !== 'parking');
+  if (big) {
+    A.buyLot(st, big.id);
+    const res = A.developLot(st, big.id, 'closet_grow');
+    check('the action refuses a bad fit as well', !res.ok, res.error);
+  }
+
+  // Progression gates still show, because those are goals rather than misfits.
+  const st2 = world();
+  st2.cash.clean = 0;
+  const mid = { id: 'x3', areaM2: 300, kind: 'retail', districtId: st2.districts[0].id, owned: true };
+  check('gated operations are still offered, marked locked',
+        operationOptions(mid, st2).some((o) => o.locked),
+        operationOptions(mid, st2).filter((o) => o.locked).map((o) => o.id).join(', '));
 }
 
 print('');

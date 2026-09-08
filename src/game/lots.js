@@ -163,7 +163,9 @@ export function priceBreakdown(kind, areaM2, district, levels = 1) {
   const effective = pricedArea(areaM2);
   // Height counts, but with diminishing returns: the ground floor is the
   // valuable one and every storey above it is worth progressively less.
-  const heightMult = Math.pow(Math.max(1, levels), 0.62);
+  // Normalised on a typical two-storey building, so height redistributes value
+  // across the stock rather than inflating the whole market.
+  const heightMult = Math.pow(Math.max(1, levels) / 2, 0.62);
   const raw = effective * LOTS.pricePerM2 * kindMult * blockMult * heightMult;
   const price = Math.round(clamp(raw, LOTS.minPrice, LOTS.maxPrice) / 10) * 10;
   return {

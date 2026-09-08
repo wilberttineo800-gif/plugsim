@@ -10,6 +10,10 @@ import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } fr
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { sellRatePerHour, streetPrice as streetPriceOf } from '../src/game/economy.js';
 import { rhythmFactor, rhythmNote, cityClock, darkness } from '../src/game/rhythm.js';
+import {
+  raise, stepIncidents, activeIncidents, unseenCount, markSeen,
+  INCIDENT_IDS, MAX_INCIDENTS,
+} from '../src/game/incidents.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
@@ -1242,6 +1246,69 @@ print('=== 26. the city has a rhythm, and it costs nothing ===');
   const notes = [0, 4 * 1440 + 23 * 60, 5 * 1440 + 20 * 60, 3 * 60].map((m) => rhythmNote(m));
   check('the city says what it is doing', notes.every((n) => n && n.length > 6),
         notes[1]);
+}
+
+print('');
+print('=== 27. things happen at a place ===');
+{
+  const st = world();
+  const d = st.districts[6];
+
+  check('a new world has nothing happening', activeIncidents(st).length === 0);
+
+  raise(st, 'eyes', { latlng: d.center, districtId: d.id, detail: '40 heat' });
+  check('something can be raised at a place', activeIncidents(st).length === 1,
+        activeIncidents(st)[0].type + ' at ' + activeIncidents(st)[0].districtId);
+  check('it carries a location', !!activeIncidents(st)[0].latlng.lat);
+
+  // The same problem in the same place is one problem, not forty.
+  for (let i = 0; i < 30; i++) raise(st, 'eyes', { latlng: d.center, districtId: d.id });
+  check('repeats refresh rather than stack', activeIncidents(st).length === 1,
+        activeIncidents(st).length + ' on the map');
+
+  // Different places are different problems.
+  raise(st, 'eyes', { latlng: st.districts[7].center, districtId: st.districts[7].id });
+  check('a different block is its own problem', activeIncidents(st).length === 2);
+
+  // It is never allowed to become noise.
+  for (let i = 0; i < 60; i++) {
+    const dd = st.districts[i % st.districts.length];
+    raise(st, INCIDENT_IDS[i % INCIDENT_IDS.length], { latlng: dd.center, districtId: dd.id });
+  }
+  check('the map never fills up with them', activeIncidents(st).length <= MAX_INCIDENTS,
+        activeIncidents(st).length + ' of ' + MAX_INCIDENTS + ' max');
+
+  // They age out.
+  const before = activeIncidents(st).length;
+  st.minutes += 48 * 60;
+  stepIncidents(st);
+  check('they expire on their own', activeIncidents(st).length < before,
+        before + ' -> ' + activeIncidents(st).length);
+
+  // Unseen is what draws the eye; opening one settles it.
+  const st2 = world();
+  raise(st2, 'queue', { latlng: st2.districts[2].center, districtId: st2.districts[2].id });
+  check('a new one is unseen', unseenCount(st2) === 1);
+  markSeen(st2, activeIncidents(st2)[0].id);
+  check('opening it marks it seen', unseenCount(st2) === 0);
+
+  // And the sim actually produces them from things that happen. They are
+  // short-lived by design, so watch across the run rather than only at the end.
+  const st3 = world();
+  st3.cash.clean = 900000;
+  const b3 = open(st3, 'grow_house');
+  const blk = st3.districts.find((x) => x.id === b3.districtId);
+  const kinds = new Set();
+  for (let day = 0; day < 20; day++) {
+    blk.heat = Math.max(blk.heat, 45);       // a block you are actually working
+    stepSim(st3, 24, {});
+    for (const i of activeIncidents(st3)) kinds.add(i.type);
+  }
+  check('playing the game turns them up', kinds.size > 0,
+        [...kinds].join(', ') || 'nothing in 20 days');
+  check('and they are the kind you would expect on a hot block',
+        kinds.has('eyes') || kinds.has('glut') || kinds.has('queue'),
+        [...kinds].join(', '));
 }
 
 print('');

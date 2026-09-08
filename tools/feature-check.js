@@ -432,6 +432,47 @@
   }
 
   out.push('');
+  out.push('=== life on the map ===');
+  {
+    const before = (s.incidents || []).length;
+    // Put one of each tone on the map and check the layer draws them.
+    const near = s.districts.slice(0, 3);
+    if (window.__plugsimIncidents && near.length === 3) {
+      const I = window.__plugsimIncidents;
+      I.raise(s, 'eyes', { latlng: near[0].center, districtId: near[0].id });
+      I.raise(s, 'queue', { latlng: near[1].center, districtId: near[1].id });
+      I.raise(s, 'good_night', { latlng: near[2].center, districtId: near[2].id });
+      g.incidentLayer.sync(s);
+
+      const marks = document.querySelectorAll('.imark');
+      ok('things happening are drawn on the map', marks.length >= 3,
+        marks.length + ' on the map');
+      ok('they are colour-coded by what they mean',
+        !!document.querySelector('.imark--bad') && !!document.querySelector('.imark--warn')
+          && !!document.querySelector('.imark--good'));
+      ok('a new one draws the eye', !!document.querySelector('.imark.is-new'));
+
+      // Opening one settles it and takes you to the block.
+      const first = (s.incidents || [])[0];
+      g.openIncident(first);
+      ok('opening one marks it seen', first.seen === true);
+      ok('and takes you to where it happened',
+        !!s.selection && s.selection.id === first.districtId, s.selection && s.selection.id);
+
+      // Repeats never pile up.
+      for (let i = 0; i < 40; i++) {
+        I.raise(s, 'eyes', { latlng: near[0].center, districtId: near[0].id });
+      }
+      ok('the same problem never stacks up',
+        (s.incidents || []).filter((x) => x.type === 'eyes' && x.districtId === near[0].id).length === 1);
+      ok('and the map never fills with them', (s.incidents || []).length <= I.MAX_INCIDENTS,
+        (s.incidents || []).length + ' of ' + I.MAX_INCIDENTS);
+    } else {
+      out.push('  skip  life on the map (module not exposed)');
+    }
+  }
+
+  out.push('');
   out.push('=== artwork ===');
   {
     const A = window.__plugsimArt;

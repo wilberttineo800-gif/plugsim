@@ -4,6 +4,7 @@
 import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
 import { gunWithAttachments } from '../ui/art.js';
 import { buildingById, districtById, buildingLabel } from '../game/state.js';
+import { INCIDENTS, activeIncidents, freshness } from '../game/incidents.js';
 import { escapeHtml, overlayColor } from './mapView.js';
 
 const ICONS = {
@@ -429,5 +430,62 @@ export class PlayerMarker {
 
   clear() {
     if (this.marker) { this.map.removeLayer(this.marker); this.marker = null; }
+  }
+}
+
+
+/**
+ * Things happening, on the map.
+ *
+ * Deliberately not announced in the ticker: the point is that you find these
+ * because you were looking. They pulse while unseen, settle once noticed, and
+ * fade out as they age.
+ */
+export class IncidentLayer {
+  constructor(map, { onSelect } = {}) {
+    this.map = map;
+    this.onSelect = onSelect;
+    this.group = L.layerGroup().addTo(map);
+    this.markers = new Map();
+  }
+
+  sync(state) {
+    const live = activeIncidents(state);
+    const seen = new Set();
+
+    for (const inc of live) {
+      seen.add(inc.id);
+      const def = INCIDENTS[inc.type];
+      if (!def) continue;
+
+      const fresh = freshness(state, inc);
+      const html =
+        `<div class="imark imark--${def.tone} ${inc.seen ? 'is-seen' : 'is-new'}"
+              style="opacity:${(0.35 + fresh * 0.65).toFixed(2)}">` +
+        `<span class="imark__glyph">${def.glyph}</span>` +
+        `<span class="imark__label">${escapeHtml(def.name)}</span>` +
+        `</div>`;
+      const icon = L.divIcon({ className: '', html, iconSize: [22, 22], iconAnchor: [11, 11] });
+
+      let marker = this.markers.get(inc.id);
+      if (!marker) {
+        marker = L.marker([inc.latlng.lat, inc.latlng.lng], { icon, zIndexOffset: 900 });
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          this.onSelect?.(inc);
+        });
+        marker.addTo(this.group);
+        this.markers.set(inc.id, marker);
+      } else {
+        marker.setIcon(icon);
+      }
+    }
+
+    for (const [id, marker] of this.markers) {
+      if (!seen.has(id)) {
+        this.group.removeLayer(marker);
+        this.markers.delete(id);
+      }
+    }
   }
 }

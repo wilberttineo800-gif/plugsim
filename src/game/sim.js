@@ -20,6 +20,7 @@ import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
+import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
 import {
   RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
@@ -164,6 +165,7 @@ function stepOnce(state, dtHours, hooks = {}) {
   maybeRecordPrices(state);
   stepRents(state, dtHours);
   stepTurf(state, dtHours);
+  stepIncidents(state);
   stepResearch(state, dtHours);
   stepHeat(state, dtHours);
   stepEnforcement(state, dtHours);
@@ -586,6 +588,7 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     state.stats.seized += carried;
     state.stats.stops++;
     d.heat = clamp(d.heat + 6, 0, HEAT.max);
+    raise(state, 'tailed', { latlng: here, districtId: d.id, detail: def.name });
     c.lastEvent = 'Pulled over';
     logEvent(
       state,
@@ -644,6 +647,7 @@ function stepStorefronts(state, dt) {
       }
 
       d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], reaching, b.packQuality[pid]);
+      maybeMarketIncident(state, d, pid);
       d.supply[pid] += reaching;
       b.packs[pid] -= move;
       b.soldToday = (b.soldToday || 0) + move;
@@ -775,6 +779,63 @@ export function itemEffectsFor(state, target) {
     if (e.paceMult) fx.paceMult *= 1 - (1 - e.paceMult) * power;
   }
   return fx;
+}
+
+/**
+ * Notice what a block is doing. Called where product actually changes hands, so
+ * these appear where the trade is rather than on a timer.
+ */
+function maybeMarketIncident(state, d, pid) {
+  const room = sellRatePerHour(d, pid) * MARKET.glutCap;
+  const held = d.supply[pid];
+  if (held > room * 0.92) {
+    raise(state, 'glut', { latlng: d.center, districtId: d.id, detail: PRODUCTS[pid].name });
+    return;
+  }
+  // Cleared right out with the block still buying: worth knowing about.
+  const wanted = sellRatePerHour(d, pid, state.minutes);
+  if (held < wanted * 0.6 && wanted > 0.5 && rng() < 0.02) {
+    raise(state, held < wanted * 0.2 ? 'queue' : 'good_night',
+      { latlng: d.center, districtId: d.id, detail: PRODUCTS[pid].name });
+  }
+}
+
+/**
+ * Once a day, look around: heat where you work, other operations settling on
+ * your blocks, and the occasional approach from somebody who wants volume.
+ */
+function dailyIncidents(state) {
+  const worked = new Set();
+  for (const b of state.buildings || []) worked.add(b.districtId);
+  for (const l of state.lots || []) if (l.owned) worked.add(l.districtId);
+
+  for (const d of state.districts || []) {
+    if (!worked.has(d.id)) continue;
+
+    // Attention building on a block you actually use.
+    if (d.heat > HEAT.stopHeatFloor && rng() < 0.25) {
+      raise(state, 'eyes', { latlng: d.center, districtId: d.id, detail: Math.round(d.heat) + ' heat' });
+    }
+
+    // Somebody else working the same ground — only once you know them.
+    const here = (state.players || []).filter((p) => p.known && (p.blocks || []).includes(d.id));
+    if (here.length && rng() < 0.14) {
+      raise(state, 'rival_move', { latlng: d.center, districtId: d.id, detail: here[0].name });
+    }
+  }
+
+  // An approach from somebody you have met, when you have something to sell.
+  const met = (state.players || []).filter((p) => p.known);
+  const stocked = (state.buildings || []).some(
+    (b) => b.packs && PRODUCT_IDS.some((p) => b.packs[p] > 20)
+  );
+  if (met.length && stocked && rng() < 0.18) {
+    const who = met[Math.floor(rng() * met.length) % met.length];
+    const where = (state.districts || []).find((d) => (who.blocks || []).includes(d.id));
+    if (where) {
+      raise(state, 'approached', { latlng: where.center, districtId: where.id, detail: who.name });
+    }
+  }
 }
 
 // --- Research ---------------------------------------------------------------
@@ -1101,6 +1162,7 @@ function stepEnforcement(state, dt, hooks = {}) {
           if (!c.routeId) c.phase = 'idle';
         }
       }
+      raise(state, 'raid_scene', { latlng: b.latlng, districtId: d.id, detail: b.name });
       logEvent(state, `RAID — ${b.name} in ${d.name} was seized and shut down.`, 'bad');
     } else {
       logEvent(
@@ -1210,6 +1272,7 @@ function settleDay(state) {
   checkUnlocks(state);
   stepLicences(state);
   rollResearchDiscoveries(state);
+  dailyIncidents(state);
 
   let upkeep = 0;
   for (const b of state.buildings) {

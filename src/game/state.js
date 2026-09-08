@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 20;
+export const SAVE_VERSION = 21;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -48,6 +48,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     research: [],        // projects finished
     researchActive: [],  // projects under way
     items: [],           // things only you have made
+    incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
     aiDisabled: false,
     playerProfile: { name: null, lastWeekWorth: null, history: [] },
@@ -331,6 +332,10 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 21) {
+    if (!Array.isArray(data.incidents)) data.incidents = [];
+  }
 
   if (data.version < 20) {
     // Places got names you can change. Anything already built gets one.

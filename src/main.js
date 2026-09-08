@@ -15,12 +15,14 @@ import {
 import { stepSim, recordPrices, catchUp } from './game/sim.js';
 import { HELPER, newlyDone } from './game/onboarding.js';
 import { darkness, rhythmNote } from './game/rhythm.js';
+import { INCIDENTS, markSeen, unseenCount } from './game/incidents.js';
 import { generatePlayers, placePlayers } from './game/players.js';
 import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import {
-  BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker, pingIncident,
+  BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker,
+  IncidentLayer, pingIncident,
 } from './map/entities.js';
 import { GameUI } from './ui/ui.js';
 import { toast } from './ui/toast.js';
@@ -403,6 +405,7 @@ game.__boot = (state) => bootGame(state);
 // Exposed for the browser check, which measures every drawing's geometry —
 // a clipped muzzle can't be seen from the markup alone.
 import('./ui/art.js').then((art) => { window.__plugsimArt = art; }).catch(() => {});
+import('./game/incidents.js').then((m) => { window.__plugsimIncidents = m; }).catch(() => {});
 
 game.sellItemTo = (itemId, playerId) => {
   diag.trace('sell item to operation');
@@ -427,6 +430,24 @@ game.renameBuilding = (buildingId, name) => {
   if (!r.ok) return toast(r.error, 'bad');
   game.buildingLayer.sync(game.state);
   game.ui.render();
+};
+
+/**
+ * Open something that's happening. Marks it seen and takes you to whatever it
+ * is about, so an incident is a way into the game rather than a notification.
+ */
+game.openIncident = (inc) => {
+  const s = game.state;
+  markSeen(s, inc.id);
+  diag.trace('open incident');
+  const def = INCIDENTS[inc.type];
+  if (def) {
+    toast(`${def.name}${inc.detail ? ' — ' + inc.detail : ''}. ${def.blurb}`,
+      def.tone === 'good' ? 'good' : def.tone === 'warn' ? 'info' : 'bad', 7000);
+  }
+  if (inc.buildingId && buildingById(s, inc.buildingId)) game.select('building', inc.buildingId);
+  else if (inc.districtId) game.select('district', inc.districtId);
+  game.incidentLayer.sync(s);
 };
 
 game.dismissHelper = () => {
@@ -454,6 +475,9 @@ function bootGame(state) {
   });
   game.lotLayer = new LotLayer(game.map, {
     onSelect: (lot) => game.select('lot', lot.id),
+  });
+  game.incidentLayer = new IncidentLayer(game.map, {
+    onSelect: (inc) => game.openIncident(inc),
   });
   game.lotLayer.setDistricts(state.districts);
   game.lotLayer.setAll(state.lots || []);
@@ -615,6 +639,7 @@ function startLoop() {
     game.buildingLayer.sync(game.state);
     game.courierLayer.sync(game.state);
     game.routeLayer.sync(game.state);
+    game.incidentLayer.sync(game.state);
     game.ui.renderHud();
 
     sincePanelRender += realSeconds;

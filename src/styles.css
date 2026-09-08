@@ -1070,3 +1070,60 @@ kbd {
   background: color-mix(in srgb, var(--sodium) 12%, transparent);
 }
 @media (max-width: 780px) { .hud__pulse { display: none; } }
+
+/* --- Things happening, on the map ------------------------------------------
+   These are meant to be found by looking, so they read at a glance without
+   shouting: a glyph until you hover, the whole story when you do. */
+.imark {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 22px;
+  padding: 0 3px;
+  border-radius: 999px;
+  border: 1px solid currentColor;
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  backdrop-filter: blur(6px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: gap .18s ease, padding .18s ease;
+}
+.imark--bad  { color: var(--bad); }
+.imark--warn { color: var(--warn); }
+.imark--good { color: var(--good); }
+
+.imark__glyph {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  line-height: 1;
+  flex: none;
+}
+.imark__label {
+  max-width: 0;
+  overflow: hidden;
+  font: 600 10px/1 var(--font-display);
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  transition: max-width .22s ease, margin .22s ease;
+}
+.imark:hover { gap: 5px; padding-right: 8px; }
+.imark:hover .imark__label { max-width: 20ch; }
+
+/* Unseen ones breathe, so something new catches the eye without a banner. */
+.imark.is-new { animation: imark-pulse 1.9s ease-out infinite; }
+.imark.is-seen { opacity: .7; border-style: dashed; }
+@keyframes imark-pulse {
+  0%   { box-shadow: 0 0 0 0 currentColor; }
+  70%  { box-shadow: 0 0 0 9px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) { .imark.is-new { animation: none; } }
+
+/* On a phone the labels would cover the map; the glyph is enough. */
+@media (max-width: 780px) {
+  .imark:hover { gap: 0; padding-right: 3px; }
+  .imark:hover .imark__label { max-width: 0; }
+}

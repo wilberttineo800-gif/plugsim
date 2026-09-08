@@ -18,6 +18,7 @@ import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
+import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
 import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
 import { rentPerDay } from './lots.js';
 import {
@@ -158,6 +159,13 @@ function stepProduction(state, dt) {
 
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
 
+    // A licensed workshop is only a workshop while the licence holds.
+    const needs = def.needsLicence;
+    if (needs && !hasLicence(state, needs)) {
+      b.stalledReason = `No ${LICENCES[needs].short} — the line is shut until it's in force`;
+      continue;
+    }
+
     const fx = effectsFor(b);
     const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
     if (b.raw[def.product] >= cap) {
@@ -181,8 +189,14 @@ function stepProduction(state, dt) {
     if (b.cycleProgress >= 1) {
       b.cycleProgress = 0;
       b.cycleStarted = false;
-      const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b);
-      const quality = clamp01(def.baseQuality + fx.qualityAdd);
+      // A firearms shop makes whatever it's tooled for, and a shotgun is not a
+      // suppressor: simpler things come off the line faster.
+      const lineMult = def.product === 'iron' ? classOf(b).yieldMult : 1;
+      const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b) * lineMult;
+      // A rifle line turns out fewer, better units than a shotgun line; that
+      // shows up as quality, which is what the market actually prices.
+      const lineQuality = def.product === 'iron' ? (classOf(b).valueMult - 1) * 0.12 : 0;
+      const quality = clamp01(def.baseQuality + fx.qualityAdd + lineQuality);
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);
       b.rawQuality[def.product] = blendQuality(
@@ -202,6 +216,13 @@ function stepLabs(state, dt) {
     const def = buildingDef(b);
     b.stalledReason = null;
     if (!b.active) { b.stalledReason = 'Shut down'; continue; }
+
+    // A licensed workshop is only a workshop while the licence holds.
+    const needs = def.needsLicence;
+    if (needs && !hasLicence(state, needs)) {
+      b.stalledReason = `No ${LICENCES[needs].short} — the line is shut until it's in force`;
+      continue;
+    }
 
     const fx = effectsFor(b);
     const packCap = def.capacity * fx.capacityMult * sizeCapacity(b);
@@ -586,6 +607,34 @@ function stepLegit(state, dt) {
     const d = districtById(state, b.districtId);
     b.stalledReason = null;
 
+    // A licensed counter is the other way out for firearms: less money than the
+    // street pays, but it's clean, it's quiet, and nobody gets raided for it.
+    if (def.sellsLegally) {
+      if (!hasLicence(state, def.needsLicence)) {
+        b.stalledReason = `No ${LICENCES[def.needsLicence].short} — the counter is shut`;
+        continue;
+      }
+      const pid = def.sellsLegally;
+      const stock = b.packs ? b.packs[pid] : 0;
+      if (stock > 0.0001) {
+        const fxL = effectsFor(b);
+        const rate = (def.capacity / 24) * 0.28 * fxL.yieldMult * sizeScale(b) * dt;
+        const move = Math.min(stock, rate);
+        // Legal price is the street price less what the paperwork costs you.
+        // Priced off what the block pays, less what the paperwork costs you.
+        // Quality still counts — a licensed shop sells a better unit.
+        const quality = b.packQuality ? b.packQuality[pid] : 0.6;
+        const unit = streetPrice(d, pid) * legalPriceFactor(b) * (0.75 + quality * 0.5);
+        const takings = move * unit;
+        b.packs[pid] -= move;
+        b.soldToday = (b.soldToday || 0) + move;
+        state.cash.clean += takings;
+        state.stats.legalRevenue = (state.stats.legalRevenue || 0) + takings;
+        state.stats.legalUnitsSold = (state.stats.legalUnitsSold || 0) + move;
+        b.earnedToday = (b.earnedToday || 0) + takings;
+      }
+    }
+
     // Takings scale with the money on the block, the floorplate and upgrades.
     const wealth = d ? d.wealth : 0.5;
     const swing = LEGIT_WEALTH_SWING * (def.wealthSensitivity || 1);
@@ -750,7 +799,10 @@ function stepHeat(state, dt) {
     if (!d) continue;
     // A building's own footprint, amplified by how heavily policed the block is.
     const policeFactor = 0.6 + d.policing * 0.9;
-    d.heat = clamp(d.heat + def.heatPerDay * effectsFor(b).heatMult * policeFactor * (dt / 24), 0, HEAT.max);
+    const lineHeat = def.product === 'iron' ? classOf(b).heatMult : 1;
+    d.heat = clamp(
+      d.heat + def.heatPerDay * effectsFor(b).heatMult * lineHeat * policeFactor * (dt / 24),
+      0, HEAT.max);
   }
 
   // Attention bleeds outward. Without this you could dump on a hot block
@@ -900,9 +952,45 @@ export function recordPrices(state) {
 
 // --- Daily settlement -------------------------------------------------------
 
+/**
+ * Applications come back, and licences lapse if you don't renew them. Both
+ * happen on the day boundary, because that's the pace paperwork moves at.
+ */
+function stepLicences(state) {
+  state.licences = state.licences || {};
+  for (const id of Object.keys(state.licences)) {
+    const rec = state.licences[id];
+    const def = LICENCES[id];
+    if (!def || !rec) continue;
+
+    if (rec.status === 'pending') {
+      rec.daysLeft -= 1;
+      if (rec.daysLeft <= 0) {
+        rec.status = 'active';
+        rec.daysLeft = 0;
+        rec.renewsInDays = 365;
+        logEvent(state, `${def.name} came through. You're licensed.`, 'good');
+      }
+      continue;
+    }
+
+    if (rec.status === 'active') {
+      rec.renewsInDays = (rec.renewsInDays ?? 365) - 1;
+      if (rec.renewsInDays === 30) {
+        logEvent(state, `${def.name} is up for renewal in a month — $${def.renewalPerYear.toLocaleString()}.`, 'info');
+      }
+      if (rec.renewsInDays <= 0) {
+        rec.status = 'lapsed';
+        logEvent(state, `${def.name} has lapsed. Anything that needed it has stopped.`, 'bad');
+      }
+    }
+  }
+}
+
 function settleDay(state) {
   state.fixerUsedToday = 0;
   checkUnlocks(state);
+  stepLicences(state);
 
   let upkeep = 0;
   for (const b of state.buildings) {

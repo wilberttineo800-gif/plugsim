@@ -8,6 +8,7 @@ import { createState, createRoute, saveGame, loadGame } from '../src/game/state.
 import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
+import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
@@ -462,6 +463,112 @@ print('=== 13. property has depth: storeys, flats, work and crime ===');
         'hot ' + hot.crime.toFixed(2) + ' vs calm ' + calm.crime.toFixed(2));
   check('a bad block is worth less', hot.marketIndex < calm.marketIndex,
         'hot ' + hot.marketIndex.toFixed(2) + ' vs calm ' + calm.marketIndex.toFixed(2));
+}
+
+print('');
+print('=== 14. firearms: two ways out, and paperwork to use one ===');
+{
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 900000;
+  for (const d of st.districts) d.heat = 0;
+
+  // The ladder is real: you can't jump to a manufacturer's licence.
+  check('a manufacturer licence needs a dealer licence first',
+        !A.applyForLicence(st, 'ffl07').ok, A.applyForLicence(st, 'ffl07').error);
+  const a1 = A.applyForLicence(st, 'ffl01');
+  check('a dealer licence can be applied for', a1.ok, a1.ok ? a1.licence.short : a1.error);
+  check('it does not arrive instantly', !hasLicence(st, 'ffl01'));
+  check('applying twice is refused', !A.applyForLicence(st, 'ffl01').ok);
+
+  // It takes weeks, and then it's in force.
+  for (let d = 0; d < LICENCES.ffl01.processingDays + 1; d++) stepSim(st, 24, {});
+  check('it comes through after the processing time', hasLicence(st, 'ffl01'));
+
+  // They look at your record.
+  const st2 = world();
+  st2.cash.clean = 900000;
+  st2.districts[0].heat = 95;
+  check('a licence is refused when you are too hot',
+        !A.applyForLicence(st2, 'ffl01').ok, A.applyForLicence(st2, 'ffl01').error);
+
+  // A licensed workshop is dead without its licence.
+  const st3 = world();
+  st3.adminUnlockAll = true;
+  st3.cash.clean = 900000;
+  const shop = open(st3, 'gunsmith');
+  stepSim(st3, 40, {});
+  check('a licensed shop will not run unlicensed',
+        shop.raw.iron === 0 && /FFL 07/.test(shop.stalledReason || ''),
+        shop.stalledReason);
+
+  // Tooling changes what comes off the line.
+  const st4 = world();
+  st4.adminUnlockAll = true;
+  st4.cash.clean = 900000;
+  const back = open(st4, 'machine_shop');
+  A.setProductionLine(st4, back.id, 'shotgun');
+  stepSim(st4, 24 * 4, {});
+  const shotguns = back.raw.iron;
+
+  const st5 = world();
+  st5.adminUnlockAll = true;
+  st5.cash.clean = 900000;
+  const back2 = open(st5, 'machine_shop');
+  A.setProductionLine(st5, back2.id, 'rifle');
+  stepSim(st5, 24 * 4, {});
+  check('a shotgun line out-produces a rifle line', shotguns > back2.raw.iron,
+        shotguns.toFixed(1) + ' shotguns vs ' + back2.raw.iron.toFixed(1) + ' rifles');
+  check('but rifles are the better unit',
+        back2.rawQuality.iron > back.rawQuality.iron,
+        back2.rawQuality.iron.toFixed(2) + ' vs ' + back.rawQuality.iron.toFixed(2));
+
+  // A back room can build anything; a licensed shop needs the stamp.
+  check('a back room will tool for NFA without paperwork',
+        A.setProductionLine(st4, back.id, 'nfa').ok);
+  const st6 = world();
+  st6.adminUnlockAll = true;
+  st6.cash.clean = 900000;
+  st6.licences = { ffl01: { id: 'ffl01', status: 'active', renewsInDays: 365 },
+                   ffl07: { id: 'ffl07', status: 'active', renewsInDays: 365 } };
+  const legal = open(st6, 'gunsmith');
+  check('a licensed shop will not tool for NFA without the stamp',
+        !A.setProductionLine(st6, legal.id, 'nfa').ok);
+
+  // And the legal counter pays less than the street, into clean money.
+  check('legal margins are below street value',
+        Object.values(FIREARM_CLASSES).every((c) => c.legalMargin < 1));
+
+  // The counter actually works: stock in, clean money out, no heat.
+  const st8 = world();
+  st8.adminUnlockAll = true;
+  st8.cash.clean = 900000;
+  st8.licences = { ffl01: { id: 'ffl01', status: 'active', renewsInDays: 365 } };
+  const store = open(st8, 'gun_store');
+  check('a gun store holds stock', !!store.packs, store.packs ? 'yes' : 'no packs map');
+  if (store.packs) {
+    store.packs.iron = 40;
+    store.packQuality.iron = 0.7;
+    const cleanBefore = st8.cash.clean;
+    const dirtyBefore = st8.cash.dirty;
+    const heatBefore = st8.districts.find((d) => d.id === store.districtId).heat;
+    stepSim(st8, 24, {});
+    check('it sells iron over the counter', store.packs.iron < 40,
+          (40 - store.packs.iron).toFixed(1) + ' units moved');
+    check('into clean money, not street money', st8.cash.clean > cleanBefore
+          && Math.abs(st8.cash.dirty - dirtyBefore) < 0.01,
+          'clean +$' + Math.round(st8.cash.clean - cleanBefore));
+    const heatAfter = st8.districts.find((d) => d.id === store.districtId).heat;
+    check('and it is quiet', heatAfter - heatBefore < 1,
+          'heat ' + heatBefore.toFixed(2) + ' -> ' + heatAfter.toFixed(2));
+  }
+
+  // A licence lapses if it isn't renewed.
+  const st7 = world();
+  st7.licences = { ffl01: { id: 'ffl01', status: 'active', renewsInDays: 2 } };
+  for (let d = 0; d < 4; d++) stepSim(st7, 24, {});
+  check('a licence lapses when it is not renewed', !hasLicence(st7, 'ffl01'),
+        st7.licences.ffl01.status);
 }
 
 print('');

@@ -11,6 +11,7 @@ import {
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
+import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgradeById, rentUpgrades, rentEffects,
@@ -306,6 +307,73 @@ export function improveRental(state, lotId, upgradeId) {
     `${u.name} finished at ${lot.name}. Rent goes from $${before.toLocaleString()} to $${after.toLocaleString()} a day.`,
     'good');
   return { ok: true, upgrade: u, before, after, cost: u.cost };
+}
+
+// --- Firearms licensing -----------------------------------------------------
+
+/**
+ * Put in for a licence. It costs money now and takes weeks to come back, and
+ * they look at your record before they grant it.
+ */
+export function applyForLicence(state, id) {
+  const def = LICENCES[id];
+  if (!def) return { ok: false, error: 'No such licence.' };
+  const gate = canApply(state, id);
+  if (!gate.ok) return { ok: false, error: gate.reason };
+  if (!canAfford(state, def.cost)) {
+    return { ok: false, error: `${def.name} costs $${def.cost.toLocaleString()} clean to file.` };
+  }
+
+  spendClean(state, def.cost);
+  state.licences = state.licences || {};
+  state.licences[id] = {
+    id,
+    status: 'pending',
+    daysLeft: def.processingDays,
+    // Renewal falls due a year after it's granted.
+    renewsInDays: null,
+  };
+  logEvent(state,
+    `Filed for ${def.name}. They'll take about ${def.processingDays} days over it.`,
+    'info');
+  return { ok: true, licence: def };
+}
+
+/** Pay the renewal on a licence you already hold. */
+export function renewLicence(state, id) {
+  const def = LICENCES[id];
+  const rec = licenceRecord(state, id);
+  if (!def || !rec || rec.status !== 'active') return { ok: false, error: 'You do not hold that.' };
+  if (!canAfford(state, def.renewalPerYear)) {
+    return { ok: false, error: `Renewal is $${def.renewalPerYear.toLocaleString()} clean.` };
+  }
+  spendClean(state, def.renewalPerYear);
+  rec.renewsInDays = 365;
+  logEvent(state, `${def.name} renewed for another year.`, 'good');
+  return { ok: true, licence: def };
+}
+
+/** Tool a firearms shop for a different category of weapon. */
+export function setProductionLine(state, buildingId, lineId) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such workshop.' };
+  const def = BUILDINGS[b.type];
+  if (def.product !== 'iron') return { ok: false, error: 'That is not a firearms shop.' };
+  const cls = FIREARM_CLASSES[lineId];
+  if (!cls) return { ok: false, error: 'Unknown category.' };
+  if (b.line === lineId) return { ok: false, error: 'Already tooled for that.' };
+
+  // NFA is a paperwork problem before it's an engineering one — but only if
+  // you're pretending to be legitimate. A back room does what it likes.
+  if (cls.requiresLicence && def.needsLicence && !hasLicence(state, cls.requiresLicence)) {
+    return { ok: false, error: `${cls.name} need a ${LICENCES[cls.requiresLicence].short} to make lawfully.` };
+  }
+
+  b.line = lineId;
+  // Retooling costs you the cycle you were in.
+  b.cycleProgress = 0;
+  logEvent(state, `${b.name} retooled for ${cls.name.toLowerCase()}.`, 'info');
+  return { ok: true, line: cls };
 }
 
 export { availableUpgrades, effectsFor };

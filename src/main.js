@@ -302,6 +302,29 @@ game.improveRental = (lotId, upgradeId) => {
   game.ui.render();
 };
 
+game.applyForLicence = (id) => {
+  diag.trace('apply licence');
+  const r = A.applyForLicence(game.state, id);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Application filed for ${r.licence.short}.`, 'good', 3600);
+  game.ui.render();
+};
+
+game.renewLicence = (id) => {
+  const r = A.renewLicence(game.state, id);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.licence.short} renewed.`, 'good');
+  game.ui.render();
+};
+
+game.setProductionLine = (buildingId, lineId) => {
+  diag.trace('retool');
+  const r = A.setProductionLine(game.state, buildingId, lineId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Retooled for ${r.line.name.toLowerCase()}.`, 'good', 3000);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

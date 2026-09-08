@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -44,6 +44,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     speedIndex: 3,
     cash: { clean: START_CASH_CLEAN, dirty: START_CASH_DIRTY },
     hqBuildingId: null,
+    licences: {},
     playerAt: origin ? { ...origin } : null,
     followMe: false,
     tutorialDone: [],
@@ -292,6 +293,11 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 15) {
+    // Firearms licensing arrived in 15; an existing run simply holds none.
+    if (!data.licences) data.licences = {};
+  }
 
   if (data.version < 14) {
     // Vehicles gained a circuit in 14; an existing one keeps the single line

@@ -11,6 +11,7 @@ import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
+import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -236,6 +237,9 @@ export class GameUI {
       case 'set-hq': g.setHeadquarters(id); break;
       case 'drop-line': g.dropLine(id, type); break;
       case 'improve-rental': g.improveRental(id, type); break;
+      case 'apply-licence': g.applyForLicence(type); break;
+      case 'renew-licence': g.renewLicence(type); break;
+      case 'set-line': g.setProductionLine(id, type); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -536,6 +540,77 @@ export class GameUI {
         pays more.
       </p>
       ${cards}
+    </div>` + this.licenceBlock();
+  }
+
+  /**
+   * Firearms paperwork. Two ways to sell iron — over a counter with a licence,
+   * or on the street for a lot more and a lot more risk — and this is where the
+   * legal route gets bought.
+   */
+  licenceBlock() {
+    const s = this.game.state;
+    const worstHeat = Math.round(Math.max(0, ...s.districts.map((d) => d.heat || 0)));
+
+    const rows = LICENCE_IDS.map((id) => {
+      const def = LICENCES[id];
+      const rec = licenceRecord(s, id);
+      const gate = canApply(s, id);
+      const short = s.cash.clean < def.cost;
+
+      if (rec && rec.status === 'active') {
+        const due = Math.max(0, Math.round(rec.renewsInDays ?? 365));
+        return `<div class="card">
+          <div class="card__head">
+            <span class="card__name">${esc(def.name)}</span>
+            <span class="card__cost good">in force</span>
+          </div>
+          <div class="card__meta">
+            <span class="${due < 45 ? 'warn' : ''}">renews in ${due} days</span>
+            <span>${money(def.renewalPerYear)}/year</span>
+          </div>
+          ${due < 60 ? `<div class="btnrow">
+            <button class="ghostbtn" data-action="renew-licence" data-type="${id}">
+              Renew now · ${moneyShort(def.renewalPerYear)}</button>
+          </div>` : ''}
+        </div>`;
+      }
+
+      if (rec && rec.status === 'pending') {
+        return `<div class="card">
+          <div class="card__head">
+            <span class="card__name">${esc(def.name)}</span>
+            <span class="card__cost warn">with the examiner</span>
+          </div>
+          <div class="card__meta"><span>${Math.ceil(rec.daysLeft)} days to go</span></div>
+        </div>`;
+      }
+
+      const blocked = !gate.ok || short;
+      return `<button class="card ${blocked ? 'is-locked' : ''}"
+        data-action="apply-licence" data-type="${id}" ${blocked ? 'disabled' : ''}>
+        <div class="card__head">
+          <span class="card__name">${esc(def.name)}</span>
+          <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(def.cost)}</span>
+        </div>
+        <div class="card__blurb">${esc(def.blurb)}</div>
+        <div class="card__meta">
+          <span>${def.processingDays} days to come back</span>
+          <span>${money(def.renewalPerYear)}/year after</span>
+          ${rec && rec.status === 'lapsed' ? '<span class="bad">lapsed</span>' : ''}
+        </div>
+        ${!gate.ok ? `<div class="card__meta"><span class="warn">${esc(gate.reason)}</span></div>` : ''}
+      </button>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Firearms licensing</span><span>heat ${worstHeat}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        Iron sells two ways. Over a counter it's clean money at legal prices, and
+        nobody comes through the door. Unserialised on the street it's worth far
+        more, and it's the hottest thing you can move.
+      </p>
+      ${rows}
     </div>`;
   }
 
@@ -1551,6 +1626,7 @@ export class GameUI {
           ${effectsFor(b).raidResist > 0 ? `<div class="row"><span>Raid resistance</span><span class="good">${pct(effectsFor(b).raidResist)}</span></div>` : ''}
         </div>
       </div>
+      ${this.firearmLineBlock(b)}
       ${this.upgradeBlock(b)}
       <div class="btnrow">
         ${b.kind !== 'front' ? `<button class="primarybtn" data-action="route-from" data-id="${b.id}" data-tab="routes">Ship from here</button>` : ''}
@@ -1645,6 +1721,51 @@ export class GameUI {
           ${open.length ? open.map(row).join('') : '<div class="empty">Nothing left worth doing.</div>'}
           ${done.length ? `<div class="sect__title" style="margin-top:10px"><span>Done</span></div>
             <div class="chips">${done.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}
+        </div>
+      </details>`;
+  }
+
+  /** What a firearms shop is tooled for, and what else it could be. */
+  firearmLineBlock(b) {
+    const s = this.game.state;
+    const def = BUILDINGS[b.type];
+    if (def.product !== 'iron') return '';
+
+    const current = classOf(b);
+    const licensed = !!def.needsLicence;
+    const rows = FIREARM_CLASS_IDS.map((id) => {
+      const cls = FIREARM_CLASSES[id];
+      const live = cls.id === current.id;
+      // A licensed shop can't tool for NFA without the stamp; a back room can.
+      const blocked = live
+        || (licensed && cls.requiresLicence && !hasLicence(s, cls.requiresLicence));
+      const why = cls.requiresLicence && licensed && !hasLicence(s, cls.requiresLicence)
+        ? `Needs ${LICENCES[cls.requiresLicence].short}` : null;
+      return `<button class="card ${live ? '' : blocked ? 'is-locked' : ''}"
+        data-action="set-line" data-id="${b.id}" data-type="${id}" ${blocked ? 'disabled' : ''}>
+        <div class="card__head">
+          <span class="card__name">${live ? '▸ ' : ''}${esc(cls.name)}</span>
+          <span class="card__cost" style="color:var(--text-dim)">${cls.valueMult.toFixed(2)}× value</span>
+        </div>
+        <div class="card__blurb">${esc(cls.blurb)}</div>
+        <div class="card__meta">
+          <span class="${cls.yieldMult >= 1 ? 'good' : 'warn'}">${cls.yieldMult.toFixed(2)}× output</span>
+          <span class="${cls.heatMult <= 1 ? 'good' : 'bad'}">${cls.heatMult.toFixed(2)}× heat</span>
+          ${why ? `<span class="warn">${esc(why)}</span>` : ''}
+        </div>
+      </button>`;
+    }).join('');
+
+    return `
+      <details class="upgrades" data-disc="line-${b.id}"
+        ${this.discOpen(`line-${b.id}`, false) ? 'open' : ''}>
+        <summary><span>Tooled for</span>
+          <span class="upgrades__count">${esc(current.name)}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">
+            Retooling costs you the cycle you're part-way through.
+          </p>
+          ${rows}
         </div>
       </details>`;
   }

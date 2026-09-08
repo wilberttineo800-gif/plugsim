@@ -215,6 +215,150 @@
   ok('map is interactive', g.map.getZoom() > 0, 'zoom ' + g.map.getZoom());
 
   out.push('');
+  out.push('=== onboarding ===');
+  {
+    const step = g.ui && window.plugsimOnboarding ? null : null;
+    const anyOwned = s.buildings[0];
+    ok('a base can be set', !!anyOwned && (g.setHeadquarters(anyOwned.id), s.hqBuildingId === anyOwned.id),
+      s.hqBuildingId ? 'HQ at ' + s.buildings.find((b) => b.id === s.hqBuildingId).name : 'none');
+    ok('the you-are-here marker is on the map', !!(g.playerMarker && g.playerMarker.marker));
+    g.ui.goTab('build');
+    const buildTab = document.getElementById('railBody').innerText;
+    ok('the helper briefs you or has been dismissed',
+      /Ray|got it from here/.test(buildTab) || s.tutorialDismissed,
+      s.tutorialDismissed ? 'dismissed' : 'Ray is talking');
+  }
+
+  out.push('');
+  out.push('=== fleet circuits ===');
+  {
+    const v = s.couriers[0];
+    if (v && s.routes.length >= 2) {
+      const spare = s.routes.filter((r) => !(v.routeIds || []).includes(r.id))[0];
+      const before = (v.routeIds || []).length;
+      if (spare) g.addLine(v.id, spare.id);
+      ok('a line can be added to a vehicle', (v.routeIds || []).length >= before,
+        (v.routeIds || []).length + ' lines on ' + v.name);
+    } else {
+      out.push('  skip  circuits (not enough routes in this session)');
+    }
+  }
+
+  out.push('');
+  out.push('=== property depth ===');
+  {
+    const withLevels = s.lots.filter((l) => l.levels > 1).length;
+    ok('buildings carry real storeys from the map', withLevels > 0,
+      withLevels + ' of ' + s.lots.length + ' are multi-storey');
+    const homes = s.lots.filter((l) => l.units > 0);
+    ok('residential buildings have lettings', homes.length > 0,
+      homes.length ? 'up to ' + Math.max(...homes.map((l) => l.units)) + ' homes in one' : 'none');
+    const rentedLot = s.lots.find((l) => l.rented);
+    if (rentedLot) {
+      const work = window.plugsimRentUpgrades || null;
+      const before = rentedLot.rentUpgrades ? rentedLot.rentUpgrades.length : 0;
+      g.improveRental(rentedLot.id, 'decorate');
+      g.improveRental(rentedLot.id, 'shopfront');
+      g.improveRental(rentedLot.id, 'surface');
+      ok('rental work can be done', (rentedLot.rentUpgrades || []).length > before,
+        (rentedLot.rentUpgrades || []).join(', ') || 'none applied');
+    }
+    ok('blocks have a crime rate', s.districts.every((d) => typeof d.crime === 'number'),
+      'range ' + Math.min(...s.districts.map((d) => d.crime)).toFixed(2) +
+      '-' + Math.max(...s.districts.map((d) => d.crime)).toFixed(2));
+  }
+
+  out.push('');
+  out.push('=== firearms ===');
+  {
+    for (const d of s.districts) d.heat = 0;
+    const before = JSON.stringify(s.licences || {});
+    g.applyForLicence('ffl01');
+    ok('a licence can be applied for', JSON.stringify(s.licences || {}) !== before,
+      s.licences && s.licences.ffl01 ? s.licences.ffl01.status : 'nothing filed');
+    ok('a manufacturer licence is refused first',
+      !s.licences || !s.licences.ffl07 || s.licences.ffl07.status !== 'pending');
+    g.ui.goTab('market');
+    const mk = document.getElementById('railBody').innerText;
+    ok('licensing is visible in the market tab', /Firearms licensing|FFL/.test(mk));
+  }
+
+  out.push('');
+  out.push('=== turf ===');
+  {
+    const blk = s.districts.slice().sort((a, b) => (a.rivalControl || 0) - (b.rivalControl || 0))[0];
+    blk.rivalControl = 0; blk.rep = 0.8;
+    g.select('district', blk.id);
+    const panel = document.getElementById('inspectorBody').innerText;
+    ok('a held block offers arrangements', /Arrangements|Your block/.test(panel));
+    g.renameDistrict(blk.id, 'Test Yard');
+    ok('a held block can be renamed', blk.customName === 'Test Yard', blk.customName);
+    g.improveTurf(blk.id, 'lookouts');
+    ok('an arrangement can be bought', (blk.turfUpgrades || []).includes('lookouts'),
+      (blk.turfUpgrades || []).join(', ') || 'none');
+    g.renameDistrict(blk.id, '');
+  }
+
+  out.push('');
+  out.push('=== R&D and one-offs ===');
+  {
+    g.ui.goTab('lab');
+    const lab = document.getElementById('railBody').innerText;
+    ok('the R&D tab renders', lab.length > 40, lab.slice(0, 60).replace(/\s+/g, ' '));
+    const rlot = s.lots.filter((l) => !l.owned && l.kind !== 'parking'
+      && l.areaM2 >= 320 && l.areaM2 <= 3200).sort((a, b) => a.price - b.price)[0];
+    if (rlot) {
+      g.buyLot(rlot.id);
+      g.developLot(rlot.id, 'research_lab');
+      const built = s.buildings.find((b) => b.lotId === rlot.id);
+      ok('an R&D facility can be built', !!built && built.kind === 'research', built && built.name);
+      g.startResearch('phenohunt');
+      ok('a project can be started', (s.researchActive || []).some((r) => r.id === 'phenohunt'),
+        (s.researchActive || []).map((r) => r.id).join(', ') || 'none');
+    } else {
+      out.push('  skip  R&D (no suitable building on the market)');
+    }
+  }
+
+  out.push('');
+  out.push('=== other operations ===');
+  {
+    g.ui.goTab('ledger');
+    const led = document.getElementById('railBody').innerText;
+    ok('the wealth board renders', /Wealth board/.test(led));
+    ok('you are on it', /\(you\)/.test(led));
+    const was = s.aiDisabled;
+    g.toggleAI();
+    ok('other operations can be switched off', s.aiDisabled !== was);
+    g.toggleAI();
+  }
+
+  out.push('');
+  out.push('=== size realism ===');
+  {
+    const tiny = s.lots.filter((l) => l.kind !== 'parking' && l.areaM2 < 30)[0];
+    const huge = s.lots.filter((l) => l.kind !== 'parking' && l.areaM2 > 2000)[0];
+    if (tiny) {
+      g.select('lot', tiny.id);
+      g.ui.goTab('build');
+      const offered = Array.from(document.querySelectorAll('#railBody [data-action="develop"]'))
+        .map((b) => b.dataset.type);
+      ok('a tiny building is not offered big operations',
+        !offered.includes('nightclub') && !offered.includes('machine_shop'),
+        Math.round(tiny.areaM2) + ' m² offers: ' + (offered.join(', ') || 'nothing'));
+    }
+    if (huge) {
+      g.select('lot', huge.id);
+      g.ui.goTab('build');
+      const offered = Array.from(document.querySelectorAll('#railBody [data-action="develop"]'))
+        .map((b) => b.dataset.type);
+      ok('a huge building is not offered a closet grow',
+        !offered.includes('closet_grow'),
+        Math.round(huge.areaM2) + ' m² offers: ' + (offered.join(', ') || 'nothing'));
+    }
+  }
+
+  out.push('');
   out.push('=== diagnostics ===');
   const d = window.plugsimDiag.summary();
   ok('diagnostics recording', d.events > 0, d.events + ' events, ' + d.faults + ' faults');

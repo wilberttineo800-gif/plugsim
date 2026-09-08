@@ -10,9 +10,9 @@ if [ "$MODE" = "lan" ]; then
   echo "Plugsim → http://localhost:$PORT"
   [ -n "$IP" ] && echo "  on your phone (same Wi-Fi) → http://$IP:$PORT"
   echo "  (reachable by anything on your network)"
-  exec python3 -m http.server "$PORT" --bind 0.0.0.0
+  exec python3 tools/devserver.py "$PORT" 0.0.0.0
 fi
 
 echo "Plugsim → http://localhost:$PORT"
 echo "  (this machine only; use './run.sh $PORT lan' for your phone)"
-exec python3 -m http.server "$PORT" --bind 127.0.0.1
+exec python3 tools/devserver.py "$PORT" 127.0.0.1

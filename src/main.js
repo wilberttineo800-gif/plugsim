@@ -12,7 +12,7 @@ import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
 } from './game/state.js';
-import { stepSim, recordPrices } from './game/sim.js';
+import { stepSim, recordPrices, catchUp } from './game/sim.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
 import { BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, pingIncident } from './map/entities.js';
@@ -260,6 +260,15 @@ function bootGame(state) {
   }
 
   if (!Object.keys(state.priceHistory || {}).length) recordPrices(state);
+
+  // The world doesn't stop because you closed the tab. Run it forward over the
+  // time you were away, then say what happened while you were gone.
+  if (state.savedAt) {
+    const away = catchUp(state, Date.now() - state.savedAt);
+    if (away) game.awayReport = away;
+    delete state.savedAt;
+  }
+
   game.ui = new GameUI(game);
   sealStartScreen();
   game.ui.show();
@@ -273,6 +282,26 @@ function bootGame(state) {
   game.autosave = setInterval(() => {
     if (game.state && !game.saveDisabled) saveGame(game.state);
   }, 60000);
+
+  if (game.awayReport) {
+    const a = game.awayReport;
+    const span = a.hours >= 48
+      ? `${Math.round(a.hours / 24)} days`
+      : a.hours >= 1.5 ? `${Math.round(a.hours)} hours` : `${Math.round(a.hours * 60)} minutes`;
+    const made = a.earnedClean + a.earnedDirty;
+    const bits = [`${span} passed while you were gone`];
+    if (a.trips) bits.push(`${a.trips} deliveries ran`);
+    if (Math.abs(made) > 1) {
+      bits.push(`${made >= 0 ? 'took' : 'lost'} $${Math.abs(Math.round(made)).toLocaleString('en-US')}`);
+    }
+    if (a.incidents) bits.push(`${a.incidents} run-in${a.incidents === 1 ? '' : 's'} with police`);
+    logEvent(state, bits.join(' · ') + '.', made >= 0 ? 'good' : 'bad');
+    toast(bits.join(' · ') + '.', made >= 0 ? 'good' : 'bad', 9000);
+    if (a.capped) {
+      toast('The trail goes cold after a week — the world caught up that far.', 'info', 7000);
+    }
+    game.awayReport = null;
+  }
 
   if (!state.buildings.length) {
     toast('Zoom in, click a building you like, and buy it. Press ? for the rundown.', 'info', 8000);

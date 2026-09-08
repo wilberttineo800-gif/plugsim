@@ -262,6 +262,8 @@ export function saveGame(state) {
       ...state,
       selection: null,
       idCounter,
+      // Wall-clock stamp, so the world can catch up on what it missed.
+      savedAt: Date.now(),
       lots: (state.lots || []).filter((l) => l.owned),
       loadedTiles: [],
     };

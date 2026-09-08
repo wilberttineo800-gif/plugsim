@@ -4,8 +4,8 @@
 
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
-import { createState, createRoute } from '../src/game/state.js';
-import { stepSim, cityPrice } from '../src/game/sim.js';
+import { createState, createRoute, saveGame, loadGame } from '../src/game/state.js';
+import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats } from '../src/game/upgrades.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
@@ -235,6 +235,62 @@ print('=== 9. every button in the UI reaches a real action ===');
   const shopped = A.upgradeCourier(st3, v3.id, 'seats').cost;
   check('an auto shop discounts fitting work', shopped < plain,
         '$' + plain + ' -> $' + shopped);
+}
+
+print('');
+print('=== 10. the world keeps running while you are away ===');
+{
+  const st = world();
+  const grow = open(st, 'grow_house');
+  const before = grow.raw.weed;
+
+  // Eight hours away should look like eight hours of play, not a reset and not
+  // a jackpot.
+  const away = catchUp(st, 8 * 3600000, {});
+  check('an away spell advances the world', away && away.hours === 8,
+        away ? away.hours + 'h, day +' + away.days : 'nothing happened');
+  check('production ran while away', grow.raw.weed > before,
+        before.toFixed(1) + ' -> ' + grow.raw.weed.toFixed(1) + ' raw');
+
+  // Same elapsed time, played through rather than away: within a few percent.
+  const st2 = world();
+  const grow2 = open(st2, 'grow_house');
+  for (let h = 0; h < 8; h += 0.05) stepSim(st2, 0.05, {});
+  const gap = Math.abs(grow2.raw.weed - grow.raw.weed) / Math.max(1, grow2.raw.weed);
+  check('away matches having played it', gap < 0.05,
+        'played ' + grow2.raw.weed.toFixed(1) + ' vs away ' + grow.raw.weed.toFixed(1));
+
+  // A very long absence is capped rather than run forever.
+  const st3 = world();
+  open(st3, 'grow_house');
+  const long = catchUp(st3, 90 * 24 * 3600000, {});
+  check('a long absence is capped at a week', long.hours === MAX_CATCHUP_HOURS && long.capped,
+        long.hours + 'h of ' + Math.round(long.awayHours) + 'h away');
+
+  check('a trivial gap does nothing', catchUp(world(), 500, {}) === null);
+
+  // The boot path depends on a saved game carrying its own timestamp. Test the
+  // round trip, not just catchUp in isolation.
+  globalThis.localStorage = {
+    _d: {}, getItem(k) { return this._d[k] ?? null; },
+    setItem(k, v) { this._d[k] = String(v); }, removeItem(k) { delete this._d[k]; },
+  };
+  const st4 = world();
+  open(st4, 'grow_house');
+  saveGame(st4);
+  const reloaded = loadGame();
+  check('a save carries a wall-clock stamp',
+        reloaded && typeof reloaded.savedAt === 'number',
+        reloaded ? 'savedAt ' + typeof reloaded.savedAt : 'save did not load');
+  const backdated = { ...reloaded, savedAt: Date.now() - 6 * 3600000 };
+  const r = catchUp(backdated, Date.now() - backdated.savedAt, {});
+  check('a reloaded save catches up on the time away',
+        r && r.hours > 5.9 && r.hours < 6.1, r ? r.hours.toFixed(2) + 'h' : 'no catch-up');
+
+  // An old save without a stamp must not blow up or teleport the world.
+  const noStamp = { ...reloaded };
+  delete noStamp.savedAt;
+  check('a save with no stamp is left alone', noStamp.savedAt === undefined);
 }
 
 print('');

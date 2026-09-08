@@ -74,6 +74,44 @@ const MAX_STEP_HOURS = 0.25;
  * top of a tick — so a single 24-hour step would stall logistics, overshoot
  * storage and turn per-hour risks into certainties.
  */
+/**
+ * Run the world forward over the real time the player was away, and describe
+ * what changed. The world is meant to keep living without you — a busy empire
+ * costs about 100 ms for a full week, so this runs the real simulation rather
+ * than estimating it.
+ */
+export const MAX_CATCHUP_HOURS = 24 * 7;
+
+export function catchUp(state, awayMs, hooks = {}) {
+  // At 1x a game second is a real second, so away time converts directly.
+  const rawHours = awayMs / 3600000;
+  if (!(rawHours > 0.02)) return null;
+
+  const hours = Math.min(rawHours, MAX_CATCHUP_HOURS);
+  const before = {
+    clean: state.cash.clean,
+    dirty: state.cash.dirty,
+    trips: (state.couriers || []).reduce((n, c) => n + (c.tripsCompleted || 0), 0),
+    day: state.clock ? state.clock.day : 0,
+  };
+  const events = [];
+  stepSim(state, hours, {
+    ...hooks,
+    onIncident: (...args) => { events.push(args[0]); hooks.onIncident?.(...args); },
+  });
+
+  return {
+    hours,
+    capped: rawHours > MAX_CATCHUP_HOURS,
+    awayHours: rawHours,
+    earnedClean: state.cash.clean - before.clean,
+    earnedDirty: state.cash.dirty - before.dirty,
+    trips: (state.couriers || []).reduce((n, c) => n + (c.tripsCompleted || 0), 0) - before.trips,
+    days: (state.clock ? state.clock.day : 0) - before.day,
+    incidents: events.length,
+  };
+}
+
 export function stepSim(state, dtHours, hooks = {}) {
   if (dtHours <= 0) return;
   let left = dtHours;

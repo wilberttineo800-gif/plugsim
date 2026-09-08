@@ -24,6 +24,7 @@ import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
 import {
   RESEARCH, projectById, rollDiscovery, nameFor, tierById, ITEM_KINDS,
   researchQuality, researchYield, researchEffects,
+  attachmentEffects,
 } from './research.js';
 import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
 import { rentPerDay } from './lots.js';
@@ -230,16 +231,22 @@ function stepProduction(state, dt) {
       // suppressor: simpler things come off the line faster.
       const lineMult = def.product === 'iron' ? classOf(b).yieldMult : 1;
       // Anything you've developed applies to every site that makes that product,
-      // plus whatever one-off is fitted to this particular building.
+      // plus whatever one-off is fitted to this particular building — and, for
+      // a firearms line, whatever is bolted to what it builds.
       const item = itemEffectsFor(state, b);
+      const att = def.product === 'iron'
+        ? attachmentEffects(state, b)
+        : { qualityAdd: 0, valueMult: 1, heatMult: 1, yieldMult: 1 };
       const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b)
-        * lineMult * researchYield(state, def.product) * item.yieldMult;
+        * lineMult * researchYield(state, def.product) * item.yieldMult * att.yieldMult;
       // A rifle line turns out fewer, better units than a shotgun line; that
       // shows up as quality, which is what the market actually prices.
       const lineQuality = def.product === 'iron' ? (classOf(b).valueMult - 1) * 0.12 : 0;
+      // What's fitted shows up as quality and as what the unit fetches.
       const quality = clamp01(
         def.baseQuality + fx.qualityAdd + lineQuality
         + researchQuality(state, def.product) + item.qualityAdd
+        + att.qualityAdd + (att.valueMult - 1) * 0.35
       );
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);
@@ -277,12 +284,23 @@ function stepLabs(state, dt) {
 
     const budget = def.rawPerHour * fx.yieldMult * sizeScale(b) * dt;
     let didWork = false;
+    // A line only knows how to finish what it's built for. A proof house tests
+    // and packs firearms; it has no idea what to do with a sack of mushrooms.
+    const handles = def.handles || null;
 
     // Split the line's time across whatever is waiting, in proportion to how
     // much of each is backed up. Running strictly in product order let a big
     // cannabis backlog eat the whole budget and starve psilocybin forever.
-    const waiting = PRODUCT_IDS.filter((pid) => b.raw[pid] > 0.0001);
+    const waiting = PRODUCT_IDS.filter(
+      (pid) => b.raw[pid] > 0.0001 && (!handles || handles.includes(pid))
+    );
     const totalWaiting = waiting.reduce((n, pid) => n + b.raw[pid], 0);
+
+    // Something turned up that this line can't finish. Say so rather than
+    // sitting there looking idle.
+    const stranded = PRODUCT_IDS.filter(
+      (pid) => b.raw[pid] > 0.0001 && handles && !handles.includes(pid)
+    );
 
     for (const pid of waiting) {
       const available = b.raw[pid];
@@ -306,7 +324,11 @@ function stepLabs(state, dt) {
       didWork = true;
     }
 
-    if (!didWork && !b.stalledReason) b.stalledReason = 'Idle — no raw harvest delivered';
+    if (!didWork && !b.stalledReason) {
+      b.stalledReason = stranded.length
+        ? `${PRODUCTS[stranded[0]].rawName} sitting here — this line doesn't handle it`
+        : 'Idle — nothing delivered to work on';
+    }
   }
 }
 
@@ -799,7 +821,8 @@ function rollResearchDiscoveries(state) {
       id: nextItemId(state),
       kind: found.kind,
       tier: found.tier,
-      name: nameFor(found.kind, rng),
+      variant: found.variant || null,
+      name: nameFor(found.kind, rng, found.variant),
       madeAt: state.minutes,
       equippedTo: null,
     };
@@ -977,7 +1000,8 @@ function stepHeat(state, dt) {
     if (!d) continue;
     // A building's own footprint, amplified by how heavily policed the block is.
     const policeFactor = 0.6 + d.policing * 0.9;
-    const lineHeat = def.product === 'iron' ? classOf(b).heatMult : 1;
+    const lineHeat = def.product === 'iron'
+      ? classOf(b).heatMult * attachmentEffects(state, b).heatMult : 1;
     d.heat = clamp(
       d.heat + def.heatPerDay * effectsFor(b).heatMult * lineHeat * policeFactor * (dt / 24),
       0, HEAT.max);

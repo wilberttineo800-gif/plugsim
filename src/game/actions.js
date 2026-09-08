@@ -14,7 +14,9 @@ import { streetPrice } from './economy.js';
 import { unlockStatus } from './progression.js';
 import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
-import { projectById, canResearch, ITEM_KINDS, itemValue } from './research.js';
+import {
+  projectById, canResearch, ITEM_KINDS, itemValue, attachmentById, ATTACHMENT_SLOTS,
+} from './research.js';
 import { offerForItem, offerForProduct, appetiteFor, operationsIn } from './players.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
@@ -512,9 +514,35 @@ export function equipItem(state, itemId, targetId) {
     return { ok: false, error: `A ${kind.name.toLowerCase()} fits a ${kind.slot}.` };
   }
 
-  // One at a time — take off whatever is already on it.
+  if (kind.slot === 'firearm') {
+    // An attachment goes on a firearms line, and a line carries several.
+    const def = BUILDINGS[target.type];
+    if (!def || def.product !== 'iron') {
+      return { ok: false, error: 'An attachment bolts onto a firearms line.' };
+    }
+    const a = attachmentById(item.variant);
+    if (a && a.needsLicence && def.needsLicence && !hasLicence(state, a.needsLicence)) {
+      return { ok: false, error: `A ${a.name.toLowerCase()} needs a ${LICENCES[a.needsLicence].short} on a licensed line.` };
+    }
+    const onIt = (state.items || []).filter(
+      (o) => o.kind === 'attachment' && o.equippedTo === targetId && o.id !== item.id
+    );
+    if (onIt.length >= ATTACHMENT_SLOTS) {
+      return { ok: false, error: `A line carries ${ATTACHMENT_SLOTS} attachments. Take one off first.` };
+    }
+    if (onIt.some((o) => o.variant === item.variant)) {
+      return { ok: false, error: `That line already has ${a ? a.name.toLowerCase() : 'one of those'} on it.` };
+    }
+    item.equippedTo = targetId;
+    logEvent(state, `${item.name} fitted to ${target.name}.`, 'good');
+    return { ok: true, item, target };
+  }
+
+  // Everything else is one at a time — take off whatever is already on it.
   for (const other of state.items || []) {
-    if (other.id !== item.id && other.equippedTo === targetId) other.equippedTo = null;
+    if (other.id !== item.id && other.kind !== 'attachment' && other.equippedTo === targetId) {
+      other.equippedTo = null;
+    }
   }
   item.equippedTo = targetId;
   logEvent(state, `${item.name} fitted to ${target.name}.`, 'good');

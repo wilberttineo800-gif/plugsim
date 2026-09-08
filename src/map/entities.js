@@ -2,6 +2,7 @@
 // routes, and couriers moving along them in real time.
 
 import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
+import { gunWithAttachments } from '../ui/art.js';
 import { buildingById, districtById } from '../game/state.js';
 import { escapeHtml, overlayColor } from './mapView.js';
 
@@ -47,6 +48,11 @@ export class BuildingLayer {
   }
 
   sync(state) {
+    // Attachments are drawn on the marker, so the layer needs to see them.
+    this.fittedFor = (b) => (state.items || [])
+      .filter((it) => it.kind === 'attachment' && it.equippedTo === b.id)
+      .map((it) => it.variant);
+
     const seen = new Set();
     for (const b of state.buildings) {
       seen.add(b.id);
@@ -89,11 +95,20 @@ export class BuildingLayer {
       b.stalledReason ? 'is-stalled' : '',
     ].filter(Boolean).join(' ');
 
+    // The name sits above the chip and is part of the same marker, so reading
+    // it and tapping it are the same gesture — clicking the label opens the
+    // business exactly as clicking the building does.
+    const label = escapeHtml(b.name.split(' · ')[0]);
+    const art = def.product === 'iron'
+      ? gunWithAttachments(b.line || 'handgun', this.fittedFor?.(b) || [], { size: 40 })
+      : svgIcon(def.icon);
+
     return L.divIcon({
       className: '',
       html:
         `<div class="${classes}">` +
-        `<div class="bmark__chip">${svgIcon(def.icon)}</div>` +
+        `<div class="bmark__label">${label}</div>` +
+        `<div class="bmark__chip">${art}</div>` +
         (b.level > 1 ? `<div class="bmark__lvl">${b.level}</div>` : '') +
         `</div>`,
       iconSize: [34, 34],

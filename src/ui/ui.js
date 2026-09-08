@@ -16,7 +16,11 @@ import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtNa
 import {
   RESEARCH, PROJECTS, PROJECT_IDS, FIELDS, projectById, canResearch, isResearched,
   ITEM_KINDS, tierById, itemValue,
+  ATTACHMENTS, ATTACHMENT_SLOTS, attachmentById, attachmentEffects, fittedTo,
 } from '../game/research.js';
+import {
+  gunArt, gunWithAttachments, attachmentArt, productArt,
+} from './art.js';
 import {
   leaderboard, trendOf, knownOperations, operationsIn, turfWarning,
   offerForItem, offerForProduct,
@@ -271,6 +275,8 @@ export class GameUI {
       case 'start-research': g.startResearch(type); break;
       case 'cancel-research': g.cancelResearch(type); break;
       case 'sell-item': g.sellItem(id); break;
+      case 'fit-attachment': g.equipItem(id, type); break;
+      case 'unfit': g.equipItem(id, null); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -2176,6 +2182,7 @@ export class GameUI {
 
     const current = classOf(b);
     const licensed = !!def.needsLicence;
+    const fitted = fittedTo(s, b.id);
     const rows = FIREARM_CLASS_IDS.map((id) => {
       const cls = FIREARM_CLASSES[id];
       const live = cls.id === current.id;
@@ -2184,8 +2191,11 @@ export class GameUI {
         || (licensed && cls.requiresLicence && !hasLicence(s, cls.requiresLicence));
       const why = cls.requiresLicence && licensed && !hasLicence(s, cls.requiresLicence)
         ? `Needs ${LICENCES[cls.requiresLicence].short}` : null;
-      return `<button class="card ${live ? '' : blocked ? 'is-locked' : ''}"
+      return `<button class="card card--art ${live ? '' : blocked ? 'is-locked' : ''}"
         data-action="set-line" data-id="${b.id}" data-type="${id}" ${blocked ? 'disabled' : ''}>
+        <div class="card__art">${gunWithAttachments(id, live ? fitted : [], {
+          size: 74, color: live ? 'var(--sodium)' : 'var(--text-dim)', accent: 'var(--money)',
+        })}</div>
         <div class="card__head">
           <span class="card__name">${live ? '▸ ' : ''}${esc(cls.name)}</span>
           <span class="card__cost" style="color:var(--text-dim)">${cls.valueMult.toFixed(2)}× value</span>
@@ -2199,7 +2209,30 @@ export class GameUI {
       </button>`;
     }).join('');
 
-    return `
+    const fx = attachmentEffects(s, b);
+    const showcase = `
+      <div class="showcase">
+        <div class="showcase__art">${gunWithAttachments(current.id, fitted, {
+          size: 148, color: 'var(--text)', accent: 'var(--sodium)',
+        })}</div>
+        <div class="showcase__meta">
+          <div class="showcase__name">${esc(current.name)}</div>
+          <div class="showcase__stats">
+            <span>${fitted.length}/${ATTACHMENT_SLOTS} fitted</span>
+            ${fx.qualityAdd > 0 ? `<span class="good">+${Math.round(fx.qualityAdd * 100)} quality</span>` : ''}
+            ${fx.valueMult > 1 ? `<span class="money">+${Math.round((fx.valueMult - 1) * 100)}% value</span>` : ''}
+            ${fx.heatMult > 1 ? `<span class="bad">+${Math.round((fx.heatMult - 1) * 100)}% heat</span>` : ''}
+          </div>
+          ${fitted.length ? `<div class="chips">${fitted.map((vid) => {
+            const a = attachmentById(vid);
+            const it = (s.items || []).find((x) => x.variant === vid && x.equippedTo === b.id);
+            return `<button class="chip chip--art" data-action="unfit" data-id="${it ? it.id : ''}"
+              title="Take it off">${attachmentArt(vid, { size: 22 })}${esc(a ? a.name : vid)} ✕</button>`;
+          }).join('')}</div>` : '<p class="card__blurb" style="margin:0">Nothing bolted on yet. Attachments come out of an R&amp;D facility.</p>'}
+        </div>
+      </div>`;
+
+    return showcase + `
       <details class="upgrades" data-disc="line-${b.id}"
         ${this.discOpen(`line-${b.id}`, false) ? 'open' : ''}>
         <summary><span>Tooled for</span>
@@ -2210,7 +2243,53 @@ export class GameUI {
           </p>
           ${rows}
         </div>
-      </details>`;
+      </details>` + this.attachmentBench(b, fitted);
+  }
+
+  /**
+   * Attachments you've made that would fit this line. Crafted in R&D, bolted on
+   * here — and what's fitted shows on the weapon itself, above and on the map.
+   */
+  attachmentBench(b, fitted) {
+    const s = this.game.state;
+    const spare = (s.items || []).filter((it) => it.kind === 'attachment' && !it.equippedTo);
+    if (!spare.length && !fitted.length) return '';
+    if (!spare.length) return '';
+
+    const cards = spare.map((it) => {
+      const a = attachmentById(it.variant);
+      if (!a) return '';
+      const tier = tierById(it.tier);
+      const already = fitted.includes(it.variant);
+      const full = fitted.length >= ATTACHMENT_SLOTS;
+      const blocked = already || full;
+      const e = a.effect || {};
+      return `<button class="card card--attach ${blocked ? 'is-locked' : ''}"
+        data-action="fit-attachment" data-id="${it.id}" data-type="${b.id}"
+        ${blocked ? 'disabled' : ''} style="border-left:3px solid ${esc(tier.color)}">
+        <div class="card__art card__art--small">${attachmentArt(it.variant, { size: 40 })}</div>
+        <div class="card__head">
+          <span class="card__name">${esc(it.name)}</span>
+          <span class="card__cost" style="color:${esc(tier.color)}">${esc(tier.name)}</span>
+        </div>
+        <div class="card__blurb">${esc(a.blurb)}</div>
+        <div class="card__meta">
+          ${e.qualityAdd ? `<span class="good">+${Math.round(e.qualityAdd * 100)} quality</span>` : ''}
+          ${e.valueMult ? `<span class="money">+${Math.round((e.valueMult - 1) * 100)}% value</span>` : ''}
+          ${e.heatMult ? `<span class="bad">+${Math.round((e.heatMult - 1) * 100)}% heat</span>` : ''}
+          ${e.yieldMult ? `<span class="warn">${Math.round((e.yieldMult - 1) * 100)}% output</span>` : ''}
+          ${already ? '<span class="warn">already on this line</span>'
+            : full ? '<span class="warn">no slots left</span>' : ''}
+        </div>
+      </button>`;
+    }).join('');
+
+    return `<details class="upgrades" data-disc="att-${b.id}"
+      ${this.discOpen(`att-${b.id}`, spare.length > 0 && fitted.length < ATTACHMENT_SLOTS) ? 'open' : ''}>
+      <summary><span>Bolt something on</span>
+        <span class="upgrades__count">${spare.length} made</span></summary>
+      <div class="upgrades__body">${cards}</div>
+    </details>`;
   }
 
   /** Everything that can still be done to this building, priced and explained. */

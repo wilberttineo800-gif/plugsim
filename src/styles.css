@@ -887,3 +887,57 @@ kbd {
 @media (max-width: 780px) {
   .hud__warning { max-width: 100%; font-size: 11px; padding: 4px 8px; }
 }
+
+/* --- Building name labels -------------------------------------------------
+   The name rides above the marker and is part of it, so tapping the words
+   opens the business exactly as tapping the icon does. */
+.bmark__label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font: 600 10.5px/1.35 var(--font-display);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  max-width: 15ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: auto;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition: border-color .16s ease, color .16s ease, transform .16s ease;
+}
+.bmark:hover .bmark__label,
+.bmark.is-selected .bmark__label {
+  border-color: var(--sodium);
+  color: var(--sodium);
+  transform: translateX(-50%) translateY(-1px);
+}
+.bmark.is-stalled .bmark__label { border-color: var(--warn); color: var(--warn); }
+.bmark.is-off .bmark__label { opacity: .5; }
+
+/* Firearms lines show what they build, with whatever is bolted to it. */
+.bmark__chip .art--gun { width: 26px; height: 13px; }
+.bmark--machine_shop .art--gun path[fill] { fill: #9aa7b5; }
+.bmark--gunsmith .art--gun path[fill] { fill: #7fb2d4; }
+
+.art { display: block; }
+.art--product { flex: none; }
+.art--attach { flex: none; opacity: .9; }
+
+/* Leaflet clips nothing on a divIcon by default, but be explicit — the label
+   sits outside the 34px icon box. */
+.leaflet-marker-icon .bmark { overflow: visible; }
+
+@media (max-width: 780px) {
+  /* On a phone the labels crowd the map, so only the selected one shows. */
+  .bmark__label { display: none; }
+  .bmark.is-selected .bmark__label { display: block; }
+}

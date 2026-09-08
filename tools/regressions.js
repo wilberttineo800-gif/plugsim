@@ -1112,4 +1112,71 @@ print('=== 24. you cannot bury a block ===');
 }
 
 print('');
+print('=== 25. every product has its own chain, end to end ===');
+{
+  // A lab that trims cannabis has no business proof-firing a receiver. Each
+  // product is made somewhere and finished somewhere that knows how.
+  const orphans = [];
+  for (const pid of PRODUCT_IDS) {
+    const makers = BUILDING_IDS.filter((id) => BUILDINGS[id].product === pid);
+    const finishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes(pid));
+    if (!makers.length || !finishers.length) orphans.push(pid);
+  }
+  check('every product is made and finished somewhere', orphans.length === 0,
+        orphans.join(', ') || PRODUCT_IDS.length + ' products');
+
+  check('firearms do not go through the drugs lab',
+        !(BUILDINGS.lab.handles || []).includes('iron'),
+        'lab handles ' + (BUILDINGS.lab.handles || []).join(', '));
+  check('firearms have their own finishing house',
+        (BUILDINGS.proof_house.handles || []).includes('iron'));
+  check('tablets do not go through the drugs lab',
+        !(BUILDINGS.lab.handles || []).includes('pills'));
+  check('opium is grown, not conjured',
+        BUILDINGS.poppy_field.product === 'pills' && BUILDINGS.poppy_field.kind === 'production');
+  check('the pill press finishes it', BUILDINGS.pill_press.kind === 'processing'
+        && (BUILDINGS.pill_press.handles || []).includes('pills'));
+
+  // A line refuses work it isn't built for, and says so.
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 4000000;
+  const lab7 = open(st, 'lab');
+  lab7.raw.iron = 50;                     // somebody dropped receivers at a lab
+  stepSim(st, 6, {});
+  check('a lab will not finish firearms', lab7.packs.iron < 0.01,
+        'made ' + lab7.packs.iron.toFixed(2) + ' packs');
+  check('and it says why', /doesn.t handle it/i.test(lab7.stalledReason || ''),
+        lab7.stalledReason);
+
+  // The proof house does finish them.
+  const proof = open(st, 'proof_house');
+  proof.raw.iron = 50;
+  stepSim(st, 12, {});
+  check('a proof house finishes firearms', proof.packs.iron > 0,
+        proof.packs.iron.toFixed(1) + ' finished units');
+
+  // And the whole opium chain runs.
+  const st2 = world();
+  st2.adminUnlockAll = true;
+  st2.cash.clean = 6000000;
+  const field = open(st2, 'poppy_field');
+  const press = open(st2, 'pill_press');
+  if (field && press) {
+    stepSim(st2, 24 * 3, {});
+    check('a poppy field yields raw opium', field.raw.pills > 0,
+          field.raw.pills.toFixed(1) + ' raw');
+    press.raw.pills = 40;
+    stepSim(st2, 12, {});
+    check('the press turns it into tablets', press.packs.pills > 0,
+          press.packs.pills.toFixed(1) + ' packs');
+  }
+
+  // Cocaine has a producer and a washer, and nothing else claims it.
+  const cokeFinishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes('coke'));
+  check('cocaine is washed in one place only', cokeFinishers.length === 1,
+        cokeFinishers.map((id) => BUILDINGS[id].name).join(', '));
+}
+
+print('');
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

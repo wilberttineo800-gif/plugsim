@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 18;
+export const SAVE_VERSION = 19;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -300,6 +300,24 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 19) {
+    // Cocaine arrived, and pills moved onto their own chain. Existing product
+    // maps need the new key, and an old pill press is now a processor.
+    const fill = (m, v) => { if (m && m.coke === undefined) m.coke = v; };
+    for (const d of data.districts || []) {
+      fill(d.supply, 0); fill(d.supplyQuality, 0.5); fill(d.demandPerHour, 0.3);
+    }
+    for (const b of data.buildings || []) {
+      fill(b.raw, 0); fill(b.packs, 0); fill(b.rawQuality, 0.5); fill(b.packQuality, 0.5);
+      // A pill press built under the old rules made pills outright; it now
+      // finishes opium. Keep the building, change what it is.
+      if (b.type === 'pill_press' && b.kind === 'production') b.kind = 'processing';
+    }
+    for (const c of data.couriers || []) { fill(c.cargo, 0); fill(c.cargoQuality, 0.5); }
+    if (data.stats) fill(data.stats.packsSold, 0);
+    if (data.priceHistory && !data.priceHistory.coke) data.priceHistory.coke = [];
+  }
 
   if (data.version < 18) {
     // Operations gained a place on the map, and you gained a way to meet them.

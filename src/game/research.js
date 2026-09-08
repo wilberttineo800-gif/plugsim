@@ -231,7 +231,96 @@ export const ITEM_KINDS = {
     blurb: 'Something fitted to a vehicle that you cannot buy.',
     effect: { capacityMult: 1.18, paceMult: 0.94 },
   },
+  attachment: {
+    id: 'attachment',
+    name: 'Attachment',
+    field: 'engineering',
+    slot: 'firearm',
+    blurb: 'Furniture for what you build. Bolts onto the line, not onto one gun.',
+    // The real effect comes from the variant; this is the floor.
+    effect: {},
+    variants: true,
+  },
 };
+
+/**
+ * What an attachment actually is, and what fitting it to a line does to what
+ * comes off it. A shop tooled for rifles that fits optics turns out a better
+ * rifle, and every unit it makes carries it.
+ */
+export const ATTACHMENTS = {
+  optic: {
+    id: 'optic',
+    name: 'Optic',
+    blurb: 'Glass on a rail. The single thing that most changes what a weapon is worth.',
+    effect: { qualityAdd: 0.10 },
+  },
+  suppressor: {
+    id: 'suppressor',
+    name: 'Suppressor',
+    blurb: 'A can and a stack of baffles. Worth a great deal, and it is the part that needs the stamp.',
+    effect: { valueMult: 1.25, heatMult: 1.2 },
+    needsLicence: 'sot2',
+  },
+  compensator: {
+    id: 'compensator',
+    name: 'Compensator',
+    blurb: 'Ports cut to keep the muzzle down. Slower to machine, better to shoot.',
+    effect: { qualityAdd: 0.06, yieldMult: 0.97 },
+  },
+  extmag: {
+    id: 'extmag',
+    name: 'Extended Magazine',
+    blurb: 'More rounds under the well. Simple, and people pay for it.',
+    effect: { valueMult: 1.12 },
+  },
+  foregrip: {
+    id: 'foregrip',
+    name: 'Foregrip',
+    blurb: 'Somewhere to put your other hand. Cheap to add, noticeably better to hold.',
+    effect: { qualityAdd: 0.05 },
+  },
+  laser: {
+    id: 'laser',
+    name: 'Laser Module',
+    blurb: 'A dot where the round goes. Sells itself.',
+    effect: { valueMult: 1.08 },
+  },
+};
+
+export const ATTACHMENT_VARIANTS = Object.keys(ATTACHMENTS);
+
+/** How many attachments one line can carry. */
+export const ATTACHMENT_SLOTS = 3;
+
+export function attachmentById(id) {
+  return ATTACHMENTS[id] || null;
+}
+
+/** Everything bolted to this firearms line, combined. */
+export function attachmentEffects(state, building) {
+  const fx = { qualityAdd: 0, valueMult: 1, heatMult: 1, yieldMult: 1 };
+  for (const it of state.items || []) {
+    if (it.kind !== 'attachment' || it.equippedTo !== building.id) continue;
+    const a = ATTACHMENTS[it.variant];
+    if (!a) continue;
+    // Rarity counts here too: a finer example of the same part does more.
+    const power = 1 + (tierById(it.tier).value - 1) * 0.1;
+    const e = a.effect || {};
+    fx.qualityAdd += (e.qualityAdd || 0) * power;
+    fx.valueMult *= 1 + ((e.valueMult || 1) - 1) * power;
+    fx.heatMult *= e.heatMult || 1;
+    fx.yieldMult *= e.yieldMult || 1;
+  }
+  return fx;
+}
+
+/** What's fitted to a line, as variant ids, for drawing it. */
+export function fittedTo(state, buildingId) {
+  return (state.items || [])
+    .filter((it) => it.kind === 'attachment' && it.equippedTo === buildingId)
+    .map((it) => it.variant);
+}
 
 export const ITEM_KIND_IDS = Object.keys(ITEM_KINDS);
 
@@ -293,7 +382,12 @@ export function rollDiscovery(state, facility, scale, rand) {
     ? candidates[Math.floor(rand() * candidates.length) % candidates.length]
     : 'strain';
 
-  return { kind, tier: tier.id };
+  // An attachment is a particular part, not a generic one.
+  const variant = ITEM_KINDS[kind].variants
+    ? ATTACHMENT_VARIANTS[Math.floor(rand() * ATTACHMENT_VARIANTS.length) % ATTACHMENT_VARIANTS.length]
+    : null;
+
+  return { kind, tier: tier.id, variant };
 }
 
 // Names are generated so a discovery reads like a thing, not a row in a table.
@@ -308,8 +402,11 @@ const SUFFIX = {
   rig: ['Rig', 'Kit', 'Loadout', 'Harness', 'Rack'],
 };
 
-export function nameFor(kind, rand) {
+export function nameFor(kind, rand, variant) {
   const a = PREFIX[Math.floor(rand() * PREFIX.length) % PREFIX.length];
+  if (kind === 'attachment' && ATTACHMENTS[variant]) {
+    return `${a} ${ATTACHMENTS[variant].name}`;
+  }
   const list = SUFFIX[kind] || SUFFIX.strain;
   const b = list[Math.floor(rand() * list.length) % list.length];
   return `${a} ${b}`;

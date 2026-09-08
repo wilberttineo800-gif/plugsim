@@ -325,6 +325,27 @@ game.setProductionLine = (buildingId, lineId) => {
   game.ui.render();
 };
 
+game.renameDistrict = (districtId, name) => {
+  const r = A.renameDistrict(game.state, districtId, name);
+  if (!r.ok) return toast(r.error, 'bad');
+  game.districtLayer.sync?.(game.state);
+  game.ui.render();
+};
+
+game.improveTurf = (districtId, upgradeId) => {
+  diag.trace('improve turf');
+  const r = A.improveTurf(game.state, districtId, upgradeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${r.upgrade.name} in place — $${r.upgrade.upkeepPerDay.toLocaleString()}/day.`, 'good', 3600);
+  game.ui.render();
+};
+
+game.endTurfUpgrade = (districtId, upgradeId) => {
+  const r = A.endTurfUpgrade(game.state, districtId, upgradeId);
+  if (!r.ok) return toast(r.error, 'bad');
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

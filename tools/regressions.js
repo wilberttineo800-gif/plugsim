@@ -9,6 +9,8 @@ import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS } from '../src/game/sim.
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
+import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
+const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
 import { BUILDINGS, COURIERS, PRODUCT_IDS } from '../src/game/constants.js';
@@ -569,6 +571,59 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
   for (let d = 0; d < 4; d++) stepSim(st7, 24, {});
   check('a licence lapses when it is not renewed', !hasLicence(st7, 'ffl01'),
         st7.licences.ffl01.status);
+}
+
+print('');
+print('=== 15. blocks you hold are yours to name and to run ===');
+{
+  const st = world();
+  st.cash.clean = 900000;
+  const d = st.districts[3];
+
+  // You can't do any of it until the block is actually yours.
+  d.rivalControl = 0.6; d.rep = 0.1;
+  check('a contested block cannot be renamed', !A.renameDistrict(st, d.id, 'The Yard').ok,
+        A.renameDistrict(st, d.id, 'The Yard').error);
+  check('and nothing can be arranged on it', !A.improveTurf(st, d.id, 'lookouts').ok);
+
+  // Take it, and it opens up.
+  d.rivalControl = 0.02; d.rep = 0.7;
+  check('a block you hold reads as held', isHeld(d));
+  const rn = A.renameDistrict(st, d.id, 'The Yard');
+  check('it can be renamed', rn.ok && districtName(d) === 'The Yard', districtName(d));
+  check('clearing the name puts the real one back',
+        A.renameDistrict(st, d.id, '').ok && districtName(d) === d.name, districtName(d));
+
+  const up = A.improveTurf(st, d.id, 'lookouts');
+  check('an arrangement can be put in place', up.ok, up.ok ? up.upgrade.name : up.error);
+  check('the same one is not bought twice', !A.improveTurf(st, d.id, 'lookouts').ok);
+  check('it costs money every day', turfUpkeep(st) > 0, '$' + turfUpkeep(st) + '/day');
+  check('and it can be stopped', A.endTurfUpgrade(st, d.id, 'lookouts').ok && turfUpkeep(st) === 0);
+
+  // Paying the precinct off should visibly cut raids on that block.
+  function raidsOver(withPatrol) {
+    const s2 = world();
+    s2.cash.clean = 5000000;
+    const b = open(s2, 'grow_house');
+    const blk = s2.districts.find((x) => x.id === b.districtId);
+    blk.rivalControl = 0; blk.rep = 0.8;
+    if (withPatrol) A.improveTurf(s2, blk.id, 'patrol');
+    let raids = 0;
+    for (let i = 0; i < 40; i++) {
+      blk.heat = 95;                    // pin it hot so raids are the variable
+      const before = s2.stats.raids;
+      stepSim(s2, 6, {});
+      raids += s2.stats.raids - before;
+      if (!s2.buildings.length) break;  // condemned; stop counting
+    }
+    return raids;
+  }
+  const bare = raidsOver(false);
+  const bought = raidsOver(true);
+  check('paying the precinct off cuts raids', bought < bare,
+        bare + ' raids bare vs ' + bought + ' with the precinct paid');
+  check('but it is not immunity', TURF_UPGRADES.patrol.effects.policeSuppression < 1,
+        pctOf(TURF_UPGRADES.patrol.effects.policeSuppression));
 }
 
 print('');

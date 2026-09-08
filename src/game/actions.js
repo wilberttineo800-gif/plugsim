@@ -12,6 +12,7 @@ import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { unlockStatus } from './progression.js';
 import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
+import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
 import {
   upgradeById, availableUpgrades, effectsFor, vehicleUpgradeById, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgradeById, rentUpgrades, rentEffects,
@@ -374,6 +375,59 @@ export function setProductionLine(state, buildingId, lineId) {
   b.cycleProgress = 0;
   logEvent(state, `${b.name} retooled for ${cls.name.toLowerCase()}.`, 'info');
   return { ok: true, line: cls };
+}
+
+// --- Turf you hold ----------------------------------------------------------
+
+/** Rename a block you've taken. It shows everywhere the old name did. */
+export function renameDistrict(state, districtId, name) {
+  const d = districtById(state, districtId);
+  if (!d) return { ok: false, error: 'No such block.' };
+  if (!isHeld(d)) return { ok: false, error: claimBlocker(d) };
+
+  const clean = String(name || '').trim().slice(0, 40);
+  if (!clean) {
+    // Clearing it puts the real name back.
+    delete d.customName;
+    logEvent(state, `${d.name} goes back to its own name.`, 'info');
+    return { ok: true, name: d.name };
+  }
+  const was = districtName(d);
+  d.customName = clean;
+  logEvent(state, `${was} is called ${clean} now.`, 'good');
+  return { ok: true, name: clean };
+}
+
+/** Put a standing arrangement on a block you hold. */
+export function improveTurf(state, districtId, upgradeId) {
+  const d = districtById(state, districtId);
+  if (!d) return { ok: false, error: 'No such block.' };
+  if (!isHeld(d)) return { ok: false, error: claimBlocker(d) };
+
+  const u = turfUpgradeById(upgradeId);
+  if (!u) return { ok: false, error: 'No such arrangement.' };
+  d.turfUpgrades = d.turfUpgrades || [];
+  if (d.turfUpgrades.includes(upgradeId)) return { ok: false, error: 'Already in place.' };
+  if (!canAfford(state, u.cost)) {
+    return { ok: false, error: `${u.name} costs $${u.cost.toLocaleString()} clean to set up.` };
+  }
+
+  spendClean(state, u.cost);
+  d.turfUpgrades.push(upgradeId);
+  logEvent(state,
+    `${u.name} on ${districtName(d)}. $${u.upkeepPerDay.toLocaleString()} a day to keep it that way.`,
+    'good');
+  return { ok: true, upgrade: u };
+}
+
+/** Stop paying for an arrangement. */
+export function endTurfUpgrade(state, districtId, upgradeId) {
+  const d = districtById(state, districtId);
+  if (!d) return { ok: false, error: 'No such block.' };
+  d.turfUpgrades = (d.turfUpgrades || []).filter((id) => id !== upgradeId);
+  const u = turfUpgradeById(upgradeId);
+  if (u) logEvent(state, `${u.name} on ${districtName(d)} stops.`, 'info');
+  return { ok: true };
 }
 
 export { availableUpgrades, effectsFor };
@@ -843,7 +897,8 @@ export function routeLabel(state, route) {
   const product = route.product === 'any' ? 'all' : route.product;
   return {
     from: from ? from.name : '—',
-    to: to ? to.name : '—',
+    // A block you've renamed reads by its new name everywhere the old one did.
+    to: to ? (route.toType === 'district' ? districtName(to) : to.name) : '—',
     cargo,
     product,
     km: route.km,

@@ -19,6 +19,7 @@ import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
+import { turfEffects, turfUpkeep } from './turf.js';
 import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
 import { rentPerDay } from './lots.js';
 import {
@@ -480,7 +481,12 @@ function maybeGetStopped(state, c, def, dt, hooks) {
 
   const heatFactor = (d.heat - HEAT.stopHeatFloor) / (HEAT.max - HEAT.stopHeatFloor);
   const stats = vehicleStats(c, COURIERS[c.type]);
-  const perHour = HEAT.stopChanceAtMaxHeat * clamp01(heatFactor) * (1 - stats.stealth);
+  // Driving through a block you've arranged is safer than driving through one
+  // you haven't.
+  const turf = turfEffects(d);
+  const perHour = HEAT.stopChanceAtMaxHeat * clamp01(heatFactor) * (1 - stats.stealth)
+    * (1 - clamp01(turf.stopResist))
+    * (1 - turf.policeSuppression);
   if (rng() < perHour * dt) {
     const fine = Math.round(carried * HEAT.finePerPackSeized);
     for (const pid of PRODUCT_IDS) c.cargo[pid] = 0;
@@ -679,8 +685,11 @@ function stepPropertyMarket(state, dt) {
       + clamp01(d.rivalControl || 0) * CRIME.fromRivals
       - d.policing * CRIME.policingRelief * 0.5
     );
+    const turfFx = turfEffects(d);
     const wasCrime = d.crime == null ? baseline : d.crime;
-    d.crime = clamp01(wasCrime + (crimeTarget - wasCrime) * CRIME.driftPerDay * days);
+    d.crime = clamp01(
+      (wasCrime + (crimeTarget - wasCrime) * CRIME.driftPerDay * days) - turfFx.crimeRelief * days * 0.5
+    );
     const legit = state.buildings.filter(
       (b) => b.districtId === d.id && b.kind === 'front' && b.active
     ).length;
@@ -693,7 +702,8 @@ function stepPropertyMarket(state, dt) {
       - (d.heat / 100) * MARKET_PROPERTY.heatDrag
       - clamp01(d.rivalControl || 0) * MARKET_PROPERTY.rivalDrag
       // Nobody pays top money to live somewhere that gets turned over.
-      - d.crime * CRIME.valueDrag;
+      - d.crime * CRIME.valueDrag
+      + turfFx.marketLift;
 
     const previous = d.marketIndex || 1;
     const drift = (target - previous) * MARKET_PROPERTY.driftPerDay * days;
@@ -785,11 +795,13 @@ function stepHeat(state, dt) {
   const homeDistrict = hq ? hq.districtId : null;
 
   for (const d of state.districts) {
-    const decay = d.id === homeDistrict
-      ? HEAT.decayPerDay * (1 + HQ_HEAT_RELIEF)
-      : HEAT.decayPerDay;
+    const turf = turfEffects(d);
+    const decay = (d.id === homeDistrict ? HEAT.decayPerDay * (1 + HQ_HEAT_RELIEF) : HEAT.decayPerDay)
+      * (1 + turf.heatRelief);
     d.heat = clamp(d.heat * (1 - decay * (dt / 24)), 0, HEAT.max);
     d.rep = clamp01(d.rep - MARKET.repDecayPerDay * (dt / 24));
+    // Looking after people keeps your standing from sliding away.
+    if (turf.repFloor) d.rep = Math.max(d.rep, turf.repFloor);
   }
 
   for (const b of state.buildings) {
@@ -870,8 +882,13 @@ function stepEnforcement(state, dt, hooks = {}) {
     if (!d || d.heat < HEAT.raidHeatFloor) continue;
 
     const factor = (d.heat - HEAT.raidHeatFloor) / (HEAT.max - HEAT.raidHeatFloor);
+    // What you've arranged on the block counts as much as what you've fitted
+    // to the building. A bought precinct is quiet, not absent.
+    const turf = turfEffects(d);
     const perHour = HEAT.raidChanceAtMaxHeat * clamp01(factor) * (0.5 + d.policing)
-      * (1 - effectsFor(b).raidResist);
+      * (1 - effectsFor(b).raidResist)
+      * (1 - clamp01(turf.raidResist))
+      * (1 - turf.policeSuppression);
     if (rng() >= perHour * dt) continue;
 
     const lostRaw = totalPacks(b.raw);
@@ -1004,7 +1021,10 @@ function settleDay(state) {
   for (const d of state.drivers || []) wages += d.wagePerDay;
   for (const v of state.couriers) wages += COURIERS[v.type].upkeepPerDay;
 
-  const total = Math.round(upkeep + wages);
+  // Standing arrangements on blocks you hold are a daily bill like any other:
+  // stop paying and the lookouts go home.
+  const turf = turfUpkeep(state);
+  const total = Math.round(upkeep + wages + turf);
   const funded = paySoft(state, total);
 
   // Being short is a warning, never a lock: each site already stalls on its own

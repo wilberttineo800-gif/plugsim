@@ -12,6 +12,7 @@ import { sizeScale, sizeCapacity } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
+import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
 } from '../game/lots.js';
@@ -210,6 +211,10 @@ export class GameUI {
       if (value) this.game.addLine(field.dataset.courier, value);
       return;
     }
+    if (name === 'districtName') {
+      this.game.renameDistrict(field.dataset.district, value);
+      return;
+    }
     if (name === 'overlay') {
       this.game.setOverlay(value);
     }
@@ -240,6 +245,8 @@ export class GameUI {
       case 'apply-licence': g.applyForLicence(type); break;
       case 'renew-licence': g.renewLicence(type); break;
       case 'set-line': g.setProductionLine(id, type); break;
+      case 'improve-turf': g.improveTurf(id, type); break;
+      case 'end-turf': g.endTurfUpgrade(id, type); break;
       case 'dismiss-helper': g.dismissHelper(); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -346,6 +353,11 @@ export class GameUI {
     }
     for (const d of s.drivers || []) costs += d.wagePerDay;
     for (const v of s.couriers) costs += COURIERS[v.type].upkeepPerDay;
+    // Rent you collect and arrangements you pay for are both real daily money.
+    for (const lot of s.lots || []) {
+      if (lot.owned && lot.rented) income += rentPerDay(lot, districtById(s, lot.districtId));
+    }
+    costs += turfUpkeep(s);
     return income - costs;
   }
 
@@ -1108,7 +1120,7 @@ export class GameUI {
       .sort((a, b) => (b.rivalControl || 0) - (a.rivalControl || 0))
       .slice(0, 8)
       .map((d) => `<button class="card" data-action="admin-block" data-id="${d.id}">
-          <div class="card__head"><span class="card__name">${esc(d.name)}</span>
+          <div class="card__head"><span class="card__name">${esc(districtName(d))}</span>
             <span class="card__cost">${pct(d.rivalControl || 0)} held</span></div>
           <div class="card__meta"><span>take it outright</span></div>
         </button>`).join('');
@@ -1168,7 +1180,7 @@ export class GameUI {
       .filter((d) => d.revenueTotal > 0)
       .sort((a, b) => b.revenueTotal - a.revenueTotal)
       .slice(0, 6)
-      .map((d) => `<div class="row"><span>${esc(d.name)}</span><span class="money">${moneyShort(d.revenueTotal)}</span></div>`)
+      .map((d) => `<div class="row"><span>${esc(districtName(d))}</span><span class="money">${moneyShort(d.revenueTotal)}</span></div>`)
       .join('') || '<div class="empty">No sales yet.</div>';
 
     return (
@@ -1326,7 +1338,7 @@ export class GameUI {
     }).join('');
 
     return (
-      `<h2 class="ttl">${esc(d.name)}</h2>
+      `<h2 class="ttl">${esc(districtName(d))}</h2>
       <p class="subttl">${d.realName ? 'Real neighbourhood' : 'Unmapped block'} · ${esc(s.cityName)}</p>
       <div class="chips" style="margin-bottom:14px">
         <span class="chip">${pct(d.wealth)} money</span>
@@ -1359,6 +1371,71 @@ export class GameUI {
   }
 
   /** Who else works this block, and what it would take to move them. */
+  /**
+   * A block you actually hold: yours to name, and yours to put standing
+   * arrangements on. Until you hold it this only says what's missing.
+   */
+  heldBlock(d) {
+    const s = this.game.state;
+    const held = isHeld(d);
+    const blocker = claimBlocker(d);
+
+    if (!held) {
+      return `<div class="sect">
+        <div class="sect__title"><span>Claiming it</span><span class="warn">not yet yours</span></div>
+        <p class="card__blurb" style="margin:0">
+          Push the other crew off and get known here, and the block becomes yours
+          to name and to run. ${esc(blocker || '')}
+        </p>
+      </div>`;
+    }
+
+    const fx = turfEffects(d);
+    const list = turfUpgrades(d);
+    const running = list.filter((u) => u.owned);
+    const open = list.filter((u) => !u.owned);
+    const bill = running.reduce((n, u) => n + u.upkeepPerDay, 0);
+
+    const card = (u) => {
+      const short = s.cash.clean < u.cost;
+      return `<button class="card ${short ? 'is-locked' : ''}"
+        data-action="improve-turf" data-id="${d.id}" data-type="${u.id}" ${short ? 'disabled' : ''}>
+        <div class="card__head">
+          <span class="card__name">${esc(u.name)}</span>
+          <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(u.cost)}</span>
+        </div>
+        <div class="card__blurb">${esc(u.blurb)}</div>
+        <div class="card__meta"><span class="warn">${money(u.upkeepPerDay)}/day to keep</span></div>
+      </button>`;
+    };
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Your block</span><span class="good">held</span></div>
+      <div class="field">
+        <label>What it's called</label>
+        <input type="text" data-field="districtName" data-district="${d.id}"
+          value="${esc(districtName(d))}" maxlength="40" placeholder="${esc(d.name)}">
+      </div>
+      ${running.length ? `<div class="chips" style="margin:8px 0">
+        ${running.map((u) => `<button class="chip chip--good" data-action="end-turf"
+          data-id="${d.id}" data-type="${u.id}" title="Stop paying for this">${esc(u.name)} ✕</button>`).join('')}
+      </div>
+      <div class="rows">
+        <div class="row"><span>Standing costs</span><span class="warn">${money(bill)}/day</span></div>
+        ${fx.policeSuppression ? `<div class="row"><span>Police presence</span>
+          <span class="good">${pct(1 - fx.policeSuppression)} of normal</span></div>` : ''}
+      </div>` : ''}
+      <details class="upgrades" data-disc="turf-${d.id}"
+        ${this.discOpen(`turf-${d.id}`, false) ? 'open' : ''}>
+        <summary><span>Arrangements</span>
+          <span class="upgrades__count">${running.length}/${list.length}</span></summary>
+        <div class="upgrades__body">
+          ${open.length ? open.map(card).join('') : '<div class="empty">Everything is arranged.</div>'}
+        </div>
+      </details>
+    </div>`;
+  }
+
   turfSection(d) {
     const s = this.game.state;
     const crew = crewById(s, d.crewId);
@@ -1369,7 +1446,7 @@ export class GameUI {
         `<div class="sect">
           <div class="sect__title"><span>Turf</span><span class="good">Open</span></div>
           <p class="card__blurb" style="margin:0">Nobody's working this block. Every customer here is yours to take.</p>
-        </div>`
+        </div>` + this.heldBlock(d)
       );
     }
 
@@ -1399,7 +1476,7 @@ export class GameUI {
         <p class="card__blurb" style="margin:6px 0 0">
           Selling here steadily wears their grip down for free. Force is faster and draws police.
         </p>
-      </div>`
+      </div>` + this.heldBlock(d)
     );
   }
 

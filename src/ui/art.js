@@ -89,7 +89,7 @@ export const GUN_ART = {
       M45 11 h4 v7 h-4 z
       M49 12 h13 v5 h-13 z
       M49 17 h6 v4 h-6 z
-      M12 16 l-4 8 M12 16 l4 8
+      M11 16 h2 l-2 9 h-2 z M13 16 h2 l3 9 h-2 z
     `,
   },
   machinegun: {
@@ -103,7 +103,7 @@ export const GUN_ART = {
       M44 12 h5 v6 h-5 z
       M49 13 h12 v4 h-12 z
       M49 17 h5 v4 h-5 z
-      M18 18 l-4 8 M18 18 l4 8
+      M17 18 h2 l-3 9 h-2 z M19 18 h2 l4 9 h-2 z
     `,
   },
   nfa: {
@@ -161,15 +161,18 @@ export const GUN_MODELS = {
   drover: {
     label: 'Drover .357',
     category: 'revolver',
+    noParts: ['extmag', 'foregrip'],
     note: 'Six shots, a top strap you can sight down, and nothing left behind at the scene.',
     path: `
-      M4 12 h22 v4 h-22 z
-      M6 10 h20 v2 h-20 z
-      M26 8 h13 v12 h-13 z
-      M28 10 h9 v8 h-9 z
-      M39 11 h7 v6 h-7 z
-      M41 17 h5 l4 11 a5 5 0 0 1 -10 1 z
-      M30 20 h6 v2 h-6 z
+      M4 11 h22 v5 h-22 z
+      M5 9 h3 v2 h-3 z
+      M26 10 h4 v7 h-4 z
+      M30 8 h9 v11 h-9 z
+      M32 11 h5 v5 h-5 z
+      M39 10 h5 v7 h-5 z
+      M44 8 h3 v4 h-3 z
+      M40 17 h5 l2 9 a4 4 0 0 1 -8 1 z
+      M32 19 h6 v2 h-6 z
     `,
   },
   // --- Submachine guns ----------------------------------------------------
@@ -179,8 +182,7 @@ export const GUN_MODELS = {
     note: 'Wide ribbed handguard, magazine ahead of the trigger, collapsing stock.',
     path: `
       M4 12 h8 v4 h-8 z
-      M12 10 h14 v8 h-14 z
-      M14 12 v4 M17 12 v4 M20 12 v4 M23 12 v4
+      M12 10 h3 v8 h-3 z M16 10 h3 v8 h-3 z M20 10 h3 v8 h-3 z M24 10 h2 v8 h-2 z
       M26 9 h16 v9 h-16 z
       M28 18 l1 10 h5 l-1 -10 z
       M38 18 h5 l-2 8 h-5 z
@@ -225,6 +227,7 @@ export const GUN_MODELS = {
   ridgeback: {
     label: 'Ridgeback 12',
     category: 'shotgun',
+    noParts: ['extmag'],
     note: 'Pump under a long smooth barrel, tube magazine, straight comb.',
     path: `
       M2 12 h40 v3 h-40 z
@@ -238,6 +241,7 @@ export const GUN_MODELS = {
   coachman: {
     label: 'Coachman',
     category: 'shotgun',
+    noParts: ['extmag'],
     note: 'Two barrels, break action, no magazine and nothing to jam.',
     path: `
       M2 11 h34 v3 h-34 z
@@ -251,6 +255,7 @@ export const GUN_MODELS = {
   vigil: {
     label: 'Vigil .308',
     category: 'precision',
+    builtIn: ['optic'], noParts: ['foregrip'],
     note: 'Bolt action, heavy barrel, glass worth more than the rifle and a bipod under it.',
     path: `
       M1 13 h30 v3 h-30 z
@@ -261,7 +266,7 @@ export const GUN_MODELS = {
       M45 11 h4 v7 h-4 z
       M49 12 h13 v5 h-13 z
       M49 17 h6 v4 h-6 z
-      M12 16 l-4 8 M12 16 l4 8
+      M11 16 h2 l-2 9 h-2 z M13 16 h2 l3 9 h-2 z
     `,
   },
   sable: {
@@ -283,7 +288,7 @@ export const GUN_MODELS = {
     path: `
       M4 9 h44 v7 h-44 z
       M8 7 h2 v2 h-2 z M44 7 h2 v2 h-2 z
-      M6 11 v-2 M10 11 v-2 M14 11 v-2
+      M6 9 h1 v2 h-1 z M10 9 h1 v2 h-1 z M14 9 h1 v2 h-1 z
       M20 16 h22 v3 h-22 z
       M33 19 h9 l3 12 h-11 z
       M23 19 h8 v2 h-6 l-2 3 h-2 z
@@ -292,6 +297,7 @@ export const GUN_MODELS = {
   bulldog: {
     label: 'Bulldog .44',
     category: 'revolver',
+    noParts: ['extmag', 'foregrip'],
     note: 'Two inches of barrel and a bobbed hammer. Nothing to snag on the way out.',
     path: `
       M14 12 h12 v4 h-12 z
@@ -305,15 +311,18 @@ export const GUN_MODELS = {
   frontier: {
     label: 'Frontier .45',
     category: 'revolver',
+    noParts: ['extmag', 'foregrip'],
     note: 'Single action, plough handle grip, a hundred and fifty years old and unchanged.',
     path: `
-      M2 12 h24 v4 h-24 z
-      M26 9 h12 v11 h-12 z
-      M28 11 h8 v7 h-8 z
-      M38 8 h4 v4 h-4 z
-      M38 12 h6 v5 h-6 z
-      M40 17 h5 l6 10 a6 6 0 0 1 -11 3 z
-      M30 20 h6 v2 h-6 z
+      M2 11 h24 v5 h-24 z
+      M3 9 h2 v2 h-2 z
+      M26 10 h3 v7 h-3 z
+      M29 8 h9 v11 h-9 z
+      M31 11 h5 v5 h-5 z
+      M38 10 h5 v7 h-5 z
+      M43 7 h3 v5 h-3 z
+      M39 17 h5 l3 9 a4 4 0 0 1 -9 2 z
+      M31 19 h6 v2 h-6 z
     `,
   },
   grease: {
@@ -375,11 +384,13 @@ export const GUN_MODELS = {
   streetsweeper: {
     label: 'Streetsweeper',
     category: 'shotgun',
+    noParts: ['extmag'],
     note: 'Twelve rounds in a spring-wound drum. Exactly as subtle as it sounds.',
     path: `
       M4 12 h28 v4 h-28 z
       M32 9 h14 v10 h-14 z
-      M30 19 a8 8 0 1 0 0.1 0 z
+      M31 19 h10 v2 h-10 z
+      M31 21 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z
       M46 11 h4 v7 h-4 z
       M50 12 h4 v4 h-4 z M54 10 h3 v9 h-3 z
       M38 19 h5 l-2 7 h-5 z
@@ -388,26 +399,27 @@ export const GUN_MODELS = {
   longshot: {
     label: 'Longshot .50',
     category: 'precision',
+    builtIn: ['optic'], noParts: ['foregrip'],
     note: 'Anti-materiel. A muzzle brake the size of a fist and a recoil pad to match.',
     path: `
       M1 12 h4 v6 h-4 z
       M5 13 h26 v4 h-26 z
-      M7 11 v2 M11 11 v2 M15 11 v2
+      M7 11 h1 v2 h-1 z M11 11 h1 v2 h-1 z M15 11 h1 v2 h-1 z
       M31 9 h16 v10 h-16 z
       M28 5 h22 v3 h-22 z
       M33 19 l1 9 h6 l-1 -9 z
       M47 10 h4 v8 h-4 z
       M51 11 h11 v7 h-11 z
-      M18 17 l-5 9 M18 17 l5 9
+      M17 17 h2 l-3 10 h-2 z M19 17 h2 l4 10 h-2 z
     `,
   },
   whisper: {
     label: 'Whisper .300',
     category: 'precision',
+    builtIn: ['optic', 'suppressor'], noParts: ['foregrip'],
     note: 'Subsonic, integrally suppressed, quieter than the bolt working.',
     path: `
-      M1 11 h20 v8 h-20 z
-      M4 11 v8 M8 11 v8 M12 11 v8 M16 11 v8
+      M1 11 h3 v8 h-3 z M5 11 h3 v8 h-3 z M9 11 h3 v8 h-3 z M13 11 h3 v8 h-3 z M17 11 h4 v8 h-4 z
       M21 12 h10 v5 h-10 z
       M31 9 h14 v9 h-14 z
       M28 6 h18 v2 h-18 z
@@ -428,7 +440,7 @@ export const GUN_MODELS = {
       M45 11 h5 v7 h-5 z
       M50 12 h12 v5 h-12 z
       M50 17 h5 v4 h-5 z
-      M17 18 l-5 9 M17 18 l5 9
+      M16 18 h2 l-3 10 h-2 z M18 18 h2 l4 10 h-2 z
     `,
   },
   reaper: {
@@ -438,17 +450,104 @@ export const GUN_MODELS = {
     path: `
       M2 13 h20 v4 h-20 z
       M22 10 h20 v9 h-20 z
-      M26 19 a7 7 0 1 0 0.1 0 z
+      M25 19 h9 v2 h-9 z
+      M25 21 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
       M38 19 h5 l-2 8 h-5 z
       M42 11 h5 v7 h-5 z
       M47 12 h13 v5 h-13 z
       M47 17 h5 v4 h-5 z
-      M14 17 l-4 8 M14 17 l4 8
+      M13 17 h2 l-2 9 h-2 z M15 17 h2 l3 9 h-2 z
     `,
   },
 };
 
 export const GUN_MODEL_IDS = Object.keys(GUN_MODELS);
+
+/**
+ * Where things bolt on, per pattern.
+ *
+ * The attachment drawings are authored once, around the origin, and moved to
+ * the right place on each gun. Without this an optic drawn for a rifle floats
+ * over the slide of a pistol — the parts have to know where they mount.
+ *
+ * `rail` is the top of the receiver, `muzzle` the front of the barrel, `under`
+ * the underside forward of the trigger, and `mag` the magazine well.
+ */
+export const MOUNTS = {
+  warden:    { rail: [22, 3], muzzle: [4, 12], under: [14, 15], mag: [30, 18] },
+  kestrel:   { rail: [24, 3], muzzle: [6, 12], under: [16, 16], mag: [29, 19] },
+  sable:     { rail: [26, 4], muzzle: [12, 13], under: [26, 19], mag: [29, 19] },
+  vulcan:    { rail: [22, 3], muzzle: [2, 12], under: [14, 16], mag: [32, 19] },
+  drover:    { rail: [30, 5], muzzle: [2, 13], under: [14, 16], mag: [33, 19] },
+  bulldog:   { rail: [29, 5], muzzle: [12, 14], under: [18, 16], mag: [32, 19] },
+  frontier:  { rail: [29, 5], muzzle: [1, 13], under: [13, 16], mag: [32, 19] },
+  wasp:      { rail: [26, 3], muzzle: [3, 12], under: [19, 18], mag: [28, 18] },
+  grease:    { rail: [18, 7], muzzle: [5, 12], under: [20, 19], mag: [14, 19] },
+  spectre:   { rail: [16, 6], muzzle: [6, 12], under: [16, 18], mag: [24, 18] },
+  kite:      { rail: [26, 2], muzzle: [1, 12], under: [14, 16], mag: [30, 17] },
+  longmarch: { rail: [26, 3], muzzle: [1, 13], under: [14, 16], mag: [26, 19] },
+  adder:     { rail: [26, 1], muzzle: [1, 12], under: [12, 16], mag: [42, 19] },
+  praetor:   { rail: [26, 1], muzzle: [0, 12], under: [14, 17], mag: [31, 18] },
+  ridgeback: { rail: [22, 9], muzzle: [1, 12], under: [17, 18], mag: [24, 19] },
+  coachman:  { rail: [20, 8], muzzle: [1, 11], under: [16, 18], mag: [24, 19] },
+  streetsweeper: { rail: [34, 6], muzzle: [3, 12], under: [18, 16], mag: [31, 19] },
+  vigil:     { rail: [30, 0], muzzle: [0, 13], under: [14, 16], mag: [33, 18] },
+  longshot:  { rail: [30, -1], muzzle: [-2, 12], under: [18, 17], mag: [33, 19] },
+  whisper:   { rail: [30, 0], muzzle: [0, 11], under: [16, 19], mag: [33, 18] },
+  hammerfall:{ rail: [26, 7], muzzle: [-1, 12], under: [20, 18], mag: [27, 19] },
+  reaper:    { rail: [24, 7], muzzle: [1, 13], under: [16, 17], mag: [25, 19] },
+};
+
+// Where each attachment drawing expects to sit, so it can be moved to a mount.
+const ATTACH_MOUNT = {
+  optic: 'rail', suppressor: 'muzzle', compensator: 'muzzle',
+  extmag: 'mag', foregrip: 'under', laser: 'under',
+};
+
+// The drawings above are authored against the original rifle; these are their
+// own reference points, subtracted so a part lands on the mount rather than
+// wherever it happened to be drawn.
+const ATTACH_ORIGIN = {
+  optic: [22, 2], suppressor: [-6, 9], compensator: [-3, 8],
+  extmag: [24, 15], foregrip: [13, 15], laser: [10, 16],
+};
+
+/**
+ * A named pattern with parts bolted on, each moved to that gun's own mounting
+ * point. The viewBox widens when something hangs off the muzzle.
+ */
+export function modelWithAttachments(modelId, fitted = [], opts = {}) {
+  const { size = 180, color = 'currentColor', accent = null, className = '' } = opts;
+  const m = GUN_MODELS[modelId];
+  if (!m) return gunWithAttachments(modelId, fitted, opts);
+  const mounts = MOUNTS[modelId] || MOUNTS.kite;
+  // Never draw a part the gun couldn't take — a box magazine on a revolver is
+  // a lie the picture tells before the rules get a chance to.
+  const barred = new Set([...(m.builtIn || []), ...(m.noParts || [])]);
+  const list = (fitted || []).filter((id) => ATTACHMENT_ART[id] && !barred.has(id));
+
+  const hangsOff = list.some((id) => {
+    const [x] = mounts[ATTACH_MOUNT[id]] || [0, 0];
+    return ATTACH_MOUNT[id] === 'muzzle' && x < 6;
+  });
+  const minX = hangsOff ? -10 : 0;
+  const width = hangsOff ? 76 : 64;
+
+  const parts = list.map((id) => {
+    const a = ATTACHMENT_ART[id];
+    const [mx, my] = mounts[ATTACH_MOUNT[id]] || [0, 0];
+    const [ox, oy] = ATTACH_ORIGIN[id] || [0, 0];
+    const paint = a.stroked
+      ? `stroke="${accent || color}" stroke-width="1.4" fill="none" stroke-linecap="round"`
+      : `fill="${accent || color}"`;
+    return `<g transform="translate(${(mx - ox).toFixed(1)}, ${(my - oy).toFixed(1)})">` +
+      `<path d="${a.path.replace(/\s+/g, ' ').trim()}" ${paint}/></g>`;
+  }).join('');
+
+  return `<svg class="art art--gun ${className}" viewBox="${minX} 0 ${width} 32"
+    width="${size}" height="${Math.round((size / width) * 32)}" aria-hidden="true"
+    ><path d="${m.path.replace(/\s+/g, ' ').trim()}" fill="${color}"/>${parts}</svg>`;
+}
 
 /** One named model, drawn. Falls back to its category if it has no art. */
 export function modelArt(id, { size = 150, color = 'currentColor', className = '' } = {}) {
@@ -589,7 +688,7 @@ export const ATTACHMENT_ART = {
   extmag: {
     label: 'Extended Magazine',
     // Hangs below the well, longer than standard.
-    path: 'M22 15 l4 14 h7 l-3 -14 z',
+    path: 'M22 15 l3 15 h6 l-2 -15 z',
   },
   foregrip: {
     label: 'Foregrip',

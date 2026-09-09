@@ -13,7 +13,7 @@ import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, 
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import {
   LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
-  hasLicence, classOf, MODELS, modelsFor, modelOf,
+  hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
 } from '../game/firearms.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import { rhythmNote, rhythmFactor, darkness, cityClock, DAY_NAMES } from '../game/rhythm.js';
@@ -23,7 +23,8 @@ import {
   ATTACHMENTS, ATTACHMENT_SLOTS, attachmentById, attachmentEffects, fittedTo,
 } from '../game/research.js';
 import {
-  gunArt, gunWithAttachments, attachmentArt, productArt, modelArt, vehicleArt,
+  gunArt, gunWithAttachments, attachmentArt, productArt, modelArt, modelWithAttachments,
+  vehicleArt,
 } from './art.js';
 import {
   leaderboard, trendOf, knownOperations, operationsIn, turfWarning,
@@ -2302,7 +2303,9 @@ export class GameUI {
     const showcase = `
       <div class="showcase">
         <div class="showcase__art">${chosen
-          ? modelArt(chosen.id, { size: 148, color: 'var(--text)' })
+          ? modelWithAttachments(chosen.id, fitted, {
+              size: 158, color: 'var(--text)', accent: 'var(--sodium)',
+            })
           : gunWithAttachments(current.id, fitted, {
               size: 148, color: 'var(--text)', accent: 'var(--sodium)',
             })}</div>
@@ -2385,7 +2388,9 @@ export class GameUI {
       const tier = tierById(it.tier);
       const already = fitted.includes(it.variant);
       const full = fitted.length >= ATTACHMENT_SLOTS;
-      const blocked = already || full;
+      const barred = incompatibleParts(b).includes(it.variant);
+      const included = builtInParts(b).includes(it.variant);
+      const blocked = already || full || barred || included;
       const e = a.effect || {};
       return `<button class="card card--attach ${blocked ? 'is-locked' : ''}"
         data-action="fit-attachment" data-id="${it.id}" data-type="${b.id}"
@@ -2401,7 +2406,9 @@ export class GameUI {
           ${e.valueMult ? `<span class="money">+${Math.round((e.valueMult - 1) * 100)}% value</span>` : ''}
           ${e.heatMult ? `<span class="bad">+${Math.round((e.heatMult - 1) * 100)}% heat</span>` : ''}
           ${e.yieldMult ? `<span class="warn">${Math.round((e.yieldMult - 1) * 100)}% output</span>` : ''}
-          ${already ? '<span class="warn">already on this line</span>'
+          ${barred ? `<span class="warn">does not go on ${esc(classOf(b).name.toLowerCase())}</span>`
+            : included ? '<span class="warn">this pattern has one already</span>'
+            : already ? '<span class="warn">already on this line</span>'
             : full ? '<span class="warn">no slots left</span>' : ''}
         </div>
       </button>`;

@@ -2,7 +2,7 @@
 // routes, and couriers moving along them in real time.
 
 import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
-import { gunWithAttachments } from '../ui/art.js';
+import { gunWithAttachments, modelWithAttachments } from '../ui/art.js';
 import { buildingById, districtById, buildingLabel } from '../game/state.js';
 import { INCIDENTS, activeIncidents, freshness } from '../game/incidents.js';
 import { escapeHtml, overlayColor } from './mapView.js';
@@ -103,7 +103,9 @@ export class BuildingLayer {
     // renamed, so this is the one they'll recognise.
     const label = escapeHtml(buildingLabel(b));
     const art = def.product === 'iron'
-      ? gunWithAttachments(b.line || 'handgun', this.fittedFor?.(b) || [], { size: 40 })
+      ? (b.model
+        ? modelWithAttachments(b.model, this.fittedFor?.(b) || [], { size: 40 })
+        : gunWithAttachments(b.line || 'handgun', this.fittedFor?.(b) || [], { size: 40 }))
       : svgIcon(def.icon);
 
     return L.divIcon({

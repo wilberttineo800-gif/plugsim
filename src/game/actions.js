@@ -14,6 +14,7 @@ import { streetPrice } from './economy.js';
 import { unlockStatus } from './progression.js';
 import {
   LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
+  builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
 import {
@@ -543,6 +544,14 @@ export function equipItem(state, itemId, targetId) {
     }
     if (onIt.some((o) => o.variant === item.variant)) {
       return { ok: false, error: `That line already has ${a ? a.name.toLowerCase() : 'one of those'} on it.` };
+    }
+    if (incompatibleParts(target).includes(item.variant)) {
+      const cls = classOf(target);
+      return { ok: false, error: `${a ? a.name : 'That'} does not go on ${cls.name.toLowerCase()}.` };
+    }
+    if (builtInParts(target).includes(item.variant)) {
+      const m = modelOf(target);
+      return { ok: false, error: `A ${m.name} comes with ${a ? a.name.toLowerCase() : 'that'} already.` };
     }
     item.equippedTo = targetId;
     logEvent(state, `${item.name} fitted to ${target.name}.`, 'good');

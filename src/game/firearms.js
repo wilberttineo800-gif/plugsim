@@ -61,6 +61,8 @@ export const LICENCE_IDS = Object.keys(LICENCES);
 export const FIREARM_CLASSES = {
   shotgun: {
     id: 'shotgun',
+    // A cylinder is not a magazine well, and so on.
+    noParts: ['extmag'],
     name: 'Shotguns',
     blurb: 'Simplest thing in the trade. Smoothbore, few parts, forgiving tolerances.',
     valueMult: 0.55,
@@ -97,6 +99,8 @@ export const FIREARM_CLASSES = {
   },
   revolver: {
     id: 'revolver',
+    // A cylinder is not a magazine well, and so on.
+    noParts: ['extmag', 'foregrip'],
     name: 'Revolvers',
     blurb: 'Fewer parts than anything with a magazine, and no brass left on the floor. People who care about that pay for it.',
     valueMult: 1.15,
@@ -106,6 +110,8 @@ export const FIREARM_CLASSES = {
   },
   precision: {
     id: 'precision',
+    // A cylinder is not a magazine well, and so on.
+    noParts: ['foregrip'],
     name: 'Precision Rifles',
     blurb: 'Heavy barrel, bedded action, glass worth more than the rifle. Slow work and very few buyers, all of them serious.',
     valueMult: 2.6,
@@ -168,8 +174,8 @@ export const MODELS = {
     blurb: 'Two barrels and a hinge. Almost nothing to machine.',
     valueMult: 0.8, yieldMult: 1.45 },
   vigil:     { id: 'vigil', category: 'precision', name: 'Vigil .308',
-    blurb: 'Bedded action, heavy barrel, every one hand-checked.',
-    valueMult: 1.25, yieldMult: 0.85 },
+    blurb: 'Bedded action, heavy barrel, every one hand-checked. Comes with glass.',
+    valueMult: 1.25, yieldMult: 0.85, builtIn: ['optic'] },
 
   sable:     { id: 'sable', category: 'handgun', name: 'Sable Compact',
     blurb: 'Cut down to nothing. Less metal, less money, and it goes anywhere.',
@@ -200,10 +206,10 @@ export const MODELS = {
     valueMult: 1.6, yieldMult: 0.62 },
   longshot:  { id: 'longshot', category: 'precision', name: 'Longshot .50',
     blurb: 'Anti-materiel. Almost nobody wants one and they pay anything for it.',
-    valueMult: 2.1, yieldMult: 0.45 },
+    valueMult: 2.1, yieldMult: 0.45, builtIn: ['optic'] },
   whisper:   { id: 'whisper', category: 'precision', name: 'Whisper .300',
     blurb: 'Integrally suppressed and subsonic. Quieter than the bolt working.',
-    valueMult: 1.7, yieldMult: 0.6 },
+    valueMult: 1.7, yieldMult: 0.6, builtIn: ['optic', 'suppressor'] },
   hammerfall: { id: 'hammerfall', category: 'machinegun', name: 'Hammerfall',
     blurb: 'Belt-fed with a quick-change barrel. Fires until the belt runs out.',
     valueMult: 1.2, yieldMult: 0.9 },
@@ -226,6 +232,18 @@ export function modelOf(building) {
 }
 
 /** What the chosen pattern does on top of its category. */
+/** Parts that make no sense on this kind of gun at all. */
+export function incompatibleParts(building) {
+  const cls = classOf(building);
+  return (cls && cls.noParts) || [];
+}
+
+/** Parts a pattern already has, which can't be fitted twice. */
+export function builtInParts(building) {
+  const m = modelOf(building);
+  return (m && m.builtIn) || [];
+}
+
 export function modelEffects(building) {
   const m = modelOf(building);
   return { valueMult: m ? m.valueMult : 1, yieldMult: m ? m.yieldMult : 1 };

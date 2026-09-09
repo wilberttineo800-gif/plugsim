@@ -18,6 +18,10 @@ import {
   LICENCES, FIREARM_CLASSES, hasLicence, MODELS, MODEL_IDS, modelEffects,
 } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
+import {
+  GUN_MODELS, GUN_MODEL_IDS, GUN_ART, GUN_IDS, VEHICLE_ART, VEHICLE_ART_IDS,
+  MOUNTS, ATTACHMENT_ART, modelWithAttachments,
+} from '../src/ui/art.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
 import {
   generatePlayers, leaderboard, playerWorth, placePlayers, knownOperations,
@@ -1369,6 +1373,107 @@ print('=== 28. the catalogue is real, not decoration ===');
         fronts.length + ' legitimate, ' + chain.length + ' illegal');
   check('and both ends are properly served', fronts.length >= 15 && chain.length >= 15,
         fronts.length + ' / ' + chain.length);
+}
+
+print('');
+print('=== 29. filled artwork is actually closed ===');
+{
+  // modelArt paints with fill and nothing else, so an open subpath — a bipod
+  // leg drawn as two lines, say — has geometry but no paint and renders
+  // invisibly. The bounding-box check in the browser cannot see this, because
+  // a bbox counts geometry whether or not it is painted.
+  const open = [];
+  for (const id of GUN_MODEL_IDS) {
+    const d = GUN_MODELS[id].path;
+    // Split into subpaths and check each one closes.
+    const subs = d.split(/(?=M)/).map((x) => x.trim()).filter(Boolean);
+    for (const sub of subs) {
+      if (!/z\s*$/i.test(sub)) open.push(`${id}: ${sub.slice(0, 26).replace(/\s+/g, ' ')}…`);
+    }
+  }
+  check('every filled drawing closes its subpaths', open.length === 0,
+        open.length ? open.slice(0, 3).join(' | ') : GUN_MODEL_IDS.length + ' patterns clean');
+
+  // And the same for anything else painted with fill only.
+  const openGuns = [];
+  for (const id of GUN_IDS) {
+    if (GUN_ART[id].stroked) continue;
+    for (const sub of GUN_ART[id].path.split(/(?=M)/).map((x) => x.trim()).filter(Boolean)) {
+      if (!/z\s*$/i.test(sub)) openGuns.push(`${id}: ${sub.slice(0, 22).replace(/\s+/g, ' ')}…`);
+    }
+  }
+  check('and so does every filled category drawing', openGuns.length === 0,
+        openGuns.length ? openGuns.slice(0, 3).join(' | ') : 'clean');
+
+  const openVeh = [];
+  for (const id of VEHICLE_ART_IDS) {
+    if (VEHICLE_ART[id].stroked) continue;
+    for (const sub of VEHICLE_ART[id].path.split(/(?=M)/).map((x) => x.trim()).filter(Boolean)) {
+      if (!/z\s*$/i.test(sub)) openVeh.push(`${id}: ${sub.slice(0, 22).replace(/\s+/g, ' ')}…`);
+    }
+  }
+  check('and every filled vehicle', openVeh.length === 0,
+        openVeh.length ? openVeh.slice(0, 3).join(' | ') : 'clean');
+}
+
+print('');
+print('=== 30. attachments fit the gun they are on ===');
+{
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 6000000;
+  const shop = open(st, 'machine_shop');
+
+  const give = (variant) => {
+    const id = 'ti' + variant;
+    st.items = (st.items || []).filter((i) => i.id !== id);
+    st.items.push({ id, kind: 'attachment', variant, tier: 'fine',
+      name: 'Test ' + variant, equippedTo: null });
+    return id;
+  };
+
+  // A revolver has a cylinder, not a magazine well.
+  A.setProductionLine(st, shop.id, 'revolver');
+  A.setModel(st, shop.id, 'drover');
+  const mag = A.equipItem(st, give('extmag'), shop.id);
+  check('a box magazine is refused on a revolver', !mag.ok, mag.error);
+  check('and so is a foregrip', !A.equipItem(st, give('foregrip'), shop.id).ok);
+  check('but an optic is fine', A.equipItem(st, give('optic'), shop.id).ok);
+
+  // A shotgun has a tube magazine.
+  A.setProductionLine(st, shop.id, 'shotgun');
+  A.setModel(st, shop.id, 'ridgeback');
+  check('a box magazine is refused on a shotgun',
+        !A.equipItem(st, give('extmag'), shop.id).ok);
+
+  // A precision rifle already carries glass.
+  A.setProductionLine(st, shop.id, 'precision');
+  A.setModel(st, shop.id, 'vigil');
+  const dup = A.equipItem(st, give('optic'), shop.id);
+  check('a second optic is refused on a rifle that has one', !dup.ok, dup.error);
+  check('but a suppressor still fits', A.equipItem(st, give('suppressor'), shop.id).ok);
+
+  // The Whisper is suppressed from the factory.
+  A.setModel(st, shop.id, 'whisper');
+  check('and a suppressor is refused on one that is already suppressed',
+        !A.equipItem(st, give('suppressor'), shop.id).ok);
+
+  // The picture must not show what the rules forbid.
+  const drawnOnRevolver = modelWithAttachments('drover', ['extmag', 'optic'], { size: 100 });
+  check('the drawing never shows a part the gun cannot take',
+        !drawnOnRevolver.includes(ATTACHMENT_ART.extmag.path.replace(/\s+/g, ' ').trim()),
+        'revolver drawn without a box magazine');
+
+  // Every pattern has somewhere for every part it can take.
+  const gaps = [];
+  for (const id of GUN_MODEL_IDS) {
+    const mounts = MOUNTS[id];
+    for (const slot of ['rail', 'muzzle', 'under', 'mag']) {
+      if (!mounts || !Array.isArray(mounts[slot])) gaps.push(id + '.' + slot);
+    }
+  }
+  check('every pattern has all four mounting points', gaps.length === 0,
+        gaps.join(', ') || GUN_MODEL_IDS.length + ' patterns');
 }
 
 print('');

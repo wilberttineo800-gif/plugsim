@@ -1182,8 +1182,15 @@ print('=== 25. every product has its own chain, end to end ===');
   for (const pid of PRODUCT_IDS) {
     const finishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes(pid));
     const proper = finishers.filter((id) => (BUILDINGS[id].qualityBonus ?? 0) >= 0);
-    check(`${PRODUCTS[pid].name} has one straight route`, proper.length === 1,
+    check(`${PRODUCTS[pid].name} has a straight route`, proper.length >= 1,
           proper.map((id) => BUILDINGS[id].name).join(', ') || 'none');
+    // Where there is more than one, they must actually differ — two identical
+    // routes is a duplicate, not a choice.
+    const grades = new Set(proper.map((id) =>
+      `${BUILDINGS[id].qualityBonus}:${BUILDINGS[id].rawPerHour}`));
+    check(`and any second route for it is a real alternative`,
+          grades.size === proper.length,
+          proper.map((id) => `${BUILDINGS[id].name} q${BUILDINGS[id].qualityBonus}`).join(', '));
     const shortcuts = finishers.filter((id) => (BUILDINGS[id].qualityBonus ?? 0) < 0);
     check(`and any shortcut for it pays for the volume`,
           shortcuts.every((id) => (BUILDINGS[id].yieldBonus || 1) > 1),

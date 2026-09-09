@@ -12,7 +12,9 @@ import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { streetPrice } from './economy.js';
 import { unlockStatus } from './progression.js';
-import { LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord } from './firearms.js';
+import {
+  LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
+} from './firearms.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
 import {
   projectById, canResearch, ITEM_KINDS, itemValue, attachmentById, ATTACHMENT_SLOTS,
@@ -410,6 +412,8 @@ export function setProductionLine(state, buildingId, lineId) {
   }
 
   b.line = lineId;
+  // A pattern belongs to a category; changing the category drops it.
+  if (b.model && (MODELS[b.model] || {}).category !== lineId) b.model = null;
   // Retooling costs you the cycle you were in.
   b.cycleProgress = 0;
   logEvent(state, `${b.name} retooled for ${cls.name.toLowerCase()}.`, 'info');
@@ -641,6 +645,25 @@ export function renameBuilding(state, buildingId, name) {
     logEvent(state, `${was} goes by ${buildingLabel(b)} now.`, 'info');
   }
   return { ok: true, name: buildingLabel(b) };
+}
+
+/** Set up a firearms line for a specific pattern within its category. */
+export function setModel(state, buildingId, modelId) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such workshop.' };
+  const def = BUILDINGS[b.type];
+  if (def.product !== 'iron') return { ok: false, error: 'That is not a firearms shop.' };
+  const m = MODELS[modelId];
+  if (!m) return { ok: false, error: 'Unknown pattern.' };
+  if (m.category !== classOf(b).id) {
+    return { ok: false, error: `${m.name} is a ${FIREARM_CLASSES[m.category].name.toLowerCase()} pattern — retool the line first.` };
+  }
+  if (b.model === modelId) return { ok: false, error: 'Already set up for that.' };
+
+  b.model = modelId;
+  b.cycleProgress = 0;
+  logEvent(state, `${b.name} set up to build the ${m.name}.`, 'info');
+  return { ok: true, model: m };
 }
 
 export { availableUpgrades, effectsFor };

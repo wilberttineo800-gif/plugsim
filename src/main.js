@@ -450,6 +450,15 @@ game.openIncident = (inc) => {
   game.incidentLayer.sync(s);
 };
 
+game.setModel = (buildingId, modelId) => {
+  diag.trace('set pattern');
+  const r = A.setModel(game.state, buildingId, modelId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`Now building the ${r.model.name}.`, 'good', 3000);
+  game.buildingLayer.sync(game.state);
+  game.ui.render();
+};
+
 game.dismissHelper = () => {
   game.state.tutorialDismissed = true;
   toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);

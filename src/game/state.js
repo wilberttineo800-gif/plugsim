@@ -11,7 +11,7 @@ import {
 } from './constants.js';
 
 const SAVE_KEY = 'plugsim.save.v1';
-export const SAVE_VERSION = 21;
+export const SAVE_VERSION = 22;
 
 let idCounter = 1;
 export function nextId(prefix) {
@@ -332,6 +332,22 @@ const MIGRATABLE_FROM = 11;
 function migrate(data) {
   if (typeof data.version !== 'number' || data.version < MIGRATABLE_FROM) return false;
   if (data.version > SAVE_VERSION) return false;
+
+  if (data.version < 22) {
+    // Three more trades arrived, and firearms lines gained a named pattern.
+    const NEW = ['meth', 'acid', 'ket'];
+    const fill = (m, v) => { if (m) for (const k of NEW) if (m[k] === undefined) m[k] = v; };
+    for (const d of data.districts || []) {
+      fill(d.supply, 0); fill(d.supplyQuality, 0.5); fill(d.demandPerHour, 0.25);
+    }
+    for (const b of data.buildings || []) {
+      fill(b.raw, 0); fill(b.packs, 0); fill(b.rawQuality, 0.5); fill(b.packQuality, 0.5);
+      if (b.model === undefined) b.model = null;
+    }
+    for (const c of data.couriers || []) { fill(c.cargo, 0); fill(c.cargoQuality, 0.5); }
+    if (data.stats) fill(data.stats.packsSold, 0);
+    for (const k of NEW) if (data.priceHistory && !data.priceHistory[k]) data.priceHistory[k] = [];
+  }
 
   if (data.version < 21) {
     if (!Array.isArray(data.incidents)) data.incidents = [];

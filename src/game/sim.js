@@ -18,7 +18,7 @@ import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
-import { LICENCES, classOf, hasLicence, legalPriceFactor } from './firearms.js';
+import { LICENCES, classOf, hasLicence, legalPriceFactor, modelEffects } from './firearms.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -239,8 +239,11 @@ function stepProduction(state, dt) {
       const att = def.product === 'iron'
         ? attachmentEffects(state, b)
         : { qualityAdd: 0, valueMult: 1, heatMult: 1, yieldMult: 1 };
+      // The specific pattern a shop is set up for, on top of its category.
+      const model = def.product === 'iron' ? modelEffects(b) : { valueMult: 1, yieldMult: 1 };
       const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b)
-        * lineMult * researchYield(state, def.product) * item.yieldMult * att.yieldMult;
+        * lineMult * researchYield(state, def.product) * item.yieldMult * att.yieldMult
+        * model.yieldMult;
       // A rifle line turns out fewer, better units than a shotgun line; that
       // shows up as quality, which is what the market actually prices.
       const lineQuality = def.product === 'iron' ? (classOf(b).valueMult - 1) * 0.12 : 0;
@@ -249,6 +252,7 @@ function stepProduction(state, dt) {
         def.baseQuality + fx.qualityAdd + lineQuality
         + researchQuality(state, def.product) + item.qualityAdd
         + att.qualityAdd + (att.valueMult - 1) * 0.35
+        + (model.valueMult - 1) * 0.3
       );
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);

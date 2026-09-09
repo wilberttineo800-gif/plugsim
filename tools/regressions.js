@@ -14,7 +14,9 @@ import {
   raise, stepIncidents, activeIncidents, unseenCount, markSeen,
   INCIDENT_IDS, MAX_INCIDENTS,
 } from '../src/game/incidents.js';
-import { LICENCES, FIREARM_CLASSES, hasLicence } from '../src/game/firearms.js';
+import {
+  LICENCES, FIREARM_CLASSES, hasLicence, MODELS, MODEL_IDS, modelEffects,
+} from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
 import { isResearched, researchQuality, itemValue, ITEM_KINDS } from '../src/game/research.js';
 import {
@@ -1324,6 +1326,49 @@ print('=== 27. things happen at a place ===');
   check('and they are the kind you would expect on a hot block',
         kinds.has('eyes') || kinds.has('glut') || kinds.has('queue'),
         [...kinds].join(', '));
+}
+
+print('');
+print('=== 28. the catalogue is real, not decoration ===');
+{
+  // Every named pattern has a drawing, a category that exists, and stats that
+  // make it a choice rather than a skin.
+  check('there are at least 22 named firearms', MODEL_IDS.length >= 22, MODEL_IDS.length + ' models');
+  const orphanCat = MODEL_IDS.filter((id) => !FIREARM_CLASSES[MODELS[id].category]);
+  check('every pattern belongs to a real category', orphanCat.length === 0, orphanCat.join(', '));
+  const flat = MODEL_IDS.filter((id) => MODELS[id].valueMult === 1 && MODELS[id].yieldMult === 1);
+  check('every pattern is a trade-off', flat.length <= 1,
+        flat.length + ' with no trade-off');
+
+  // Value and output pull against each other, or it's a free lunch.
+  const dearest = MODEL_IDS.reduce((a, b) => MODELS[a].valueMult > MODELS[b].valueMult ? a : b);
+  const fastest = MODEL_IDS.reduce((a, b) => MODELS[a].yieldMult > MODELS[b].yieldMult ? a : b);
+  check('the dearest pattern is not also the fastest', dearest !== fastest,
+        MODELS[dearest].name + ' vs ' + MODELS[fastest].name);
+
+  // A pattern only applies on a line tooled for its category.
+  const st = world();
+  st.adminUnlockAll = true;
+  st.cash.clean = 4000000;
+  const shop = open(st, 'machine_shop');
+  A.setProductionLine(st, shop.id, 'handgun');
+  check('a pattern from another category is refused',
+        !A.setModel(st, shop.id, 'longmarch').ok,
+        A.setModel(st, shop.id, 'longmarch').error);
+  check('one from this category is accepted', A.setModel(st, shop.id, 'warden').ok);
+  check('and it changes what comes off the line',
+        modelEffects(shop).valueMult !== 1 || modelEffects(shop).yieldMult !== 1);
+  A.setProductionLine(st, shop.id, 'rifle');
+  check('retooling drops a pattern that no longer fits', !shop.model, shop.model || 'cleared');
+
+  // Businesses, both ends.
+  const fronts = BUILDING_IDS.filter((id) => BUILDINGS[id].kind === 'front');
+  const chain = BUILDING_IDS.filter((id) =>
+    ['production', 'processing', 'storage'].includes(BUILDINGS[id].kind));
+  check('there are at least 40 businesses', fronts.length + chain.length >= 40,
+        fronts.length + ' legitimate, ' + chain.length + ' illegal');
+  check('and both ends are properly served', fronts.length >= 15 && chain.length >= 15,
+        fronts.length + ' / ' + chain.length);
 }
 
 print('');

@@ -136,6 +136,100 @@ export const FIREARM_CLASSES = {
 };
 
 export const FIREARM_CLASS_IDS = Object.keys(FIREARM_CLASSES);
+
+/**
+ * The actual patterns a shop can be set up to build, within a category. Each is
+ * a real trade-off rather than a skin: a 1911 pattern is slower to make and
+ * worth more, a polymer striker gun is the opposite.
+ */
+export const MODELS = {
+  warden:    { id: 'warden', category: 'handgun', name: 'Warden .45',
+    blurb: 'Single stack, exposed hammer, all steel. Slow to make and people pay for it.',
+    valueMult: 1.3, yieldMult: 0.82 },
+  kestrel:   { id: 'kestrel', category: 'handgun', name: 'Kestrel 9',
+    blurb: 'Polymer frame, few parts, quick to turn out. What the street actually asks for.',
+    valueMult: 0.92, yieldMult: 1.25 },
+  drover:    { id: 'drover', category: 'revolver', name: 'Drover .357',
+    blurb: 'Six shots and nothing left on the floor afterwards.',
+    valueMult: 1.1, yieldMult: 1 },
+  wasp:      { id: 'wasp', category: 'smg', name: 'Wasp 9',
+    blurb: 'Roller-delayed, ribbed handguard, the shape everybody recognises.',
+    valueMult: 1.15, yieldMult: 0.95 },
+  kite:      { id: 'kite', category: 'rifle', name: 'Kite 15',
+    blurb: 'Flat-top rail, modular, takes every attachment there is.',
+    valueMult: 1.05, yieldMult: 1 },
+  longmarch: { id: 'longmarch', category: 'rifle', name: 'Longmarch 47',
+    blurb: 'Stamped, loose tolerances, works caked in anything. Cheap to build and it never stops selling.',
+    valueMult: 0.88, yieldMult: 1.3 },
+  ridgeback: { id: 'ridgeback', category: 'shotgun', name: 'Ridgeback 12',
+    blurb: 'Pump action, tube magazine, nothing to go wrong.',
+    valueMult: 1, yieldMult: 1 },
+  coachman:  { id: 'coachman', category: 'shotgun', name: 'Coachman',
+    blurb: 'Two barrels and a hinge. Almost nothing to machine.',
+    valueMult: 0.8, yieldMult: 1.45 },
+  vigil:     { id: 'vigil', category: 'precision', name: 'Vigil .308',
+    blurb: 'Bedded action, heavy barrel, every one hand-checked.',
+    valueMult: 1.25, yieldMult: 0.85 },
+
+  sable:     { id: 'sable', category: 'handgun', name: 'Sable Compact',
+    blurb: 'Cut down to nothing. Less metal, less money, and it goes anywhere.',
+    valueMult: 0.85, yieldMult: 1.35 },
+  vulcan:    { id: 'vulcan', category: 'handgun', name: 'Vulcan 10',
+    blurb: 'Long slide and a ported barrel. A competition gun that ended up on the street.',
+    valueMult: 1.5, yieldMult: 0.7 },
+  bulldog:   { id: 'bulldog', category: 'revolver', name: 'Bulldog .44',
+    blurb: 'Two inches of barrel and a bobbed hammer. Nothing to snag.',
+    valueMult: 0.95, yieldMult: 1.2 },
+  frontier:  { id: 'frontier', category: 'revolver', name: 'Frontier .45',
+    blurb: 'Single action, unchanged in a century and a half. Collectors pay stupidly.',
+    valueMult: 1.55, yieldMult: 0.72 },
+  grease:    { id: 'grease', category: 'smg', name: 'Grease .45',
+    blurb: 'Stamped tube and a wire stock. Made in a shed by the thousand.',
+    valueMult: 0.72, yieldMult: 1.5 },
+  spectre:   { id: 'spectre', category: 'smg', name: 'Spectre .45',
+    blurb: 'Angled bore, folds to nothing, expensive to machine properly.',
+    valueMult: 1.45, yieldMult: 0.75 },
+  adder:     { id: 'adder', category: 'rifle', name: 'Adder Bullpup',
+    blurb: 'Action behind the trigger — full barrel, half the length. Fiddly to build.',
+    valueMult: 1.35, yieldMult: 0.8 },
+  praetor:   { id: 'praetor', category: 'rifle', name: 'Praetor .308',
+    blurb: 'Full-power cartridge and heavier everything. Fewer buyers, deeper pockets.',
+    valueMult: 1.42, yieldMult: 0.76 },
+  streetsweeper: { id: 'streetsweeper', category: 'shotgun', name: 'Streetsweeper',
+    blurb: 'Twelve rounds in a spring-wound drum. Exactly as subtle as it sounds.',
+    valueMult: 1.6, yieldMult: 0.62 },
+  longshot:  { id: 'longshot', category: 'precision', name: 'Longshot .50',
+    blurb: 'Anti-materiel. Almost nobody wants one and they pay anything for it.',
+    valueMult: 2.1, yieldMult: 0.45 },
+  whisper:   { id: 'whisper', category: 'precision', name: 'Whisper .300',
+    blurb: 'Integrally suppressed and subsonic. Quieter than the bolt working.',
+    valueMult: 1.7, yieldMult: 0.6 },
+  hammerfall: { id: 'hammerfall', category: 'machinegun', name: 'Hammerfall',
+    blurb: 'Belt-fed with a quick-change barrel. Fires until the belt runs out.',
+    valueMult: 1.2, yieldMult: 0.9 },
+  reaper:    { id: 'reaper', category: 'machinegun', name: 'Reaper LMG',
+    blurb: 'Light enough to carry, drum underneath. Easier to build than a belt gun.',
+    valueMult: 0.9, yieldMult: 1.3 },
+};
+
+export const MODEL_IDS = Object.keys(MODELS);
+
+/** The patterns available to a line tooled for a given category. */
+export function modelsFor(categoryId) {
+  return MODEL_IDS.filter((id) => MODELS[id].category === categoryId).map((id) => MODELS[id]);
+}
+
+export function modelOf(building) {
+  const m = building && building.model ? MODELS[building.model] : null;
+  // Only honour a model that belongs to what the line is tooled for.
+  return m && m.category === classOf(building).id ? m : null;
+}
+
+/** What the chosen pattern does on top of its category. */
+export function modelEffects(building) {
+  const m = modelOf(building);
+  return { valueMult: m ? m.valueMult : 1, yieldMult: m ? m.yieldMult : 1 };
+}
 export const DEFAULT_LINE = 'handgun';
 
 export function classOf(building) {

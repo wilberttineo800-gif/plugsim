@@ -11,7 +11,10 @@ import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity, rentBonusFor } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
-import { LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord, hasLicence, classOf } from '../game/firearms.js';
+import {
+  LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
+  hasLicence, classOf, MODELS, modelsFor, modelOf,
+} from '../game/firearms.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import { rhythmNote, rhythmFactor, darkness, cityClock, DAY_NAMES } from '../game/rhythm.js';
 import {
@@ -20,7 +23,7 @@ import {
   ATTACHMENTS, ATTACHMENT_SLOTS, attachmentById, attachmentEffects, fittedTo,
 } from '../game/research.js';
 import {
-  gunArt, gunWithAttachments, attachmentArt, productArt,
+  gunArt, gunWithAttachments, attachmentArt, productArt, modelArt, vehicleArt,
 } from './art.js';
 import {
   leaderboard, trendOf, knownOperations, operationsIn, turfWarning,
@@ -336,6 +339,7 @@ export class GameUI {
       case 'apply-licence': g.applyForLicence(type); break;
       case 'renew-licence': g.renewLicence(type); break;
       case 'set-line': g.setProductionLine(id, type); break;
+      case 'set-model': g.setModel(id, type); break;
       case 'improve-turf': g.improveTurf(id, type); break;
       case 'end-turf': g.endTurfUpgrade(id, type); break;
       case 'start-research': g.startResearch(type); break;
@@ -2294,13 +2298,17 @@ export class GameUI {
     }).join('');
 
     const fx = attachmentEffects(s, b);
+    const chosen = modelOf(b);
     const showcase = `
       <div class="showcase">
-        <div class="showcase__art">${gunWithAttachments(current.id, fitted, {
-          size: 148, color: 'var(--text)', accent: 'var(--sodium)',
-        })}</div>
+        <div class="showcase__art">${chosen
+          ? modelArt(chosen.id, { size: 148, color: 'var(--text)' })
+          : gunWithAttachments(current.id, fitted, {
+              size: 148, color: 'var(--text)', accent: 'var(--sodium)',
+            })}</div>
         <div class="showcase__meta">
-          <div class="showcase__name">${esc(current.name)}</div>
+          <div class="showcase__name">${esc(chosen ? chosen.name : current.name)}</div>
+          ${chosen ? `<div class="showcase__stats"><span>${esc(current.name)}</span></div>` : ''}
           <div class="showcase__stats">
             <span>${fitted.length}/${ATTACHMENT_SLOTS} fitted</span>
             ${fx.qualityAdd > 0 ? `<span class="good">+${Math.round(fx.qualityAdd * 100)} quality</span>` : ''}
@@ -2316,7 +2324,38 @@ export class GameUI {
         </div>
       </div>`;
 
-    return showcase + `
+    const patterns = modelsFor(current.id);
+    const patternPicker = patterns.length ? `
+      <details class="upgrades" data-disc="model-${b.id}"
+        ${this.discOpen(`model-${b.id}`, !chosen) ? 'open' : ''}>
+        <summary><span>Pattern</span>
+          <span class="upgrades__count">${esc(chosen ? chosen.name : 'not set')}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">
+            Which ${esc(current.name.toLowerCase().replace(/s$/, ''))} this line actually builds.
+            More work per unit means fewer of them and more for each.
+          </p>
+          ${patterns.map((m) => {
+            const live = chosen && chosen.id === m.id;
+            return `<button class="card card--art ${live ? '' : ''}"
+              data-action="set-model" data-id="${b.id}" data-type="${m.id}" ${live ? 'disabled' : ''}>
+              <div class="card__art">${modelArt(m.id, {
+                size: 116, color: live ? 'var(--sodium)' : 'var(--text-dim)',
+              })}</div>
+              <div class="card__head">
+                <span class="card__name">${live ? '▸ ' : ''}${esc(m.name)}</span>
+                <span class="card__cost" style="color:var(--text-dim)">${m.valueMult.toFixed(2)}× value</span>
+              </div>
+              <div class="card__blurb">${esc(m.blurb)}</div>
+              <div class="card__meta">
+                <span class="${m.yieldMult >= 1 ? 'good' : 'warn'}">${m.yieldMult.toFixed(2)}× output</span>
+              </div>
+            </button>`;
+          }).join('')}
+        </div>
+      </details>` : '';
+
+    return showcase + patternPicker + `
       <details class="upgrades" data-disc="line-${b.id}"
         ${this.discOpen(`line-${b.id}`, false) ? 'open' : ''}>
         <summary><span>Tooled for</span>

@@ -1177,10 +1177,18 @@ print('=== 25. every product has its own chain, end to end ===');
           press.packs.pills.toFixed(1) + ' packs');
   }
 
-  // Cocaine has a producer and a washer, and nothing else claims it.
-  const cokeFinishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes('coke'));
-  check('cocaine is washed in one place only', cokeFinishers.length === 1,
-        cokeFinishers.map((id) => BUILDINGS[id].name).join(', '));
+  // Alternatives are fine, but only deliberate ones: anything beyond the
+  // primary finisher has to be trading something away for it.
+  for (const pid of PRODUCT_IDS) {
+    const finishers = BUILDING_IDS.filter((id) => (BUILDINGS[id].handles || []).includes(pid));
+    const proper = finishers.filter((id) => (BUILDINGS[id].qualityBonus ?? 0) >= 0);
+    check(`${PRODUCTS[pid].name} has one straight route`, proper.length === 1,
+          proper.map((id) => BUILDINGS[id].name).join(', ') || 'none');
+    const shortcuts = finishers.filter((id) => (BUILDINGS[id].qualityBonus ?? 0) < 0);
+    check(`and any shortcut for it pays for the volume`,
+          shortcuts.every((id) => (BUILDINGS[id].yieldBonus || 1) > 1),
+          shortcuts.map((id) => BUILDINGS[id].name).join(', ') || 'no shortcuts');
+  }
 }
 
 print('');

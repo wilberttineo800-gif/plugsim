@@ -39,16 +39,71 @@ export const GUN_ART = {
   },
   rifle: {
     label: 'Rifle',
-    // Flat-top receiver, handguard, angled magazine, collapsible stock.
+    // Barrel and handguard, flat-top receiver with a rail, angled magazine,
+    // raked pistol grip and — the part that was missing — a proper buttstock.
+    // Without it the silhouette just read as an oversized handgun.
     path: `
-      M6 11 h34 v4 h-34 z
-      M2 11 h4 v4 h-4 z
-      M18 8 h14 v3 h-14 z
-      M22 15 l3 10 h6 l-2 -10 z
-      M40 10 h8 v7 h-8 z
-      M48 11 h5 v5 h-5 z
-      M53 10 h9 v7 h-9 z
-      M36 17 h4 v5 h-4 z
+      M2 12 h24 v4 h-24 z
+      M26 10 h18 v7 h-18 z
+      M24 8 h16 v2 h-16 z
+      M30 17 l2 10 h6 l-2 -10 z
+      M40 17 h6 l-2 9 h-6 z
+      M44 11 h5 v6 h-5 z
+      M49 12 h13 v5 h-13 z
+      M49 17 h5 v3 h-5 z
+    `,
+  },
+  smg: {
+    label: 'Submachine Gun',
+    // Compact, magazine through the grip, folding stock.
+    path: `
+      M6 12 h8 v4 h-8 z
+      M14 10 h22 v7 h-22 z
+      M16 8 h14 v2 h-14 z
+      M20 17 l2 11 h6 l-2 -11 z
+      M32 17 h6 l-2 9 h-6 z
+      M36 11 h4 v5 h-4 z
+      M40 12 h14 v3 h-14 z
+      M54 10 h3 v8 h-3 z
+    `,
+  },
+  revolver: {
+    label: 'Revolver',
+    // Cylinder, top strap and a rounded butt.
+    path: `
+      M8 12 h20 v4 h-20 z
+      M28 10 a6 6 0 1 1 0 12 a6 6 0 0 1 0 -12 z
+      M34 11 h10 v5 h-10 z
+      M40 16 h6 l3 10 a5 5 0 0 1 -9 2 z
+      M30 16 h8 v2 h-8 z
+      M22 10 h4 v2 h-4 z
+    `,
+  },
+  precision: {
+    label: 'Precision Rifle',
+    // Long heavy barrel, bipod, thumbhole stock.
+    path: `
+      M1 13 h30 v3 h-30 z
+      M31 10 h14 v8 h-14 z
+      M33 18 l1 8 h5 l-1 -8 z
+      M45 11 h4 v7 h-4 z
+      M49 12 h13 v5 h-13 z
+      M49 17 h6 v4 h-6 z
+      M12 16 l-4 8 M12 16 l4 8
+    `,
+  },
+  machinegun: {
+    label: 'Machine Gun',
+    // Belt-fed, heavy barrel with a shroud, bipod and box.
+    path: `
+      M2 13 h6 v4 h-6 z
+      M8 12 h4 v6 h-4 z M14 12 h4 v6 h-4 z M20 12 h4 v6 h-4 z
+      M24 11 h20 v8 h-20 z
+      M28 19 h10 v6 h-10 z
+      M44 12 h5 v6 h-5 z
+      M49 13 h12 v4 h-12 z
+      M49 17 h5 v4 h-5 z
+      M18 18 l-4 8 M18 18 l4 8
     `,
   },
   nfa: {
@@ -241,4 +296,129 @@ export function attachmentArt(id, { size = 34, color = 'currentColor' } = {}) {
   return `<svg class="art art--attach" viewBox="${boxes[id] || '0 0 64 32'}"
     width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"
     ><path d="${a.path.replace(/\s+/g, ' ').trim()}" ${paint}/></svg>`;
+}
+
+
+// --- Vehicles ---------------------------------------------------------------
+//
+// Side profile on the same 64x32 field as the guns. Every model in the
+// dealership maps onto one of these bodies, so a box truck reads as a box
+// truck at thumbnail size and a sports car doesn't look like a saloon.
+
+export const VEHICLE_ART = {
+  person: {
+    label: 'On foot',
+    path: `M32 5 a3.5 3.5 0 1 1 0 7 a3.5 3.5 0 0 1 0 -7 z
+      M30 13 h4 l3 8 h-2.5 l-1.5 -4 v6 l3 9 h-3 l-3 -7.5 l-3 7.5 h-3 l3 -9 v-6 l-1.5 4 h-2.5 z`,
+  },
+  bicycle: {
+    label: 'Bicycle',
+    path: `M15 23 a6 6 0 1 0 0.1 0 z M49 23 a6 6 0 1 0 0.1 0 z
+      M15 23 l9 -9 h11 l-5 9 z M32 14 l7 9 M28 12 h9 M49 23 l-9 -9 h-5`,
+    stroked: true,
+  },
+  scooter: {
+    label: 'Scooter',
+    path: `M14 24 a5.5 5.5 0 1 0 0.1 0 z M50 24 a5.5 5.5 0 1 0 0.1 0 z
+      M14 24 h7 a11 9 0 0 1 11 -9 h7 l5 9 h6
+      M32 15 v-5 h8 M40 10 l5 -4`,
+    stroked: true,
+  },
+  motorcycle: {
+    label: 'Motorcycle',
+    path: `M14 23 a6.5 6.5 0 1 0 0.1 0 z M50 23 a6.5 6.5 0 1 0 0.1 0 z
+      M14 23 l10 -4 h11 l6 -7 h6 l4 11
+      M24 19 l5 -8 h10 M41 12 h8`,
+    stroked: true,
+  },
+
+  // Road vehicles all sit on the same ground line with real wheels — without
+  // them a silhouette is just a lump and nothing reads as a car.
+  hatchback: {
+    label: 'Hatchback',
+    path: `M9 21 v-4 l5 -5 h5 l4 -4 h10 l3 4 h7 l5 5 v4 z
+      M13 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
+      M37 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z`,
+  },
+  sedan: {
+    label: 'Saloon',
+    path: `M5 21 v-4 l6 -4 h5 l5 -4 h12 l4 4 h7 l8 4 v4 z
+      M11 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
+      M41 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z`,
+  },
+  sportscar: {
+    label: 'Sports car',
+    path: `M3 21 v-3 l7 -3 l7 -4 h14 l7 4 l9 3 v3 z
+      M10 24 a4.5 4.5 0 1 0 9 0 a4.5 4.5 0 1 0 -9 0 z
+      M42 24 a4.5 4.5 0 1 0 9 0 a4.5 4.5 0 1 0 -9 0 z`,
+  },
+  suv: {
+    label: 'SUV',
+    path: `M7 21 v-7 l4 -4 h5 l3 -3 h12 l3 3 h5 l5 4 v7 z
+      M12 24 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z
+      M38 24 a5.5 5.5 0 1 0 11 0 a5.5 5.5 0 1 0 -11 0 z`,
+  },
+  van: {
+    label: 'Van',
+    path: `M5 21 v-12 h26 v3 h6 l6 5 v4 z
+      M10 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
+      M36 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z`,
+  },
+  boxtruck: {
+    label: 'Box truck',
+    path: `M4 21 v-16 h30 v16 z M34 21 v-8 l4 -4 h8 l6 5 v7 z
+      M10 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
+      M40 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z`,
+  },
+  pickup: {
+    label: 'Pickup',
+    path: `M5 21 v-6 h18 v-6 l4 -4 h11 l4 4 h4 l4 6 v6 z
+      M11 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z
+      M37 24 a5 5 0 1 0 10 0 a5 5 0 1 0 -10 0 z`,
+  },
+  semi: {
+    label: 'Semi',
+    path: `M2 21 v-17 h30 v17 z M32 21 v-9 l4 -5 h10 l7 6 v8 z
+      M6 24 a4.5 4.5 0 1 0 9 0 a4.5 4.5 0 1 0 -9 0 z
+      M17 24 a4.5 4.5 0 1 0 9 0 a4.5 4.5 0 1 0 -9 0 z
+      M42 24 a4.5 4.5 0 1 0 9 0 a4.5 4.5 0 1 0 -9 0 z`,
+  },
+  drone: {
+    label: 'Drone',
+    // Rotors on booms either side, with a package slung underneath.
+    path: `M24 13 h16 v6 h-16 z
+      M8 11 h10 M46 11 h10 M13 11 v-2 M51 11 v-2
+      M18 11 l6 3 M46 11 l-6 3
+      M28 19 v4 h8 v-4 M28 23 h8`,
+    stroked: true,
+  },
+};
+
+export const VEHICLE_ART_IDS = Object.keys(VEHICLE_ART);
+
+/** Which drawing each model in the dealership uses. */
+export const VEHICLE_BODY = {
+  runner: 'person', jogger: 'person',
+  bike: 'bicycle', ebike: 'bicycle',
+  scooter: 'scooter', motorcycle: 'motorcycle',
+  hatchback: 'hatchback', sedan: 'sedan', cab: 'sedan',
+  suv: 'suv', luxury: 'sedan', sportscar: 'sportscar',
+  minivan: 'van', van: 'van', chiller: 'van', luton: 'boxtruck',
+  pickup: 'pickup', boxtruck: 'boxtruck', flatbed: 'pickup', semi: 'semi',
+  drone: 'drone', heavylift: 'drone',
+};
+
+export function bodyFor(typeId) {
+  return VEHICLE_BODY[typeId] || 'sedan';
+}
+
+/** One vehicle, drawn. */
+export function vehicleArt(typeId, { size = 64, color = 'currentColor', className = '' } = {}) {
+  const art = VEHICLE_ART[bodyFor(typeId)] || VEHICLE_ART.sedan;
+  const paint = art.stroked
+    ? ` stroke="${color}" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"`
+    : ` fill="${color}"`;
+  return `<svg class="art art--vehicle ${className}" viewBox="0 0 64 32"
+    width="${size}" height="${Math.round(size / 2)}" aria-hidden="true"
+    ><path d="${art.path.replace(/\s+/g, ' ').trim()}"${paint}/></svg>`;
 }

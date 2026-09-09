@@ -318,7 +318,9 @@ function stepLabs(state, dt) {
       }
       paySoft(state, cost);
 
-      const packs = take * PRODUCTS[pid].packsPerRaw;
+      // A cut house bulks it out: more packs from the same input, and every
+      // one of them worse for it.
+      const packs = take * PRODUCTS[pid].packsPerRaw * (def.yieldBonus || 1);
       const quality = clamp01(b.rawQuality[pid] + def.qualityBonus + fx.qualityAdd);
       b.packQuality[pid] = blendQuality(b.packs[pid], b.packQuality[pid], packs, quality);
       b.raw[pid] -= take;
@@ -578,8 +580,12 @@ function maybeGetStopped(state, c, def, dt, hooks) {
   // Driving through a block you've arranged is safer than driving through one
   // you haven't.
   const turf = turfEffects(d);
+  // Vans on the road all day are cover for vans on the road all day.
+  const cover = clamp01((state.buildings || []).reduce(
+    (n, b) => Math.max(n, b.active !== false ? (BUILDINGS[b.type].stopResist || 0) : 0), 0));
   const perHour = HEAT.stopChanceAtMaxHeat * clamp01(heatFactor) * (1 - stats.stealth)
     * (1 - clamp01(turf.stopResist))
+    * (1 - cover)
     * (1 - turf.policeSuppression);
   if (rng() < perHour * dt) {
     const fine = Math.round(carried * HEAT.finePerPackSeized);

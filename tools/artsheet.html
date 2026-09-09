@@ -1,0 +1,58 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Plugsim — everything drawn</title>
+<link rel="stylesheet" href="../src/styles.css">
+<style>
+  body { background: var(--ground); color: var(--text); font-family: var(--font-body);
+         margin: 0; padding: 26px 30px 40px; }
+  h1 { font: 600 20px/1 var(--font-display); letter-spacing: .1em; text-transform: uppercase;
+       color: var(--sodium); margin: 0 0 4px; }
+  p.sub { color: var(--text-faint); margin: 0 0 26px; font-size: 12.5px; }
+  h2 { font: 600 12px/1 var(--font-display); letter-spacing: .14em; text-transform: uppercase;
+       color: var(--text-dim); margin: 26px 0 12px; padding-bottom: 7px;
+       border-bottom: 1px solid var(--line); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 12px; }
+  .cell { background: linear-gradient(180deg, var(--panel-2), var(--panel));
+          border: 1px solid var(--line); border-radius: 10px; padding: 12px 10px 10px;
+          display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cell svg { display: block; }
+  .nm { font: 600 10.5px/1.3 var(--font-display); letter-spacing: .06em;
+        text-transform: uppercase; color: var(--text); text-align: center; }
+  .sub2 { font: 500 9.5px/1.2 var(--font-mono); color: var(--text-faint); text-align: center; }
+</style>
+<h1>Everything drawn</h1>
+<p class="sub">Inline SVG — no images fetched, works offline.</p>
+<div id="out"></div>
+<script type="module">
+  import * as A from '../src/ui/art.js';
+  import { COURIERS, COURIER_IDS, PRODUCTS, PRODUCT_IDS } from '../src/game/constants.js';
+
+  const out = document.getElementById('out');
+  const section = (title, cells) => {
+    out.insertAdjacentHTML('beforeend',
+      `<h2>${title}</h2><div class="grid">${cells.join('')}</div>`);
+  };
+  const cell = (art, name, sub) =>
+    `<div class="cell">${art}<div class="nm">${name}</div>${sub ? `<div class="sub2">${sub}</div>` : ''}</div>`;
+
+  section('Firearms — the four categories', A.GUN_IDS.map((id) =>
+    cell(A.gunArt(id, { size: 116, color: 'var(--text)' }), A.GUN_ART[id].label)));
+
+  section('Firearms with attachments fitted', [
+    cell(A.gunWithAttachments('rifle', ['optic', 'extmag'], { size: 130, color: 'var(--text)', accent: 'var(--sodium)' }), 'Rifle', 'optic · extended mag'),
+    cell(A.gunWithAttachments('rifle', ['optic', 'suppressor', 'foregrip'], { size: 130, color: 'var(--text)', accent: 'var(--sodium)' }), 'Rifle', 'optic · can · grip'),
+    cell(A.gunWithAttachments('handgun', ['suppressor', 'laser'], { size: 130, color: 'var(--text)', accent: 'var(--sodium)' }), 'Handgun', 'can · laser'),
+    cell(A.gunWithAttachments('shotgun', ['optic'], { size: 130, color: 'var(--text)', accent: 'var(--sodium)' }), 'Shotgun', 'optic'),
+    cell(A.gunWithAttachments('nfa', ['optic', 'foregrip'], { size: 130, color: 'var(--text)', accent: 'var(--sodium)' }), 'NFA', 'optic · grip'),
+  ]);
+
+  section('Attachments you craft', A.ATTACHMENT_IDS.map((id) =>
+    cell(A.attachmentArt(id, { size: 62, color: 'var(--sodium)' }), A.ATTACHMENT_ART[id].label)));
+
+  section('The fleet — every model in the dealership', COURIER_IDS.map((id) =>
+    cell(A.vehicleArt(id, { size: 132, color: 'var(--text)' }),
+      COURIERS[id].name, COURIERS[id].capacity + ' cap · ' + COURIERS[id].class)));
+
+  section('Goods', PRODUCT_IDS.map((id) =>
+    cell(A.productArt(id, { size: 58, color: PRODUCTS[id].color }), PRODUCTS[id].name)));
+</script>

@@ -254,12 +254,18 @@ export function upgradeBuilding(state, buildingId, upgradeId) {
  * a job — so every shop you own cuts the bill, and building it out cuts more.
  */
 export function fittingDiscount(state) {
-  const shops = (state.buildings || []).filter((b) => b.type === 'autoshop' && b.active !== false);
+  // An auto shop is the legitimate way to do it; a chop shop is the other way,
+  // and cheaper because nothing about it is above board.
+  const shops = (state.buildings || []).filter(
+    (b) => b.active !== false && (b.type === 'autoshop' || BUILDINGS[b.type].fittingDiscount)
+  );
   if (!shops.length) return 0;
   // Best shop leads; extra shops help a little, and the whole thing is capped
   // so the work is never free.
-  const best = shops.reduce(
-    (n, b) => Math.max(n, 0.15 + 0.05 * (b.upgrades || []).length), 0);
+  const best = shops.reduce((n, b) => {
+    const base = BUILDINGS[b.type].fittingDiscount ?? 0.15;
+    return Math.max(n, base + 0.05 * (b.upgrades || []).length);
+  }, 0);
   return Math.min(0.45, best + 0.03 * (shops.length - 1));
 }
 

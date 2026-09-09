@@ -205,167 +205,195 @@ export const GUN_DETAIL = {
   },
 
   // --- Kestrel 9 ------------------------------------------------------------
-  // Glock 17: 7.95" overall, 5.47" tall, 4.49" barrel, at 56 px/in.
-  // The grip rakes *forward* going down — that is what grip angle means, and
-  // drawing it the other way is what made the first pass look like a toy.
+  // Glock 17: 7.95" overall, 5.47" tall, at 55.6 px/in — a 442 x 311 field.
+  //
+  // These numbers are traced off a photograph rather than guessed, because
+  // guessing got the single most important thing backwards three times running:
+  // **the grip rakes rearward as it drops.** The magazine sits behind the top
+  // of the grip, not in front of it. Measured off the reference, both straps
+  // lean back about 18 degrees, the slide is a quarter of the gun's height, and
+  // the trigger guard bottoms out at half of it.
   kestrel: {
-    box: [-8, -16, 470, 334],
-    mounts: { rail: [200, 4], muzzle: [0, 31], under: [170, 90], mag: [330, 288] },
+    box: [-6, -6, 464, 326],
+    mounts: { rail: [200, 8], muzzle: [0, 42], under: [110, 92], mag: [366, 296] },
     body: `
-      <path d="M0 18 h14 v26 h-14 z" fill="#2a2e34"/>
-      <circle cx="6" cy="31" r="6.4" fill="#0d0f12"/>
-      <!-- slide -->
-      <path d="M2 6 h396 c8 0 12 4 12 12 v28 c0 8 -4 12 -12 12 h-396
-               c-2 0 -3.6 -1.4 -3.6 -3.6 v-44.8 c0 -2.2 1.6 -3.6 3.6 -3.6 z" fill="url(#pgPoly)"/>
-      <path d="M2 6 h396 c8 0 12 4 12 12 v2.6 h-411.6 v-11 c0 -2.2 1.6 -3.6 3.6 -3.6 z"
+      <!-- barrel at the muzzle -->
+      <path d="M0 26 h16 v32 h-16 z" fill="#2a2e34"/>
+      <circle cx="7" cy="42" r="7" fill="#0b0d10"/>
+      <!-- slide: a quarter of the gun's height -->
+      <path d="M2 10 h396 c7 0 11 4 11 11 v35 c0 7 -4 11 -11 11 h-396
+               c-2.4 0 -4 -1.6 -4 -4 v-49 c0 -2.4 1.6 -4 4 -4 z" fill="url(#pgPoly)"/>
+      <path d="M2 10 h396 c7 0 11 4 11 11 v3 h-411 v-10 c0 -2.4 1.6 -4 4 -4 z"
             fill="#7c8794" opacity=".3"/>
-      <path d="M0 52 h410 c0 4 -3 6 -8 6 h-398 c-2.4 0 -4 -1.6 -4 -3.6 z"
-            fill="#0d0f12" opacity=".45"/>
+      <path d="M0 61 h409 c0 4 -3 6 -8 6 h-397 c-2.4 0 -4 -1.6 -4 -4 z"
+            fill="#0b0d10" opacity=".35"/>
       <!-- ejection port -->
-      <path d="M236 13 h94 c3 0 5 2 5 5 v15 c0 3 -2 5 -5 5 h-94 c-3 0 -5 -2 -5 -5
-               v-15 c0 -3 2 -5 5 -5 z" fill="#101317"/>
-      <path d="M236 33 h94 c3 0 5 2 5 5 v-2.4 c0 3 -2 5 -5 5 h-94 c-3 0 -5 -2 -5 -5 z"
-            fill="#8d97a5" opacity=".25"/>
+      <path d="M248 18 h92 c3.4 0 5.6 2.2 5.6 5.6 v17 c0 3.4 -2.2 5.6 -5.6 5.6 h-92
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-17 c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="#101317"/>
+      <path d="M248 40 h92 c3.4 0 5.6 2.2 5.6 5.6 v-2.6 c0 3.4 -2.2 5.6 -5.6 5.6 h-92
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 z" fill="#8d97a5" opacity=".22"/>
       <!-- rear cocking serrations -->
       <g fill="#101317" opacity=".75">
-        <rect x="344" y="12" width="5" height="40" rx="2.4"/>
-        <rect x="356" y="12" width="5" height="40" rx="2.4"/>
-        <rect x="368" y="12" width="5" height="40" rx="2.4"/>
-        <rect x="380" y="12" width="5" height="40" rx="2.4"/>
-        <rect x="392" y="12" width="5" height="40" rx="2.4"/>
+        <rect x="350" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="362" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="374" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="386" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="398" y="16" width="5" height="45" rx="2.4"/>
       </g>
       <!-- sights -->
-      <path d="M26 -8 h13 v14 h-13 z" fill="#20242a"/>
-      <circle cx="32.5" cy="0" r="3.6" fill="#e8eef5" opacity=".85"/>
-      <path d="M372 -8 h34 v14 h-34 z" fill="#20242a"/>
-      <path d="M385 -8 h8 v9 h-8 z" fill="#0b0d10"/>
-      <!-- frame: dust cover, accessory rail, takedown lever -->
-      <path d="M62 58 h178 v28 h-178 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-16.8
+      <path d="M28 -2 h14 v12 h-14 z" fill="#20242a"/>
+      <circle cx="35" cy="4.4" r="3.6" fill="#e8eef5" opacity=".85"/>
+      <path d="M368 -2 h36 v12 h-36 z" fill="#20242a"/>
+      <path d="M382 -2 h8 v8 h-8 z" fill="#0b0d10"/>
+      <!-- frame: dust cover forward of the guard, with its accessory rail -->
+      <path d="M40 67 h124 v27 h-124 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-15.8
                c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="url(#pgPoly)"/>
+      <path d="M40 67 h124 v3.4 h-129.6 c0 -2.2 2.2 -3.4 5.6 -3.4 z"
+            fill="#7c8794" opacity=".24"/>
       <g fill="#12151a" opacity=".7">
-        <rect x="96" y="76" width="28" height="10" rx="2"/>
-        <rect x="140" y="76" width="28" height="10" rx="2"/>
-        <rect x="184" y="76" width="28" height="10" rx="2"/>
+        <rect x="66" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="102" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="138" y="83" width="24" height="11" rx="2.4"/>
       </g>
-      <path d="M214 58 h24 v10 h-24 z" fill="#4a515b"/>
-      <!-- trigger guard: the squared Glock loop -->
-      <path d="M240 58 h100 v18 h-11 c-4 28 -17 40 -37 40 c-22 0 -34 -12 -38 -40 h-14 z"
+      <path d="M168 67 h22 v11 h-22 z" fill="#4a515b"/>
+      <path d="M196 70 h44 v9 h-44 z" fill="#4a515b"/>
+      <!-- trigger guard: bottoms out at half the gun's height -->
+      <path fill-rule="evenodd" fill="url(#pgPoly)"
+            d="M160 67 h124 v24 h-14 c-4 40 -20 58 -46 58 c-27 0 -42 -18 -46 -58 h-18
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-12.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z
+               M186 91 h72 c-3.4 30 -15 43 -35 43 c-21 0 -33 -13 -37 -43 z"/>
+      <path d="M186 91 h10 c3 27 12 39 28 41 l-2 12 c-24 -3.4 -34 -22 -36 -53 z"
+            fill="#12151a" opacity=".5"/>
+      <path d="M196 92 h18 v38 h-18 z" fill="#20242a"/>
+      <path d="M202 94 h5 v34 h-5 z" fill="#0b0d10"/>
+      <!-- grip: rakes REARWARD as it drops, about 18 degrees, so the magazine
+           finishes behind the top of the grip -->
+      <path d="M284 90
+               C288 150 306 240 328 296
+               c1.6 4.2 5.6 6.4 10 5.4
+               l96 -22 c4.8 -1 7.4 -5 6.4 -9.8
+               C424 200 402 140 386 84
+               c-1.4 -5 -5 -7.6 -10.6 -7.6 h-79 c-10 0 -13.6 6.4 -12.4 13.6 z"
             fill="url(#pgPoly)"/>
-      <path d="M262 76 c3 21 11 30 25 32 l-2 12 c-23 -3 -33 -19 -36 -44 z" fill="#101317"/>
-      <path d="M270 78 h14 v28 h-14 z" fill="#20242a"/>
-      <path d="M274.5 80 h4 v24 h-4 z" fill="#0b0d10"/>
-      <!-- grip: frontstrap and backstrap both rake forward as they drop -->
-      <path d="M340 76
-               C336 132 320 212 300 284
-               c-1.2 4.4 1.4 7.6 5.8 8
-               l54 4.8 c4.4 .4 7.6 -2.4 8 -6.8
-               C378 212 402 132 434 66
-               c2.6 -5.4 -.4 -9.4 -6.6 -9.4 h-72 c-10 0 -15.4 5.6 -15.4 15.4 z"
-            fill="url(#pgPoly)"/>
-      <!-- beavertail over the web of the hand -->
-      <path d="M400 56 h30 c8 0 12 4 10 11 l-6 18 c-2 -13 -10 -21 -24 -22 z"
-            fill="url(#pgPoly)"/>
-      <path d="M340 76 C336 132 320 212 300 284 c-1.2 4.4 1.4 7.6 5.8 8
-               l12 1 C338 214 356 134 360 78 z" fill="#5a626d" opacity=".22"/>
-      <!-- stippled panel and the finger grooves down the frontstrap -->
-      <path d="M330 116 h44 l-22 156 h-44 z" fill="url(#pgStipple)"/>
+      <!-- beavertail, over the web of the hand -->
+      <path d="M378 72 h26 c7 0 10 4.4 8 10.4 l-6 18
+               c-2 -14 -9.4 -23 -22 -25.4 z" fill="url(#pgPoly)"/>
+      <!-- frontstrap highlight -->
+      <path d="M284 90 C288 150 306 240 328 296 c1.6 4.2 5.6 6.4 10 5.4
+               l-13 -2.8 C302 242 288 152 288 88 z" fill="#7c8794" opacity=".22"/>
+      <!-- stippled panel between the straps -->
+      <path d="M298 116 C304 176 320 250 338 292 l84 -19
+               C408 216 390 158 372 108 z" fill="url(#pgStipple)"/>
+      <!-- finger grooves down the frontstrap -->
       <g fill="#12151a" opacity=".5">
-        <path d="M332 122 c9 .6 15 3.4 19 7.6 l1.6 -12 c-5 -3.4 -11 -5.4 -18 -5.6 z"/>
-        <path d="M322 168 c9 .6 15 3.4 19 7.6 l1.6 -12 c-5 -3.4 -11 -5.4 -18 -5.6 z"/>
-        <path d="M312 214 c9 .6 15 3.4 19 7.6 l1.6 -12 c-5 -3.4 -11 -5.4 -18 -5.6 z"/>
+        <path d="M292 132 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+        <path d="M302 188 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+        <path d="M314 244 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
       </g>
-      <!-- magazine floorplate -->
-      <path d="M296 282 h66 c4.4 0 7 3 7 7.4 v9 c0 4.4 -2.6 7.4 -7 7 l-62 -5.4
-               c-4.4 -.4 -7 -3.4 -7 -7.6 v-3 c0 -4.4 2.6 -7.4 3 -7.4 z" fill="#20242a"/>
-      <path d="M294 288 l76 6.6 v3.4 l-76 -6.6 z" fill="#8d97a5" opacity=".3"/>
+      <!-- magazine floorplate, the rearmost thing on the gun -->
+      <path d="M330 294 l104 -23 c5 -1.2 8.4 1.4 9.4 6.4 l2 9.6
+               c1 5 -1.6 8.8 -6.6 9.8 l-100 21 c-5 1 -8.6 -1.4 -9.6 -6.2 l-2 -9
+               c-1 -5 1.6 -8.6 2.8 -8.6 z" fill="#20242a"/>
+      <path d="M326 302 l118 -25 .8 4 -118 25 z" fill="#8d97a5" opacity=".3"/>
     `,
   },
 
   // --- Warden .45 -----------------------------------------------------------
-  // M1911A1: 8.625" overall, 5.5" tall, 5.03" barrel, at 52 px/in.
+  // M1911A1: 8.625" overall, 5.5" tall, at 52 px/in — a 448 x 286 field.
+  // Longer and slimmer than the Glock, squarer slide, exposed hammer, and a
+  // slightly flatter rearward grip rake.
   warden: {
-    box: [-8, -16, 476, 322],
-    mounts: { rail: [190, 4], muzzle: [0, 30], under: [160, 86], mag: [332, 276] },
+    box: [-6, -8, 470, 306],
+    mounts: { rail: [190, 4], muzzle: [0, 34], under: [110, 88], mag: [366, 268] },
     body: `
       <!-- barrel bushing and recoil spring plug -->
-      <path d="M0 10 h28 v42 h-28 z" fill="url(#pgSteelDark)"/>
-      <circle cx="12" cy="23" r="7.4" fill="#0d0f12"/>
-      <circle cx="12" cy="42" r="6" fill="#3a4048"/>
+      <path d="M0 12 h28 v48 h-28 z" fill="url(#pgSteelDark)"/>
+      <circle cx="12" cy="26" r="7.6" fill="#0b0d10"/>
+      <circle cx="12" cy="48" r="6.4" fill="#3a4048"/>
       <!-- slide: rounded top, unlike the Glock's flat one -->
-      <path d="M6 3 h354 c9 0 14 5 14 14 v26 c0 9 -5 14 -14 14 h-354
-               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-42.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="url(#pgBlued)"/>
-      <path d="M6 3 h354 c9 0 14 5 14 14 v1.6 c-4 -7 -10 -10.6 -19 -10.6 h-354.6
+      <path d="M6 6 h370 c9 0 14 5 14 14 v26 c0 9 -5 14 -14 14 h-370
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-42.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z"
+            fill="url(#pgBlued)"/>
+      <path d="M6 6 h370 c9 0 14 5 14 14 v1.6 c-4 -7 -10 -10.6 -19 -10.6 h-370.6
                c0 -3.4 2.2 -5 5.6 -5 z" fill="#8d97a5" opacity=".38"/>
-      <path d="M0 49 h374 c-1 5 -6 8 -14 8 h-354 c-3.4 0 -5.6 -2.2 -5.6 -5.6 z"
-            fill="#0b0d10" opacity=".5"/>
-      <path d="M212 12 h76 c3 0 5 2 5 5 v14 c0 3 -2 5 -5 5 h-76 c-3 0 -5 -2 -5 -5
-               v-14 c0 -3 2 -5 5 -5 z" fill="#101317"/>
+      <path d="M0 54 h390 c-1 4 -6 6 -14 6 h-370 c-3.4 0 -5.6 -1.6 -5.6 -4 z"
+            fill="#0b0d10" opacity=".35"/>
+      <path d="M222 14 h80 c3.4 0 5.6 2.2 5.6 5.6 v15 c0 3.4 -2.2 5.6 -5.6 5.6 h-80
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-15 c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="#101317"/>
       <g fill="#101317" opacity=".7">
-        <rect x="308" y="10" width="5" height="42" rx="2.4"/>
-        <rect x="320" y="10" width="5" height="42" rx="2.4"/>
-        <rect x="332" y="10" width="5" height="42" rx="2.4"/>
-        <rect x="344" y="10" width="5" height="42" rx="2.4"/>
-        <rect x="356" y="10" width="5" height="42" rx="2.4"/>
+        <rect x="324" y="12" width="5" height="44" rx="2.4"/>
+        <rect x="336" y="12" width="5" height="44" rx="2.4"/>
+        <rect x="348" y="12" width="5" height="44" rx="2.4"/>
+        <rect x="360" y="12" width="5" height="44" rx="2.4"/>
+        <rect x="372" y="12" width="5" height="44" rx="2.4"/>
       </g>
-      <path d="M24 -7 h12 v10 h-12 z" fill="#2a2e34"/>
-      <path d="M338 -7 h26 v10 h-26 z" fill="#2a2e34"/>
-      <path d="M347 -7 h8 v8 h-8 z" fill="#0b0d10"/>
-      <!-- hammer: spur standing proud behind the slide -->
-      <path d="M374 20 c18 0 30 10 32 26 c1.4 11 -4.6 19 -15 20 l-2.6 -13
-               c4.6 -.6 7 -4 6.2 -9 c-1.6 -10 -9.6 -15.6 -22 -16 z" fill="url(#pgBlued)"/>
-      <path d="M374 20 c18 0 30 10 32 26 l-6 .6 c-2.6 -13 -12 -20 -26 -20.6 z"
-            fill="#8d97a5" opacity=".3"/>
-      <circle cx="376" cy="44" r="8" fill="#3a4048"/>
-      <circle cx="376" cy="44" r="3.4" fill="#101317"/>
-      <!-- grip safety, running into the backstrap -->
-      <path d="M362 40 h20 c15 0 24 9 26 24 l4 24 c-9 -18 -22 -28 -40 -30 l-10 -1 z"
+      <path d="M26 -4 h12 v10 h-12 z" fill="#2a2e34"/>
+      <path d="M354 -4 h26 v10 h-26 z" fill="#2a2e34"/>
+      <path d="M363 -4 h8 v8 h-8 z" fill="#0b0d10"/>
+      <!-- hammer: a spur on a pivot, behind the slide -->
+      <path d="M390 16 c15 1.6 24 10.6 25.6 24 c1.2 10 -3.8 16.6 -13 18
+               l-2.6 -12.6 c3.8 -.8 5.6 -3.8 5 -8 c-1.2 -8 -7 -12.6 -16 -13.2 z"
             fill="url(#pgBlued)"/>
+      <path d="M390 16 c15 1.6 24 10.6 25.6 24 l-5.6 .6 c-1.8 -10.4 -9 -16.6 -20 -17.2 z"
+            fill="#8d97a5" opacity=".32"/>
+      <circle cx="394" cy="48" r="7.6" fill="#3a4048"/>
+      <circle cx="394" cy="48" r="3.2" fill="#101317"/>
+      <!-- grip safety, sweeping down into the backstrap -->
+      <path d="M362 44 h26 c14 0 22 8 24 22 l5 24 c-8 -18 -22 -28 -40 -30
+               l-15 -1.4 z" fill="url(#pgBlued)"/>
       <!-- thumb safety and slide stop -->
-      <path d="M344 56 h34 c4.4 0 6.6 2.2 6.6 6.6 c0 4.4 -2.2 6.6 -6.6 6.6 h-34 z"
+      <path d="M330 60 h44 c4.4 0 6.6 2.2 6.6 6.6 c0 4.4 -2.2 6.6 -6.6 6.6 h-44 z"
             fill="url(#pgSteelDark)"/>
-      <circle cx="192" cy="66" r="7.4" fill="url(#pgSteelDark)"/>
-      <!-- frame: same blued steel as the slide, not a second colour -->
-      <path d="M54 55 h178 v26 h-178 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-14.8
+      <circle cx="176" cy="70" r="7.4" fill="url(#pgSteelDark)"/>
+      <!-- frame: same blued steel as the slide -->
+      <path d="M38 60 h130 v26 h-130 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-14.8
                c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="url(#pgBlued)"/>
-      <path d="M54 55 h178 v3 h-183.6 c0 -1.8 2.2 -3 5.6 -3 z" fill="#8d97a5" opacity=".3"/>
+      <path d="M38 60 h130 v3 h-135.6 c0 -1.8 2.2 -3 5.6 -3 z" fill="#8d97a5" opacity=".28"/>
       <!-- trigger guard: round, the 1911 signature -->
-      <path d="M232 55 h92 v17 h-10 c-4 25 -17 36 -36 36 c-20 0 -32 -11 -36 -36 h-10 z"
-            fill="url(#pgBlued)"/>
-      <path d="M254 72 c3 20 12 28 25 30 l-2 11 c-22 -3 -32 -17 -35 -41 z" fill="#101317"/>
-      <path d="M262 74 h16 v26 h-16 z" fill="url(#pgSteelDark)"/>
+      <path fill-rule="evenodd" fill="url(#pgBlued)"
+            d="M164 60 h122 v22 h-13 c-3.4 34 -18 49 -42 49 c-24 0 -38 -15 -42 -49 h-25
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-10.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z
+               M188 82 h72 c-3 26 -14 37 -33 37 c-20 0 -32 -11 -36 -37 z"/>
+      <path d="M188 82 h10 c2.6 23 11 33 26 35 l-2 12 c-24 -3 -33 -20 -35 -47 z"
+            fill="#12151a" opacity=".5"/>
+      <!-- trigger, long and flat with its face grooves -->
+      <path d="M196 84 h18 v32 h-18 z" fill="url(#pgSteelDark)"/>
       <g fill="#0b0d10" opacity=".65">
-        <rect x="264" y="78" width="12" height="2.4"/>
-        <rect x="264" y="85" width="12" height="2.4"/>
-        <rect x="264" y="92" width="12" height="2.4"/>
+        <rect x="198" y="88" width="14" height="2.6"/>
+        <rect x="198" y="97" width="14" height="2.6"/>
+        <rect x="198" y="106" width="14" height="2.6"/>
       </g>
-      <!-- grip frame: rakes forward as it drops -->
-      <path d="M324 72
-               C320 124 306 198 288 266
-               c-1.2 4.4 1.4 7.6 5.8 8
-               l52 4.6 c4.4 .4 7.6 -2.4 8 -6.8
-               C364 198 388 124 418 62
-               c2.6 -5.4 -.4 -9.4 -6.6 -9.4 h-72 c-10 0 -15.4 5.6 -15.4 15.4 z"
+      <!-- grip frame: the same rearward rake, a touch flatter -->
+      <path d="M286 82
+               C290 138 306 218 326 270
+               c1.6 4 5.4 6 9.6 5
+               l92 -21 c4.6 -1 7 -4.8 6 -9.4
+               C420 190 400 132 386 78
+               c-1.4 -4.8 -5 -7.2 -10.2 -7.2 h-77 c-9.6 0 -13.2 6 -12.8 11.2 z"
             fill="url(#pgBlued)"/>
       <!-- walnut grip panel, checkered, with its screw -->
-      <path d="M330 104 h44 c5 0 7.6 3 6.8 8 l-26 148 c-.8 5 -4 8 -9 7.6
-               l-40 -3.6 c-5 -.4 -7.4 -3.6 -6.4 -8.4 l24 -144 c.8 -5 4.6 -7.6 6.6 -7.6 z"
-            fill="url(#pgWalnut)"/>
-      <path d="M330 104 h44 c5 0 7.6 3 6.8 8 l-26 148 c-.8 5 -4 8 -9 7.6
-               l-40 -3.6 c-5 -.4 -7.4 -3.6 -6.4 -8.4 l24 -144 c.8 -5 4.6 -7.6 6.6 -7.6 z"
-            fill="url(#pgStipple)"/>
-      <circle cx="344" cy="188" r="9" fill="#2f1c0e"/>
-      <circle cx="344" cy="188" r="4.6" fill="#9fa9b6" opacity=".5"/>
+      <path d="M300 108 C306 162 320 224 336 264 l78 -18
+               C400 200 384 150 370 102 c-1.2 -4 -4 -6 -8 -5.2 l-56 4
+               c-4 .4 -6.6 3.4 -6 7.2 z" fill="url(#pgWalnut)"/>
+      <path d="M300 108 C306 162 320 224 336 264 l78 -18
+               C400 200 384 150 370 102 c-1.2 -4 -4 -6 -8 -5.2 l-56 4
+               c-4 .4 -6.6 3.4 -6 7.2 z" fill="url(#pgStipple)"/>
+      <circle cx="356" cy="182" r="9" fill="#2f1c0e"/>
+      <circle cx="356" cy="182" r="4.6" fill="#9fa9b6" opacity=".5"/>
       <!-- mainspring housing, grooved, down the backstrap -->
-      <g stroke="#0b0d10" stroke-width="3.4" opacity=".5" fill="none">
-        <path d="M390 108 l-8 20"/><path d="M378 150 l-8 20"/><path d="M366 192 l-8 20"/>
+      <g stroke="#0b0d10" stroke-width="3.4" opacity=".45" fill="none">
+        <path d="M392 100 l4 15"/><path d="M404 146 l4 15"/><path d="M416 192 l4 15"/>
       </g>
       <!-- magazine floorplate -->
-      <path d="M284 264 h64 c4.4 0 7 3 7 7.4 v8 c0 4.4 -2.6 7.4 -7 7 l-60 -5.2
-               c-4.4 -.4 -7 -3.4 -7 -7.6 v-2.2 c0 -4.4 2.6 -7.4 3 -7.4 z" fill="url(#pgSteelDark)"/>
-      <path d="M282 270 l74 6.4 v3.4 l-74 -6.4 z" fill="#9fa9b6" opacity=".3"/>
+      <path d="M328 266 l98 -22 c4.6 -1 7.8 1.4 8.8 6 l1.8 9 c1 4.6 -1.4 8.2 -6 9.2
+               l-94 20 c-4.6 1 -8 -1.4 -9 -5.8 l-1.8 -8.4 c-1 -4.6 1.4 -8 1.2 -8 z"
+            fill="url(#pgSteelDark)"/>
+      <path d="M324 274 l112 -25 .8 3.8 -112 25 z" fill="#9fa9b6" opacity=".3"/>
     `,
   },
-
   // --- Kite 15 --------------------------------------------------------------
   // AR-15 carbine: 32.5" overall on a 16" barrel, at 14.5 px/in.
   kite: {

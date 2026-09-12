@@ -172,6 +172,9 @@ export const PRODUCT_IDS = Object.keys(PRODUCTS);
 export const BUILDINGS = {
   grow_house: {
     id: 'grow_house',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Grow Room'], [1.6, 'Grow House'], [3.2, 'Grow Op'], [Infinity, 'Warehouse Grow']],
     kind: 'production',
     name: 'Grow House',
     blurb: 'Runs continuous cannabis cycles. Output is raw and unsellable until cured.',
@@ -193,6 +196,9 @@ export const BUILDINGS = {
   },
   fungi_room: {
     id: 'fungi_room',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Fruiting Cupboard'], [1.6, 'Fruiting Room'], [Infinity, 'Mushroom Farm']],
     kind: 'production',
     name: 'Fruiting Room',
     blurb: 'Slower cycles, smaller flushes, but the product is worth three times as much.',
@@ -215,6 +221,9 @@ export const BUILDINGS = {
   },
   closet_grow: {
     id: 'closet_grow',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[1.2, 'Closet Grow'], [2.2, 'Spare Room Grow'], [Infinity, 'Back Room Grow']],
     kind: 'production',
     name: 'Closet Grow',
     blurb: 'A few lights in a back room. Tiny output, almost no footprint, and nobody notices.',
@@ -236,6 +245,9 @@ export const BUILDINGS = {
   },
   press_room: {
     id: 'press_room',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Hand Press'], [1.1, 'Hash Press'], [Infinity, 'Press Works']],
     kind: 'production',
     name: 'Hash Press',
     blurb: 'Presses trim and resin into slabs. Steady, dense, and worth twice raw flower.',
@@ -365,6 +377,9 @@ export const BUILDINGS = {
   },
   pill_press: {
     id: 'pill_press',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Tabletop Press'], [1.1, 'Pill Press'], [Infinity, 'Tablet Plant']],
     kind: 'processing',
     name: 'Pill Press',
     blurb: 'Takes raw opium latex and turns it into tablets. Punch and die, a hopper, and a smell that carries.',
@@ -385,6 +400,9 @@ export const BUILDINGS = {
   },
   gunsmith: {
     id: 'gunsmith',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Workbench'], [1.1, 'Gunsmith'], [Infinity, 'Arms Workshop']],
     kind: 'production',
     name: 'Licensed Gunsmith',
     blurb: 'Serialised receivers, marked to standard, every unit in the bound book. Costs more and yields less than a back room, but nobody kicks the door in.',
@@ -435,6 +453,9 @@ export const BUILDINGS = {
   },
   machine_shop: {
     id: 'machine_shop',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Garage Shop'], [1.1, 'Machine Shop'], [Infinity, 'Machine Works']],
     kind: 'production',
     name: 'Machine Shop',
     blurb: 'Turns out untraceable iron. The most valuable thing you can make, and the fastest way to bring the wrong attention.',
@@ -457,6 +478,9 @@ export const BUILDINGS = {
   },
   lab: {
     id: 'lab',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Trim Room'], [1.1, 'Cutting Lab'], [Infinity, 'Processing Lab']],
     kind: 'processing',
     name: 'Processing Lab',
     blurb: 'Turns raw harvest into packaged product. Your chain is only as fast as this.',
@@ -478,6 +502,9 @@ export const BUILDINGS = {
   },
   stash: {
     id: 'stash',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Stash Spot'], [1.6, 'Stash House'], [Infinity, 'Stash Warehouse']],
     kind: 'storage',
     name: 'Stash House',
     blurb: 'Buffer storage close to your customers — and it can serve the block itself, so you don\u2019t need a courier for the last hop.',
@@ -514,6 +541,9 @@ export const BUILDINGS = {
   },
   depot: {
     id: 'depot',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Parking Spot'], [1.6, 'Depot'], [Infinity, 'Freight Yard']],
     kind: 'depot',
     name: 'Depot',
     blurb: 'Somewhere for the fleet to sit. Only goes on a car park, and how many vehicles you can run is however many spaces it has.',
@@ -531,6 +561,9 @@ export const BUILDINGS = {
   },
   lockup: {
     id: 'lockup',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[1.2, 'Lockup'], [Infinity, 'Storage Unit']],
     kind: 'storage',
     name: 'Lockup Garage',
     blurb: 'A roller door and four walls. The cheapest place to park product near a buyer, and it can serve the block itself.',
@@ -547,6 +580,9 @@ export const BUILDINGS = {
   },
   bodega: {
     id: 'bodega',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Corner Stall'], [1.3, 'Corner Store'], [Infinity, 'Minimart']],
     kind: 'front',
     name: 'Corner Store',
     blurb: 'Small, legal, boring. Turns a modest clean profit and quietly washes street cash.',
@@ -565,6 +601,9 @@ export const BUILDINGS = {
   },
   laundromat: {
     id: 'laundromat',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Wash Point'], [1.6, 'Laundromat'], [Infinity, 'Laundry Plant']],
     kind: 'front',
     name: 'Laundromat',
     blurb: 'Thin margins, but nobody blinks at a cash business. Washes far more than it earns.',
@@ -583,6 +622,9 @@ export const BUILDINGS = {
   },
   autoshop: {
     id: 'autoshop',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Lock-up Garage'], [1.6, 'Auto Shop'], [Infinity, 'Body Works']],
     kind: 'front',
     name: 'Auto Shop',
     blurb: 'Needs real space. The best earner you can run legally, and the best laundry.',
@@ -601,6 +643,9 @@ export const BUILDINGS = {
   },
   cafe: {
     id: 'cafe',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.7, 'Coffee Cart'], [1.6, 'Coffee Bar'], [Infinity, 'Roastery']],
     kind: 'front',
     name: 'Coffee Bar',
     blurb: 'Lives or dies on the block around it. Excellent on money streets, pointless on poor ones.',

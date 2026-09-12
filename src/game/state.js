@@ -238,10 +238,35 @@ export function parkedPosition(state, vehicle) {
   return { lat: centre.lat + dy * latPerM, lng: centre.lng + dx * lngPerM };
 }
 
-/** What to call a place: the player's name for it, falling back to its type. */
+/**
+ * What to call a place: the player's own name for it, else a name that matches
+ * how big the place actually is.
+ *
+ * A grow on a 600 m2 warehouse and a grow in a box room are the same building
+ * TYPE, and calling both of them "Grow House" made the property size — the
+ * thing you are actually buying — invisible in every list it appears in.
+ */
 export function buildingLabel(b) {
   if (!b) return '';
-  return b.label || (BUILDINGS[b.type] || {}).name || b.name || '';
+  return b.label || typeLabel(b) || b.name || '';
+}
+
+/**
+ * What KIND of place this is, named for how big it actually turned out.
+ *
+ * A grow on a 600 m2 warehouse and a grow in a box room are the same building
+ * type, so both read as "Closet Grow" in every panel — which hides the property
+ * size, the thing you actually chose. `sizeNames` on the definition bands the
+ * type name by `b.scale`; anything without bands keeps its single name.
+ */
+export function typeLabel(b) {
+  const def = BUILDINGS[(b && b.type) || ''] || {};
+  if (!Array.isArray(def.sizeNames) || !def.sizeNames.length) return def.name || '';
+  const scale = (b && b.scale) || 1;
+  for (const [upTo, name] of def.sizeNames) {
+    if (scale < upTo) return name;
+  }
+  return def.sizeNames[def.sizeNames.length - 1][1];
 }
 
 export function buildingById(state, id) {

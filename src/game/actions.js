@@ -37,6 +37,7 @@ import {
   courierById,
   districtById,
   buildingLabel,
+  typeLabel,
   logEvent,
   routeById,
   spendClean,
@@ -216,7 +217,9 @@ export function developLot(state, lotId, typeId) {
   b.areaM2 = lot.areaM2;
   b.scale = areaScale(lot, def.referenceAreaM2, def.areaExponent);
   b.capScale = areaCapacityScale(lot, def.referenceAreaM2);
-  b.name = `${def.name} · ${lot.name}`;
+  // Name it for the size it actually is — buildingLabel reads b.scale, which is
+  // why it has to be set first. A warehouse grow should not read as a closet.
+  b.name = `${typeLabel(b)} · ${lot.name}`;
   b.builtAtMinute = state.minutes;
   state.buildings.push(b);
   lot.buildingId = b.id;

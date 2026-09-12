@@ -45,7 +45,7 @@ import {
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import {
   buildingById, courierById, districtById, clockOf, nextDriverHireFee, driverById,
-  buildingLabel,
+  buildingLabel, typeLabel,
 } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
 import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip, crimeLabel } from './format.js';
@@ -1975,7 +1975,7 @@ export class GameUI {
     if (running) {
       return (
         `<h2 class="ttl">${esc(lot.name)}</h2>
-        <p class="subttl">Yours · ${esc(BUILDINGS[running.type].name)}</p>
+        <p class="subttl">Yours · ${esc(typeLabel(running))}</p>
         ${facts}
         <div class="sect" style="margin-top:14px">
           <div class="sect__title"><span>As property</span></div>
@@ -2162,7 +2162,7 @@ export class GameUI {
       <div class="field" style="margin:0 0 12px">
         <label>What you call it</label>
         <input type="text" data-field="buildingName" data-building="${b.id}"
-          value="${esc(buildingLabel(b))}" maxlength="32" placeholder="${esc(BUILDINGS[b.type].name)}">
+          value="${esc(buildingLabel(b))}" maxlength="32" placeholder="${esc(typeLabel(b))}">
       </div>
       ${this.firearmLineBlock(b)}
       ${this.upgradeBlock(b)}

@@ -173,7 +173,7 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // unserved route is a building paying rent to produce stock nobody collects.
   const unserved = (st.routes || []).filter(
     (r) => !(st.couriers || []).some((c) => c.routeId === r.id));
-  if (unserved.length && cash > 500000) {
+  if (unserved.length && cash > 300000) {
     const veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
     if (veh && veh.vehicle) {
       const hire = A.hireDriver(st);
@@ -254,13 +254,13 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     if (!bdef.product || !bdef.capacity) continue;
     const held = Object.values(b.packs || {}).reduce((s, n) => s + n, 0)
                + Object.values(b.raw || {}).reduce((s, n) => s + n, 0);
-    if (held < bdef.capacity * 0.35) continue;
+    if (held < bdef.capacity * 0.2) continue;
     const already = new Set((st.routes || [])
       .filter((r) => r.fromId === b.id).map((r) => r.toId));
     const next = [...st.districts]
       .sort((x, y) => (y.demandPerHour[bdef.product] || 0) - (x.demandPerHour[bdef.product] || 0))
       .find((x) => !already.has(x.id));
-    if (next && (st.routes || []).filter((r) => r.fromId === b.id).length < 8) {
+    if (next && (st.routes || []).filter((r) => r.fromId === b.id).length < 20) {
       wire(st, b.id, 'district', next.id, 'packs');
     }
   }
@@ -274,7 +274,7 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   });
   const couriers = (st.couriers || []).length;
   const idleRoute = (st.routes || []).find((r) => !(st.couriers || []).some((c) => c.routeId === r.id));
-  if ((backedUp || idleRoute) && couriers < 40 && cash > 400000) {
+  if ((backedUp || idleRoute) && couriers < 60 && cash > 300000) {
     const veh = A.buyVehicle(st, couriers < 3 ? 'sedan' : couriers < 10 ? 'van' : 'boxtruck');
     if (veh && veh.vehicle) {
       const hire = A.hireDriver(st);
@@ -292,7 +292,7 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     lastReport = day;
     print('  day ' + String(day).padStart(4) + '  $' + Math.round(cash).toLocaleString()
           + ' clean / $' + Math.round(st.cash.dirty).toLocaleString() + ' street, '
-          + props + ' props, ' + st.buildings.filter((b)=>(BUILDINGS[b.type]||{}).kind==='front').length
+          + props + ' props, ' + (st.couriers||[]).length + ' veh, ' + (st.routes||[]).length + ' routes, ' + st.buildings.filter((b)=>(BUILDINGS[b.type]||{}).kind==='front').length
           + ' fronts, worth $' + Math.round(netWorth(st)).toLocaleString());
   }
 }

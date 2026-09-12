@@ -14,6 +14,7 @@ import {
   MARKET_PROPERTY,
   LEGIT_WEALTH_SWING,
   IDLE_UPKEEP_SHARE,
+  BACKLOG_PAUSE_AT,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -197,6 +198,17 @@ function stepProduction(state, dt) {
     const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
     if (b.raw[def.product] >= cap) {
       b.stalledReason = 'Storage full — move the harvest out';
+      continue;
+    }
+
+    // Don't buy in for a cycle you clearly can't ship. Nobody orders another
+    // pallet of nutrient when the drying room is already stacked to the roof —
+    // and charging for one is what made falling behind on haulage lethal rather
+    // than merely expensive. You still lose the output you could have sold, so
+    // outgrowing your fleet is a real cost; it just no longer bleeds you dry
+    // while the product sits there unsellable.
+    if (!b.cycleStarted && b.raw[def.product] >= cap * BACKLOG_PAUSE_AT) {
+      b.stalledReason = 'Backing up — haulage can’t keep up, so the line is idling';
       continue;
     }
 

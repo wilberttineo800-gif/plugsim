@@ -37,7 +37,7 @@ import {
 import { crewById } from '../game/crews.js';
 
 import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
-import { unlockStatus, regionNote } from '../game/progression.js';
+import { unlockStatus, regionNote, buildingPreview} from '../game/progression.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgrades,
@@ -45,7 +45,7 @@ import {
 import { FIXER, LEGIT_WEALTH_SWING } from '../game/constants.js';
 import {
   buildingById, courierById, districtById, clockOf, nextDriverHireFee, driverById,
-  buildingLabel, typeLabel,
+  buildingLabel, typeLabel, typeLabelFor,
 } from '../game/state.js';
 import { OVERLAYS, overlayValue, overlayColor } from '../map/mapView.js';
 import { esc, money, moneyShort, units, pct, km, duration, qualityLabel, clip, crimeLabel } from './format.js';
@@ -943,6 +943,38 @@ export class GameUI {
     );
   }
 
+  /**
+   * What this property would actually DO, before you commit to it.
+   *
+   * Bare multipliers told you a lot was better than some invisible reference,
+   * not what the place produces or holds — and a bad buy can bankrupt you now,
+   * so the numbers you are betting on belong on the card.
+   */
+  previewRow(o) {
+    const p = buildingPreview(o.def, o.scale, o.capScale);
+    if (!p) return '';
+    const bits = [];
+    if (p.packsPerDay > 0) {
+      bits.push(`<span style="color:var(--good)">makes ${units(p.packsPerDay)} ${esc(p.packName || 'units')}/day</span>`);
+    }
+    if (p.holds > 0) {
+      // The ceiling before the line stalls waiting for a lorry — the number
+      // that decides how much haulage you need behind it.
+      bits.push(`<span>holds ${units(p.holds)}</span>`);
+    }
+    if (p.launderPerDay > 0) {
+      bits.push(`<span style="color:var(--money)">washes ${moneyShort(p.launderPerDay)}/day</span>`);
+    }
+    if (p.runningPerDay > 0) {
+      bits.push(`<span style="color:var(--warn)">costs ${moneyShort(p.runningPerDay)}/day to run</span>`);
+    }
+    if (p.grossPerDay > 0) {
+      bits.push(`<span style="color:var(--money)">${moneyShort(p.grossPerDay)}/day if it all sells</span>`);
+    }
+    if (!bits.length) return '';
+    return `<div class="card__meta">${bits.join('')}</div>`;
+  }
+
   /** The "what do we run here" chooser for a building you already own. */
   lotDevelopBlock(lot) {
     const s = this.game.state;
@@ -959,10 +991,11 @@ export class GameUI {
         <button class="card ${blocked ? 'is-locked' : ''}"
           data-action="develop" data-id="${lot.id}" data-type="${o.id}" ${blocked ? 'disabled' : ''}>
           <div class="card__head">
-            <span class="card__name">${esc(o.def.name)}</span>
+            <span class="card__name">${esc(typeLabelFor(o.def, o.scale))}</span>
             <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(o.def.cost)}</span>
           </div>
           <div class="card__blurb">${esc(o.def.blurb)}</div>
+          ${o.locked ? '' : this.previewRow(o)}
           <div class="card__meta">
             ${o.locked ? '' : o.fits ? `<span style="color:var(--good)">×${o.scale.toFixed(2)} output · ×${o.capScale.toFixed(1)} storage</span>` : ''}
             ${note ? `<span style="color:${o.locked ? 'var(--text-faint)' : 'var(--warn)'}">${esc(note)}</span>` : ''}

@@ -101,3 +101,43 @@ export function regionNote(countryCode, productId) {
   if (m < 0.6) return 'Thin market here';
   return null;
 }
+
+/**
+ * What you'd actually get for your money, before you spend it.
+ *
+ * The build menu used to show bare multipliers — "×3.69 output" — which tells
+ * you this lot is better than some invisible reference but not what the place
+ * will DO. Since a bad investment can now bankrupt you, the numbers you are
+ * betting on should be on the card.
+ *
+ * All figures are per day at the given scale, ignoring upgrades and research
+ * (which only ever improve on this) and assuming the line runs uninterrupted —
+ * so treat output as a ceiling that haulage has to keep up with.
+ */
+export function buildingPreview(def, scale = 1, capScale = 1) {
+  if (!def) return null;
+  const cyclesPerDay = def.cycleHours ? 24 / def.cycleHours : 0;
+  const rawPerDay = (def.slots || 0) * (def.rawPerSlot || 0) * scale * cyclesPerDay;
+  const product = def.product ? PRODUCTS[def.product] : null;
+  const packsPerDay = product ? rawPerDay * (product.packsPerRaw || 1) : 0;
+
+  const suppliesPerDay = (def.supplyCostPerSlot || 0) * (def.slots || 0) * scale * cyclesPerDay;
+  const upkeepPerDay = def.upkeepPerDay || 0;
+
+  return {
+    product: def.product || null,
+    productName: product ? product.name : null,
+    packName: product ? product.packName : null,
+    rawPerDay,
+    packsPerDay,
+    // The ceiling on what it holds before the line stalls waiting for a lorry.
+    holds: (def.capacity || 0) * capScale,
+    launderPerDay: def.launderPerDay || 0,
+    suppliesPerDay,
+    upkeepPerDay,
+    runningPerDay: suppliesPerDay + upkeepPerDay,
+    // Gross if every pack sold at list. Real takings are lower — blocks
+    // saturate — but it is the right number for comparing two properties.
+    grossPerDay: product ? packsPerDay * product.basePrice : 0,
+  };
+}

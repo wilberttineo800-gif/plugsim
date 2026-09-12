@@ -260,9 +260,16 @@ export function buildingLabel(b) {
  * type name by `b.scale`; anything without bands keeps its single name.
  */
 export function typeLabel(b) {
-  const def = BUILDINGS[(b && b.type) || ''] || {};
+  return typeLabelFor(BUILDINGS[(b && b.type) || ''], (b && b.scale) || 1);
+}
+
+/**
+ * The same banding, for a building that doesn't exist yet — so the build menu
+ * can tell you it's about to be a Warehouse Grow rather than a Closet Grow.
+ */
+export function typeLabelFor(def, scale = 1) {
+  if (!def) return '';
   if (!Array.isArray(def.sizeNames) || !def.sizeNames.length) return def.name || '';
-  const scale = (b && b.scale) || 1;
   for (const [upTo, name] of def.sizeNames) {
     if (scale < upTo) return name;
   }

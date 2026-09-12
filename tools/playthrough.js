@@ -171,8 +171,9 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
 
   // Every route must have a courier before anything else is considered. An
   // unserved route is a building paying rent to produce stock nobody collects.
-  const unserved = (st.routes || []).filter(
-    (r) => !(st.couriers || []).some((c) => c.routeId === r.id));
+  const served = (r) => (st.couriers || []).some(
+    (c) => c.routeId === r.id || (c.routeIds || []).includes(r.id));
+  const unserved = (st.routes || []).filter((r) => !served(r));
   if (unserved.length && cash > 300000) {
     const veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
     if (veh && veh.vehicle) {
@@ -186,21 +187,21 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // being hauled, and there is real clean money spare after the reserve.
   const healthy = unserved.length === 0 && cash > 2500000;
 
-  // Buy the biggest thing we can afford, keeping a float so supplies never stall.
-  // The reserve tracks actual burn: 20 days of upkeep and supplies, because a
-  // stalled building still charges rent while earning nothing.
+  // Reserve enough to keep buying supplies, but nothing like the 20-day float
+  // that used to stop the bot scaling at all. Falling behind on haulage is the
+  // expensive mistake here, not being briefly thin on cash.
   const burn = st.buildings.reduce((s, b) => {
     const d = BUILDINGS[b.type] || {};
     return s + (d.upkeepPerDay || 0)
              + (d.supplyCostPerSlot || 0) * (d.slots || 0) * (24 / (d.cycleHours || 24));
   }, 0);
-  const float = Math.max(500000, burn * 20);
+  const float = Math.max(500000, burn * 3);
   if (healthy && cash > float * 1.5) {
     for (const type of LADDER) {
       const def = BUILDINGS[type];
       if (!def) continue;
       if (def.unlock && (props < (def.unlock.properties || 0) || cash < (def.unlock.cash || 0))) continue;
-      if (has(st, type) >= 6) continue;             // spread out rather than stack one type
+      if (has(st, type) >= 14) continue;            // spread out rather than stack one type
       const lot = bestLotFor(st, type, cash - float);
       if (!lot) continue;
       A.buyLot(st, lot.id);
@@ -224,12 +225,11 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // street cash held, which is the bottleneck the naive run never noticed.
   const FRONTS = ['laundromat', 'bodega', 'carwash', 'cafe', 'takeaway', 'nailsalon'];
   const frontCount = st.buildings.filter((b) => (BUILDINGS[b.type] || {}).kind === 'front').length;
-  // FINDING, left off deliberately: buying fronts bankrupts an otherwise healthy
-  // operation. A laundromat is $29,000/day upkeep and a bodega $21,000/day, and
-  // at this scale that outruns what their laundering is worth — the same run
-  // ends at net worth +$62m with fronts off and -$102m with them on. That is a
-  // balance decision, not a bot bug, so it is flagged rather than tuned around.
-  if (false && st.cash.dirty > 200000 && frontCount < 12 && cash > 700000) {
+  // Fronts bankrupt a SMALL operation — a laundromat is $29,000/day and a
+  // bodega $21,000/day — but they are the only way to turn a large street pile
+  // into the clean money that property costs. So they are gated on the
+  // operation actually being big enough to carry them.
+  if (st.cash.dirty > 20000000 && frontCount < 14 && cash > 1500000) {
     for (const f of FRONTS) {
       const def = BUILDINGS[f];
       if (!def) continue;
@@ -246,22 +246,31 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // what a single grow house makes: stock backs up, storage fills, production
   // halts, and upkeep keeps charging on a dead chain. So buy transport whenever
   // product is visibly piling up, and treat it as a running cost, not a luxury.
-  // One district absorbs ~32 packs/day; the starter grow makes ~129. If stock
-  // is piling up the answer is another OUTLET, not another lorry — so open a
-  // second, third, fourth block for anything that is backing up.
-  for (const b of st.buildings) {
-    const bdef = BUILDINGS[b.type] || {};
-    if (!bdef.product || !bdef.capacity) continue;
-    const held = Object.values(b.packs || {}).reduce((s, n) => s + n, 0)
-               + Object.values(b.raw || {}).reduce((s, n) => s + n, 0);
-    if (held < bdef.capacity * 0.2) continue;
-    const already = new Set((st.routes || [])
-      .filter((r) => r.fromId === b.id).map((r) => r.toId));
-    const next = [...st.districts]
-      .sort((x, y) => (y.demandPerHour[bdef.product] || 0) - (x.demandPerHour[bdef.product] || 0))
-      .find((x) => !already.has(x.id));
-    if (next && (st.routes || []).filter((r) => r.fromId === b.id).length < 20) {
-      wire(st, b.id, 'district', next.id, 'packs');
+  // Open a new outlet ONLY with a vehicle to serve it. A route with nobody
+  // driving it is worse than no route: it splits the source building's output
+  // across destinations that never get reached. The working ratio is about one
+  // vehicle per route — 21 routes behind 6 vans is how the bot strangled itself.
+  const unservedNow = unserved;
+  if (unservedNow.length === 0 && cash > 900000) {
+    for (const b of st.buildings) {
+      const bdef = BUILDINGS[b.type] || {};
+      if (!bdef.product || !bdef.capacity) continue;
+      const held = Object.values(b.packs || {}).reduce((s, n) => s + n, 0)
+                 + Object.values(b.raw || {}).reduce((s, n) => s + n, 0);
+      if (held < bdef.capacity * 0.4) continue;
+      const already = new Set((st.routes || [])
+        .filter((r) => r.fromId === b.id).map((r) => r.toId));
+      const next = [...st.districts]
+        .sort((x, y) => (y.demandPerHour[bdef.product] || 0) - (x.demandPerHour[bdef.product] || 0))
+        .find((x) => !already.has(x.id));
+      if (!next) continue;
+      const veh = A.buyVehicle(st, 'van').vehicle;
+      if (!veh) break;
+      const hire = A.hireDriver(st);
+      if (hire && hire.driver) A.assignDriver(st, veh.id, hire.driver.id);
+      const r = wire(st, b.id, 'district', next.id, 'packs');
+      A.assignCourier(st, veh.id, r.id);
+      break;                      // one new lane per day
     }
   }
 
@@ -273,7 +282,8 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     return held > def.capacity * 0.5;
   });
   const couriers = (st.couriers || []).length;
-  const idleRoute = (st.routes || []).find((r) => !(st.couriers || []).some((c) => c.routeId === r.id));
+  const idleRoute = unserved[0];
+
   if ((backedUp || idleRoute) && couriers < 60 && cash > 300000) {
     const veh = A.buyVehicle(st, couriers < 3 ? 'sedan' : couriers < 10 ? 'van' : 'boxtruck');
     if (veh && veh.vehicle) {

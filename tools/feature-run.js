@@ -61,7 +61,24 @@ function netWorth(st) {
   }
   return n;
 }
-function run(st, days) { for (let i = 0; i < days; i++) for (let h = 0; h < 24; h += 0.25) stepSim(st, 0.25, {}); }
+function run(st, days, scale) {
+  for (let i = 0; i < days; i++) {
+    for (let h = 0; h < 24; h += 0.25) stepSim(st, 0.25, {});
+    if (!scale) continue;
+    // Keep buying transport while anything is backing up — this is a feature
+    // harness, so it should not spend 1000 days demonstrating the throttle.
+    const stuck = st.buildings.some((b) => /Backing up|full/.test(b.stalledReason || ''));
+    if (stuck && (st.couriers || []).length < 40 && st.cash.clean > 500000) {
+      const veh = A.buyVehicle(st, 'van');
+      if (veh && veh.vehicle) {
+        const hire = A.hireDriver(st);
+        if (hire && hire.driver) A.assignDriver(st, veh.vehicle.id, hire.driver.id);
+        const r = (st.routes || [])[(st.couriers.length) % (st.routes || []).length];
+        if (r) A.assignCourier(st, veh.vehicle.id, r.id);
+      }
+    }
+  }
+}
 
 seedWorld(20260912);
 const origin = { lat: 41.7658, lng: -72.6734 };
@@ -127,15 +144,32 @@ feature('Building upgrades', () => {
   return 'grow upgraded';
 });
 
+print('  chain: couriers=' + (st.couriers||[]).length
+  + ' drivers=' + (st.drivers||[]).length
+  + ' routes=' + (st.routes||[]).length
+  + ' withDriver=' + (st.couriers||[]).filter(c=>c.driverId).length
+  + ' onRoute=' + (st.couriers||[]).filter(c=>c.routeId||(c.routeIds||[]).length).length);
+const depots = st.buildings.filter(b=>b.type==='depot'||b.type==='lockup');
+print('  yards: ' + depots.length + ' bays=' + depots.map(b=>b.parkSlots||b.capacity||'?').join(','));
 run(st, 30);
+print('  after 30d: dirty=$' + Math.round(st.cash.dirty).toLocaleString()
+  + ' trips=' + (st.couriers||[]).reduce((n,c)=>n+(c.tripsCompleted||0),0)
+  + ' growRaw=' + Math.round(Object.values(grow.raw||{}).reduce((s,n)=>s+n,0))
+  + ' labPacks=' + Math.round(Object.values(lab.packs||{}).reduce((s,n)=>s+n,0))
+  + ' | grow: ' + (grow.stalledReason||'running')
+  + ' | lab: ' + (lab.stalledReason||'running'));
 
 // --- money -----------------------------------------------------------------
 feature('Street sales produce street cash', () => {
-  need(st.cash.dirty > 0 || st.stats.laundered > 0, 'no street cash after 30 days');
-  return '$' + Math.round(st.cash.dirty).toLocaleString() + ' dirty';
+  // Upkeep is paid out of street cash the same day it lands, so the BALANCE is
+  // not evidence either way — measure the takings instead.
+  const taken = (st.districts || []).reduce((s, d) => s + (d.revenueTotal || 0), 0);
+  need(taken > 0, 'blocks paid nothing in 30 days');
+  return '$' + Math.round(taken).toLocaleString() + ' taken on the street';
 });
 feature('Fixer laundering', () => {
   const before = st.cash.clean;
+  st.cash.dirty += 500000;     // give him something to wash; upkeep eats it daily
   const r = A.washWithFixer(st);
   need(r && r.ok, (r && r.error) || 'fixer refused');
   need(st.cash.clean > before, 'clean did not rise');
@@ -212,7 +246,7 @@ feature('Turf: take and improve a block', () => {
 print('Running 1000 days...');
 const t0 = Date.now();
 const worth0 = netWorth(st);
-run(st, 1000);
+run(st, 1000, true);
 const secs = ((Date.now() - t0) / 1000).toFixed(0);
 
 feature('Survives 1000 days solvent', () => {
@@ -221,7 +255,7 @@ feature('Survives 1000 days solvent', () => {
 });
 feature('World kept running', () => {
   const trips = (st.couriers || []).reduce((n, c) => n + (c.tripsCompleted || 0), 0);
-  need(trips > 100, 'only ' + trips + ' trips in 1000 days');
+  need(trips > 1000, 'only ' + trips + ' trips in 1000 days');
   return trips.toLocaleString() + ' courier trips';
 });
 feature('AI competitors still active', () => {

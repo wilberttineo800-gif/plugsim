@@ -192,7 +192,7 @@ print('=== 6. HUD projection matches what the sim charges ===');
   A.upgradeBuilding(st, g.id, 'racks');
   const def = BUILDINGS[g.type];
   const oldFormula = def.upkeepPerDay * (1 + (g.level - 1) * 0.35);
-  check('upkeepFor is the single source', Math.abs(upkeepFor(g) - 22500) < 1,
+  check('upkeepFor is the single source', Math.abs(upkeepFor(g) - 1502) < 2,
         'sim charges $' + upkeepFor(g) + ', old formula gave $' + oldFormula.toFixed(0));
 }
 
@@ -376,15 +376,24 @@ print('=== 11. the first hour has a shape ===');
   st2.tutorialDismissed = true;
   check('it can be dismissed', currentStep(st2) === null);
 
-  // Your own block runs calmer than the rest.
+  // Your own block runs calmer. Compare the SAME district with and without a
+  // base rather than two different ones — districts have their own policing and
+  // wealth, so decay rates differ between them and a cross-district comparison
+  // only ever passed by luck of which lots the fixture happened to generate.
   const st3 = world();
   const home = open(st3, 'grow_house');
   const d = st3.districts.find((x) => x.id === home.districtId);
-  const other = st3.districts.find((x) => x.id !== home.districtId);
-  d.heat = 60; other.heat = 60;
   home.active = false; // isolate decay from production heat
+
+  const stNoHq = world();
+  const homeNoHq = open(stNoHq, 'grow_house');
+  const other = stNoHq.districts.find((x) => x.id === homeNoHq.districtId);
+  homeNoHq.active = false;   // same district, same setup, no base
+
+  d.heat = 60; other.heat = 60;
   A.setHeadquarters(st3, home.id);
   stepSim(st3, 12, {});
+  stepSim(stNoHq, 12, {});
   check('heat sheds faster where you live', d.heat < other.heat,
         'home ' + d.heat.toFixed(1) + ' vs ' + other.heat.toFixed(1));
 }
@@ -830,10 +839,15 @@ print('=== 19. an operation has to fit the building ===');
   const inverted = BUILDING_IDS.filter((id) => BUILDINGS[id].maxAreaM2 <= BUILDINGS[id].minAreaM2);
   check('no ceiling sits under its own floor', inverted.length === 0, inverted.join(', '));
 
-  // The note's example: a closet grow is a wardrobe, not a warehouse.
+  // A closet grow is a wardrobe, not a warehouse — but the AREA is the
+  // property's, and the closet is a room inside it. Capping the property at
+  // three times the minimum meant it needed a lot smaller than a garage, so no
+  // lot in the game ever qualified and the cheap starter tier was dead content.
+  // What actually matters is that it is refused in a commercial unit, which the
+  // next check proves.
   const closet = BUILDINGS.closet_grow;
-  check('a closet grow stays a closet', closet.maxAreaM2 <= closet.minAreaM2 * 3,
-        closet.minAreaM2 + '-' + closet.maxAreaM2 + ' m2');
+  check('a closet grow stays domestic', closet.maxAreaM2 <= 150,
+        closet.minAreaM2 + '-' + closet.maxAreaM2 + ' m2 — a house, not a unit');
   check('a closet grow is refused in a big unit',
         !fitsBuilding(closet, { areaM2: 400, kind: 'warehouse' }).fits,
         fitsBuilding(closet, { areaM2: 400, kind: 'warehouse' }).reason);

@@ -93,9 +93,9 @@ const hqLot = smallestLotFor(st, 'hq');
 A.buyLot(st, hqLot.id); A.developLot(st, hqLot.id, 'hq');
 A.setHeadquarters(st, st.buildings[st.buildings.length - 1].id);
 
-const growLot = smallestLotFor(st, 'grow_house');
+const growLot = smallestLotFor(st, 'closet_grow');
 A.buyLot(st, growLot.id);
-const grow0 = A.developLot(st, growLot.id, 'grow_house').building;
+const grow0 = A.developLot(st, growLot.id, 'closet_grow').building;
 
 const park = (st.lots || []).filter((l) => l.kind === 'parking' && !l.owned)
   .sort((a, b) => a.price - b.price)[0];
@@ -121,7 +121,8 @@ print('Goal:  ' + (BUILDINGS[GOAL] ? BUILDINGS[GOAL].name : GOAL) + ' — '
       + (BUILDINGS[GOAL] ? BUILDINGS[GOAL].unlock.cash.toLocaleString() : '?') + ' banked.');
 print('');
 print('MILESTONES');
-mark(0, 'opened up: HQ, grow, depot, lab, one scooter');
+mark(0, 'opened up: HQ, closet grow, depot, lab, one scooter — on $'
+     + START_CASH_CLEAN.toLocaleString());
 
 // --- play on ---------------------------------------------------------------
 // Reinvest order: keep the chain fed first, then add capacity, then reach for

@@ -67,9 +67,9 @@ A.buyLot(st, hqLot.id); A.developLot(st, hqLot.id, 'hq');
 const hq = st.buildings[st.buildings.length - 1];
 A.setHeadquarters(st, hq.id);
 
-const growLot = smallest(st, 'grow_house');
+const growLot = smallest(st, 'closet_grow');
 A.buyLot(st, growLot.id);
-const grow = A.developLot(st, growLot.id, 'grow_house').building;
+const grow = A.developLot(st, growLot.id, 'closet_grow').building;
 
 const park = (st.lots || []).filter((l) => l.kind === 'parking' && !l.owned)
   .sort((a, b) => a.price - b.price)[0];
@@ -79,7 +79,9 @@ const labLot = smallest(st, 'lab');
 A.buyLot(st, labLot.id);
 const lab = A.developLot(st, labLot.id, 'lab').building;
 
-const v = A.buyVehicle(st, 'scooter').vehicle;
+const bought = A.buyVehicle(st, 'scooter');
+const v = bought && bought.vehicle;
+if (!v) throw new Error('could not afford a scooter on $' + cash0.toLocaleString());
 A.assignDriver(st, v.id, A.hireDriver(st).driver.id);
 
 const target = [...st.districts].sort((a, b) => b.demandPerHour.weed - a.demandPerHour.weed)[0];

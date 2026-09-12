@@ -185,8 +185,8 @@ export const BUILDINGS = {
     upkeepPerDay: 13000,
     slots: 4,
     cycleHours: 6,
-    rawPerSlot: 2.5,
-    supplyCostPerSlot: 11000, // charged at the start of every cycle
+    rawPerSlot: 0.625,
+    supplyCostPerSlot: 2750, // charged at the start of every cycle
     baseQuality: 0.5,
     heatPerDay: 0.6,
     capacity: 120, // raw units it can hold before production stalls
@@ -207,8 +207,8 @@ export const BUILDINGS = {
     upkeepPerDay: 17500,
     slots: 3,
     cycleHours: 9,
-    rawPerSlot: 1.6,
-    supplyCostPerSlot: 16500,
+    rawPerSlot: 0.4,
+    supplyCostPerSlot: 4125,
     baseQuality: 0.5,
     heatPerDay: 0.5,
     capacity: 80,
@@ -228,8 +228,8 @@ export const BUILDINGS = {
     upkeepPerDay: 4500,
     slots: 2,
     cycleHours: 7,
-    rawPerSlot: 1.1,
-    supplyCostPerSlot: 6000,
+    rawPerSlot: 0.275,
+    supplyCostPerSlot: 1500,
     baseQuality: 0.42,
     heatPerDay: 0.15,
     capacity: 30,
@@ -1550,6 +1550,16 @@ export const FIXER = {
 };
 
 // How hard a legitimate business leans on the wealth of its block.
+/**
+ * What a stalled building still costs per day, as a share of its normal upkeep.
+ *
+ * A halted line keeps its rent but stops burning power, consumables and the
+ * wages of people who would be running it. Charging the full bill on a building
+ * that is producing nothing is what turned a full warehouse into an
+ * unrecoverable spiral — the chain seizes quietly and the bill never changes.
+ */
+export const IDLE_UPKEEP_SHARE = 0.35;
+
 export const LEGIT_WEALTH_SWING = 0.55;
 
 // --- Market -----------------------------------------------------------------

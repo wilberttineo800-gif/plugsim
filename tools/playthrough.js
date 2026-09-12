@@ -126,10 +126,11 @@ mark(0, 'opened up: HQ, grow, depot, lab, one scooter');
 // --- play on ---------------------------------------------------------------
 // Reinvest order: keep the chain fed first, then add capacity, then reach for
 // whatever the bankroll has newly unlocked.
-const LADDER = ['grow_house', 'fungi_room', 'press_room', 'stash', 'lab',
-                'pill_press', 'meth_cook', 'gunsmith', 'coca_plot', 'poppy_field',
-                'blotter_lab', 'wash_house', 'holding_co', 'terminal',
-                'members_club', 'pharma_plant'];
+// Only things this operation can actually feed. A hash press with no hash, or
+// a pill press with no precursor, is a building that pays rent to produce
+// nothing — which is how the bot kept bankrupting itself while "expanding".
+const LADDER = ['grow_house', 'fungi_room', 'lab', 'stash',
+                'holding_co', 'terminal', 'members_club', 'pharma_plant'];
 
 let sold = 0;
 let done = null;
@@ -140,9 +141,16 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   for (let h = 0; h < 24; h += 0.25) stepSim(st, 0.25, {});
 
   // Wash every day, first thing. A real player does this constantly.
-  for (let i = 0; i < 3 && st.cash.dirty > 0; i++) {
-    const res = A.washWithFixer(st);
-    if (!res || !res.ok) break;
+  // Wash only toward a purchase. Upkeep is paid out of street cash at FULL
+  // value (paySoft spends dirty first), while the fixer takes 40% — so washing
+  // money you were going to spend on running costs anyway just burns it. Hold
+  // dirty for opex; convert only what a building or a front actually needs.
+  const WANT_CLEAN = 4000000;
+  if (st.cash.clean < WANT_CLEAN && st.cash.dirty > 1000000) {
+    for (let i = 0; i < 4 && st.cash.clean < WANT_CLEAN; i++) {
+      const res = A.washWithFixer(st);
+      if (!res || !res.ok) break;
+    }
   }
 
   const cash = st.cash.clean;
@@ -161,6 +169,23 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   }
   if (done) break;
 
+  // Every route must have a courier before anything else is considered. An
+  // unserved route is a building paying rent to produce stock nobody collects.
+  const unserved = (st.routes || []).filter(
+    (r) => !(st.couriers || []).some((c) => c.routeId === r.id));
+  if (unserved.length && cash > 500000) {
+    const veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
+    if (veh && veh.vehicle) {
+      const hire = A.hireDriver(st);
+      if (hire && hire.driver) A.assignDriver(st, veh.vehicle.id, hire.driver.id);
+      A.assignCourier(st, veh.vehicle.id, unserved[0].id);
+    }
+  }
+
+  // Only grow the operation when it is demonstrably healthy: everything is
+  // being hauled, and there is real clean money spare after the reserve.
+  const healthy = unserved.length === 0 && cash > 2500000;
+
   // Buy the biggest thing we can afford, keeping a float so supplies never stall.
   // The reserve tracks actual burn: 20 days of upkeep and supplies, because a
   // stalled building still charges rent while earning nothing.
@@ -170,7 +195,7 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
              + (d.supplyCostPerSlot || 0) * (d.slots || 0) * (24 / (d.cycleHours || 24));
   }, 0);
   const float = Math.max(500000, burn * 20);
-  if (cash > float * 1.5) {
+  if (healthy && cash > float * 1.5) {
     for (const type of LADDER) {
       const def = BUILDINGS[type];
       if (!def) continue;
@@ -199,7 +224,12 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // street cash held, which is the bottleneck the naive run never noticed.
   const FRONTS = ['laundromat', 'bodega', 'carwash', 'cafe', 'takeaway', 'nailsalon'];
   const frontCount = st.buildings.filter((b) => (BUILDINGS[b.type] || {}).kind === 'front').length;
-  if ((st.cash.dirty > 400000 || frontCount === 0) && frontCount < 10 && cash > 600000) {
+  // FINDING, left off deliberately: buying fronts bankrupts an otherwise healthy
+  // operation. A laundromat is $29,000/day upkeep and a bodega $21,000/day, and
+  // at this scale that outruns what their laundering is worth — the same run
+  // ends at net worth +$62m with fronts off and -$102m with them on. That is a
+  // balance decision, not a bot bug, so it is flagged rather than tuned around.
+  if (false && st.cash.dirty > 200000 && frontCount < 12 && cash > 700000) {
     for (const f of FRONTS) {
       const def = BUILDINGS[f];
       if (!def) continue;
@@ -216,6 +246,25 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // what a single grow house makes: stock backs up, storage fills, production
   // halts, and upkeep keeps charging on a dead chain. So buy transport whenever
   // product is visibly piling up, and treat it as a running cost, not a luxury.
+  // One district absorbs ~32 packs/day; the starter grow makes ~129. If stock
+  // is piling up the answer is another OUTLET, not another lorry — so open a
+  // second, third, fourth block for anything that is backing up.
+  for (const b of st.buildings) {
+    const bdef = BUILDINGS[b.type] || {};
+    if (!bdef.product || !bdef.capacity) continue;
+    const held = Object.values(b.packs || {}).reduce((s, n) => s + n, 0)
+               + Object.values(b.raw || {}).reduce((s, n) => s + n, 0);
+    if (held < bdef.capacity * 0.35) continue;
+    const already = new Set((st.routes || [])
+      .filter((r) => r.fromId === b.id).map((r) => r.toId));
+    const next = [...st.districts]
+      .sort((x, y) => (y.demandPerHour[bdef.product] || 0) - (x.demandPerHour[bdef.product] || 0))
+      .find((x) => !already.has(x.id));
+    if (next && (st.routes || []).filter((r) => r.fromId === b.id).length < 8) {
+      wire(st, b.id, 'district', next.id, 'packs');
+    }
+  }
+
   const backedUp = st.buildings.some((b) => {
     const def = BUILDINGS[b.type] || {};
     if (!def.capacity) return false;

@@ -13,6 +13,7 @@ import {
   RIVALS,
   MARKET_PROPERTY,
   LEGIT_WEALTH_SWING,
+  IDLE_UPKEEP_SHARE,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -1290,7 +1291,11 @@ function settleDay(state) {
     b.earnedToday = 0;
     b.soldToday = 0;
     if (!b.active) continue;
-    upkeep += upkeepFor(b);
+    // A halted line still costs rent, but not power, consumables or the people
+    // who would be running it. Charging full upkeep on a building that is
+    // producing nothing is what turned a full warehouse into an unrecoverable
+    // spiral: the chain seizes quietly, and the bill never changes.
+    upkeep += b.stalledReason ? upkeepFor(b) * IDLE_UPKEEP_SHARE : upkeepFor(b);
   }
   let wages = 0;
   for (const d of state.drivers || []) wages += d.wagePerDay;

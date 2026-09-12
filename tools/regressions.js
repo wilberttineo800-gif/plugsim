@@ -63,7 +63,7 @@ function world() {
   applyInitialControl(districts, crews);
   const lots = syntheticLots(districts);
   const st = createState({ origin, cityName: 'T', countryCode: 'us', districts, crews, lots });
-  st.cash.clean = 900000;
+  st.cash.clean = 90000000;
   // Vehicles need a bay before they can be bought at all.
   const park = cheapestLotFor(st, BUILDINGS.depot);
   A.buyLot(st, park.id);
@@ -192,7 +192,7 @@ print('=== 6. HUD projection matches what the sim charges ===');
   A.upgradeBuilding(st, g.id, 'racks');
   const def = BUILDINGS[g.type];
   const oldFormula = def.upkeepPerDay * (1 + (g.level - 1) * 0.35);
-  check('upkeepFor is the single source', Math.abs(upkeepFor(g) - 225) < 1,
+  check('upkeepFor is the single source', Math.abs(upkeepFor(g) - 22500) < 1,
         'sim charges $' + upkeepFor(g) + ', old formula gave $' + oldFormula.toFixed(0));
 }
 
@@ -334,7 +334,7 @@ print('');
 print('=== 11. the first hour has a shape ===');
 {
   const st = world();
-  st.cash.clean = 300000;
+  st.cash.clean = 30000000;
 
   // A brand new player is on step one, and it is the base.
   const first = currentStep(st);
@@ -366,7 +366,7 @@ print('=== 11. the first hour has a shape ===');
   A.assignDriver(st, v.id, A.hireDriver(st).driver.id);
   const r = wire(st, b.id, 'district', st.districts[3].id, 'packs', 'any', 2);
   r.active = true;
-  st.cash.dirty = 10;
+  st.cash.dirty = 100000;
   open(st, 'laundromat');
   check('the list finishes', currentStep(st) === null,
         onboardingProgress(st).done + '/' + onboardingProgress(st).total);
@@ -502,7 +502,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
 {
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 900000;
+  st.cash.clean = 90000000;
   for (const d of st.districts) d.heat = 0;
 
   // The ladder is real: you can't jump to a manufacturer's licence.
@@ -519,7 +519,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
 
   // They look at your record.
   const st2 = world();
-  st2.cash.clean = 900000;
+  st2.cash.clean = 90000000;
   st2.districts[0].heat = 95;
   check('a licence is refused when you are too hot',
         !A.applyForLicence(st2, 'ffl01').ok, A.applyForLicence(st2, 'ffl01').error);
@@ -527,7 +527,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
   // A licensed workshop is dead without its licence.
   const st3 = world();
   st3.adminUnlockAll = true;
-  st3.cash.clean = 900000;
+  st3.cash.clean = 90000000;
   const shop = open(st3, 'gunsmith');
   stepSim(st3, 40, {});
   check('a licensed shop will not run unlicensed',
@@ -537,7 +537,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
   // Tooling changes what comes off the line.
   const st4 = world();
   st4.adminUnlockAll = true;
-  st4.cash.clean = 900000;
+  st4.cash.clean = 90000000;
   const back = open(st4, 'machine_shop');
   A.setProductionLine(st4, back.id, 'shotgun');
   stepSim(st4, 24 * 4, {});
@@ -545,7 +545,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
 
   const st5 = world();
   st5.adminUnlockAll = true;
-  st5.cash.clean = 900000;
+  st5.cash.clean = 90000000;
   const back2 = open(st5, 'machine_shop');
   A.setProductionLine(st5, back2.id, 'rifle');
   stepSim(st5, 24 * 4, {});
@@ -560,7 +560,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
         A.setProductionLine(st4, back.id, 'nfa').ok);
   const st6 = world();
   st6.adminUnlockAll = true;
-  st6.cash.clean = 900000;
+  st6.cash.clean = 90000000;
   st6.licences = { ffl01: { id: 'ffl01', status: 'active', renewsInDays: 365 },
                    ffl07: { id: 'ffl07', status: 'active', renewsInDays: 365 } };
   const legal = open(st6, 'gunsmith');
@@ -574,7 +574,7 @@ print('=== 14. firearms: two ways out, and paperwork to use one ===');
   // The counter actually works: stock in, clean money out, no heat.
   const st8 = world();
   st8.adminUnlockAll = true;
-  st8.cash.clean = 900000;
+  st8.cash.clean = 90000000;
   st8.licences = { ffl01: { id: 'ffl01', status: 'active', renewsInDays: 365 } };
   const store = open(st8, 'gun_store');
   check('a gun store holds stock', !!store.packs, store.packs ? 'yes' : 'no packs map');
@@ -607,7 +607,7 @@ print('');
 print('=== 15. blocks you hold are yours to name and to run ===');
 {
   const st = world();
-  st.cash.clean = 900000;
+  st.cash.clean = 90000000;
   const d = st.districts[3];
 
   // You can't do any of it until the block is actually yours.
@@ -638,7 +638,7 @@ print('=== 15. blocks you hold are yours to name and to run ===');
     for (let trial = 0; trial < 12; trial++) {
       seedWorld(1000 + trial);          // same randomness for both conditions
       const s2 = world();
-      s2.cash.clean = 5000000;
+      s2.cash.clean = 500000000;
       const b = open(s2, 'grow_house');
       const blk = s2.districts.find((x) => x.id === b.districtId);
       blk.rivalControl = 0; blk.rep = 0.8;
@@ -666,7 +666,7 @@ print('=== 16. the corporate tier is a different league ===');
 {
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 12000000;
+  st.cash.clean = 1200000000;
 
   const CORP = ['holding_co', 'members_club', 'terminal', 'pharma_plant'];
   for (const id of CORP) {
@@ -698,7 +698,7 @@ print('=== 16. the corporate tier is a different league ===');
 
   const st2 = world();
   st2.adminUnlockAll = true;
-  st2.cash.clean = 12000000;
+  st2.cash.clean = 1200000000;
   const lot2 = st2.lots.find((l) => l.id === lot.id) || st2.lots.find((l) => !l.owned && l.areaM2 > 200);
   A.buyLot(st2, lot2.id);
   A.rentOut(st2, lot2.id);
@@ -714,7 +714,7 @@ print('=== 17. research, and things only you have made ===');
 {
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 6000000;
+  st.cash.clean = 600000000;
 
   check('research needs a facility', !A.startResearch(st, 'phenohunt').ok,
         A.startResearch(st, 'phenohunt').error);
@@ -821,7 +821,7 @@ print('=== 19. an operation has to fit the building ===');
 {
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 20000000;
+  st.cash.clean = 2000000000;
 
   // Every building has both ends of a range, and they make sense.
   const noCeiling = BUILDING_IDS.filter((id) => !BUILDINGS[id].maxAreaM2);
@@ -1063,7 +1063,7 @@ print('=== 23. going broke is loud ===');
         (st.log || []).length - logAfter + ' extra lines over 20 ticks');
 
   // And it clears once there's money again.
-  st.cash.clean = 100000;
+  st.cash.clean = 10000000;
   stepSim(st, 0.05, {});
   check('it clears once you can pay again', !g4.stalledBroke && !g4.stalledReason,
         g4.stalledReason || 'running');
@@ -1151,7 +1151,7 @@ print('=== 25. every product has its own chain, end to end ===');
   // A line refuses work it isn't built for, and says so.
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 4000000;
+  st.cash.clean = 400000000;
   const lab7 = open(st, 'lab');
   lab7.raw.iron = 50;                     // somebody dropped receivers at a lab
   stepSim(st, 6, {});
@@ -1170,7 +1170,7 @@ print('=== 25. every product has its own chain, end to end ===');
   // And the whole opium chain runs.
   const st2 = world();
   st2.adminUnlockAll = true;
-  st2.cash.clean = 6000000;
+  st2.cash.clean = 600000000;
   const field = open(st2, 'poppy_field');
   const press = open(st2, 'pill_press');
   if (field && press) {
@@ -1316,7 +1316,7 @@ print('=== 27. things happen at a place ===');
   // And the sim actually produces them from things that happen. They are
   // short-lived by design, so watch across the run rather than only at the end.
   const st3 = world();
-  st3.cash.clean = 900000;
+  st3.cash.clean = 90000000;
   const b3 = open(st3, 'grow_house');
   const blk = st3.districts.find((x) => x.id === b3.districtId);
   const kinds = new Set();
@@ -1353,7 +1353,7 @@ print('=== 28. the catalogue is real, not decoration ===');
   // A pattern only applies on a line tooled for its category.
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 4000000;
+  st.cash.clean = 400000000;
   const shop = open(st, 'machine_shop');
   A.setProductionLine(st, shop.id, 'handgun');
   check('a pattern from another category is refused',
@@ -1421,7 +1421,7 @@ print('=== 30. attachments fit the gun they are on ===');
 {
   const st = world();
   st.adminUnlockAll = true;
-  st.cash.clean = 6000000;
+  st.cash.clean = 600000000;
   const shop = open(st, 'machine_shop');
 
   const give = (variant) => {

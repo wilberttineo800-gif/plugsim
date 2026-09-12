@@ -19,7 +19,7 @@ export const LICENCES = {
     short: 'FFL 01',
     blurb:
       'Lets you sell finished firearms over a counter, with a bound book and a background check on every sale. Legal money, legal prices.',
-    cost: 9000,
+    cost: 900000,
     renewalPerYear: 3200,
     processingDays: 14,
     // A licence is a look at your record. Too much attention and it's refused.
@@ -31,7 +31,7 @@ export const LICENCES = {
     short: 'FFL 07',
     blurb:
       'Lets you build firearms lawfully: serialised receivers, marked to standard, records kept. Slower and dearer than a back-room shop, and nobody kicks the door in.',
-    cost: 24000,
+    cost: 2400000,
     renewalPerYear: 9500,
     processingDays: 30,
     maxHeatToApply: 38,
@@ -43,7 +43,7 @@ export const LICENCES = {
     short: 'SOT 2',
     blurb:
       'The tax stamp that puts suppressors, short barrels and select-fire on the books. Enormous margins, and the closest scrutiny there is.',
-    cost: 41000,
+    cost: 4100000,
     renewalPerYear: 18000,
     processingDays: 45,
     maxHeatToApply: 28,

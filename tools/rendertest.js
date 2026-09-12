@@ -23,7 +23,7 @@ const lots = syntheticLots(districts);
 const state = createState({ origin, cityName: 'Detroit', districts, crews, lots });
 
 // A populated empire, so panels render with real content rather than empties.
-state.cash.clean = 400000;
+state.cash.clean = 40000000;
 function openSite(type) {
   const lot = cheapestLotFor(state, BUILDINGS[type]);
   A.buyLot(state, lot.id);

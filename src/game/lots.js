@@ -394,10 +394,15 @@ export function lotsInDistrict(state, districtId) {
  * lab is limited by equipment and trained hands, so doubling the room is worth
  * far less than double. A check-cashing booth barely cares about size at all.
  * Each type carries its own exponent rather than sharing one square root.
+ *
+ * The ceiling is deliberately high. It used to be 3.2, which every building
+ * hit at 4x its reference area — so a 650 m² warehouse grow produced exactly
+ * what a 520 m² one did, and the exponents above never got to mean anything.
+ * Buying the big building has to be worth the money it costs.
  */
 export function areaScale(lot, referenceM2, exponent = 0.7) {
   if (!lot) return 1;
-  return clamp(Math.pow(lot.areaM2 / referenceM2, exponent), 0.55, 3.2);
+  return clamp(Math.pow(lot.areaM2 / referenceM2, exponent), 0.35, 12);
 }
 
 /**

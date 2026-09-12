@@ -958,9 +958,12 @@ export class GameUI {
       bits.push(`<span style="color:var(--good)">makes ${units(p.packsPerDay)} ${esc(p.packName || 'units')}/day</span>`);
     }
     if (p.holds > 0) {
-      // The ceiling before the line stalls waiting for a lorry — the number
-      // that decides how much haulage you need behind it.
-      bits.push(`<span>holds ${units(p.holds)}</span>`);
+      // Capacity is in RAW units and output is in packs, so say which — and
+      // say it in days, because "four days of harvest" is the number that
+      // actually tells you how much haulage to put behind it.
+      const days = p.holdsDays >= 1 ? Math.round(p.holdsDays) : p.holdsDays.toFixed(1);
+      bits.push(`<span>holds ${units(p.holds)}${p.holdsName ? ` ${esc(p.holdsName)}` : ''}`
+        + `${p.holdsDays > 0 ? ` · ${days} days' worth` : ''}</span>`);
     }
     if (p.launderPerDay > 0) {
       bits.push(`<span style="color:var(--money)">washes ${moneyShort(p.launderPerDay)}/day</span>`);

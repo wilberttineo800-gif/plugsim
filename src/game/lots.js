@@ -412,7 +412,11 @@ export function areaScale(lot, referenceM2, exponent = 0.7) {
  */
 export function areaCapacityScale(lot, referenceM2) {
   if (!lot) return 1;
-  return clamp(lot.areaM2 / referenceM2, 0.45, 8);
+  // The ceiling has to sit at or above areaScale's (12), or a big building
+  // outgrows its own store: at 12x output against 8x storage the largest
+  // premises fill faster than smaller ones and stall sooner, which is backwards
+  // — floor space is exactly the thing that holds product.
+  return clamp(lot.areaM2 / referenceM2, 0.45, 14);
 }
 
 export { clamp01, hashUnit };

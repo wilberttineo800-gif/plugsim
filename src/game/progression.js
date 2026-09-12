@@ -131,7 +131,13 @@ export function buildingPreview(def, scale = 1, capScale = 1) {
     rawPerDay,
     packsPerDay,
     // The ceiling on what it holds before the line stalls waiting for a lorry.
+    // NOTE: capacity is in RAW units, while packsPerDay is packs — the two are
+    // separated by packsPerRaw, so showing them side by side without saying so
+    // read as "makes 31.7, holds 21", which looks like it fills in half a day
+    // when the real buffer is four days of harvest.
     holds: (def.capacity || 0) * capScale,
+    holdsName: product ? product.rawName : null,
+    holdsDays: rawPerDay > 0 ? ((def.capacity || 0) * capScale) / rawPerDay : 0,
     launderPerDay: def.launderPerDay || 0,
     suppliesPerDay,
     upkeepPerDay,

@@ -147,3 +147,57 @@ export function buildingPreview(def, scale = 1, capScale = 1) {
     grossPerDay: product ? packsPerDay * product.basePrice : 0,
   };
 }
+
+/**
+ * How the products feed each other.
+ *
+ * Some things are made OF other things — flower into hash and concentrate,
+ * concentrate into carts, powder into rock — and nothing in the game said so.
+ * A player had no way to find out a cart line needs wax except by building one
+ * and watching it refuse to start.
+ *
+ * Derived from the building definitions rather than a hand-kept list, so it
+ * cannot drift out of step with what the game actually does.
+ */
+export function productTree() {
+  const parent = {};      // product -> what it is made from
+  const children = {};    // product -> what is made from it
+  for (const id of BUILDING_IDS) {
+    const def = BUILDINGS[id];
+    if (!def.derivedFrom || !def.product) continue;
+    const from = def.derivedFrom.product;
+    parent[def.product] = { product: from, perSlot: def.derivedFrom.perSlot, via: id };
+    (children[from] = children[from] || []).push({ product: def.product, via: id });
+  }
+  return { parent, children };
+}
+
+/** The full line a product sits on, from the root down to it. */
+export function chainFor(productId) {
+  const { parent } = productTree();
+  const line = [productId];
+  let cur = parent[productId];
+  const guard = new Set([productId]);
+  while (cur && !guard.has(cur.product)) {
+    line.unshift(cur.product);
+    guard.add(cur.product);
+    cur = parent[cur.product];
+  }
+  return line;
+}
+
+/** Everything downstream of a product, breadth-first. */
+export function feedsInto(productId) {
+  const { children } = productTree();
+  const out = [];
+  const queue = [...(children[productId] || [])];
+  const seen = new Set();
+  while (queue.length) {
+    const next = queue.shift();
+    if (seen.has(next.product)) continue;
+    seen.add(next.product);
+    out.push(next);
+    queue.push(...(children[next.product] || []));
+  }
+  return out;
+}

@@ -40,7 +40,8 @@ import {
 import { crewById } from '../game/crews.js';
 
 import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
-import { unlockStatus, regionNote, buildingPreview} from '../game/progression.js';
+import { unlockStatus, regionNote, buildingPreview, productTree, chainFor, feedsInto }
+  from '../game/progression.js';
 import { citiesOf, cityOfDistrict, distanceKm, foundingCost, openableFrom, quoteShipment,
   homeCity } from '../game/cities.js';
 import {
@@ -1061,6 +1062,13 @@ export class GameUI {
     const p = buildingPreview(o.def, o.scale, o.capScale);
     if (!p) return '';
     const bits = [];
+    // A line made of something else cannot start without it. Saying so here is
+    // the difference between choosing it and discovering it three weeks later
+    // when the place refuses to run.
+    const src = o.def.derivedFrom;
+    if (src) {
+      bits.push(`<span style="color:var(--warn)">needs ${esc(PRODUCTS[src.product].name.toLowerCase())} delivered in</span>`);
+    }
     if (p.packsPerDay > 0) {
       bits.push(`<span style="color:var(--good)">makes ${units(p.packsPerDay)} ${esc(p.packName || 'units')}/day</span>`);
     }
@@ -2353,6 +2361,41 @@ export class GameUI {
     </details>`;
   }
 
+  /**
+   * The line this place sits on — what feeds it, and what it feeds.
+   *
+   * Nothing in the game said flower becomes hash and concentrate, or that
+   * concentrate becomes carts. You found out by building a cart line and
+   * watching it refuse to start, which is a poor way to learn a mechanic.
+   */
+  chainBlock(def) {
+    const pid = def.product;
+    if (!pid) return '';
+    const line = chainFor(pid);
+    const downstream = feedsInto(pid);
+    if (line.length < 2 && !downstream.length) return '';
+
+    const step = (id) => `<span style="color:${id === pid ? 'var(--sodium)' : 'var(--text-dim)'}">`
+      + `${esc(PRODUCTS[id].name)}</span>`;
+    const src = def.derivedFrom;
+
+    return `<div class="sect" style="margin-top:12px">
+      <div class="sect__title"><span>The line</span></div>
+      <p class="card__blurb" style="margin:0 0 6px">
+        ${line.map(step).join(' <span style="color:var(--text-faint)">→</span> ')}
+      </p>
+      ${src ? `<div class="rows"><div class="row">
+        <span>Needs delivered here</span>
+        <span class="warn">${esc(PRODUCTS[src.product].name)} · ${src.perSlot}/slot a cycle</span>
+      </div></div>` : ''}
+      ${downstream.length ? `<p class="card__blurb" style="margin:6px 0 0">
+        What it makes feeds ${downstream.map((d) => esc(PRODUCTS[d.product].name)).join(', ')} —
+        each one worth more by weight than the last, and each one another place
+        to run and another line to keep fed.
+      </p>` : ''}
+    </div>`;
+  }
+
   buildingPanel(b) {
     const s = this.game.state;
     const def = BUILDINGS[b.type];
@@ -2365,10 +2408,17 @@ export class GameUI {
       const cap = def.capacity * fx.capacityMult * sizeCapacity(b);
       const perCycle = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b);
       body =
+        this.chainBlock(def) +
         `<div class="sect">
           <div class="sect__title"><span>Current cycle</span><span>${pct(b.cycleProgress)}</span></div>
           <div class="meter meter--${def.product === 'weed' ? 'weed' : 'shroom'}"><i style="width:${b.cycleProgress * 100}%"></i></div>
           <div class="rows" style="margin-top:9px">
+            ${def.derivedFrom ? `<div class="row">
+              <span>${esc(PRODUCTS[def.derivedFrom.product].name)} on site</span>
+              <span class="${(b.packs[def.derivedFrom.product] || 0) >= def.derivedFrom.perSlot * def.slots * sizeScale(b)
+                ? 'good' : 'warn'}">${units(b.packs[def.derivedFrom.product] || 0)}
+                · needs ${units(def.derivedFrom.perSlot * def.slots * sizeScale(b))} a cycle</span>
+            </div>` : ''}
             <div class="row"><span>Yield per cycle</span><span>${units(perCycle)} ${esc(p.rawName.toLowerCase())}</span></div>
             <div class="row"><span>Cycle length</span><span>${duration(def.cycleHours)}</span></div>
             <div class="row"><span>Supplies per cycle</span><span>${money(def.supplyCostPerSlot * def.slots * sizeScale(b))}</span></div>

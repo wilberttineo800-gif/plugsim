@@ -18,6 +18,7 @@ import {
   LICENCES, FIREARM_CLASSES, hasLicence, MODELS, MODEL_IDS, modelEffects,
 } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
+import { productTree, chainFor, feedsInto } from '../src/game/progression.js';
 import { pendingTip, markTipSeen, TIPS } from '../src/game/guide.js';
 import {
   GUN_MODELS, GUN_MODEL_IDS, GUN_ART, GUN_IDS, VEHICLE_ART, VEHICLE_ART_IDS,
@@ -1694,6 +1695,33 @@ print('=== 24. some things are made OF other things ===');
         Math.round(400 - (press.packs.weed || 0)) + ' used');
   check('and turns out hash', (press.raw.hash || 0) > 0,
         (press.raw.hash || 0).toFixed(1) + ' raw hash');
+}
+
+
+print('');
+print('=== 25. the tree is discoverable, not guesswork ===');
+{
+  const { parent, children } = productTree();
+  check('the tree is derived from the buildings themselves',
+        Object.keys(parent).length >= 4,
+        Object.keys(parent).length + ' derived products');
+
+  // The cannabis line is three deep; that depth is the whole point of it.
+  const pens = chainFor('pens');
+  check('a chain reads root-first', pens[0] === 'weed' && pens[pens.length - 1] === 'pens',
+        pens.join(' -> '));
+  check('and it is three steps deep', pens.length === 3);
+
+  // Everything downstream, not just the next hop — a grower wants to know
+  // flower reaches carts, not only that it reaches wax.
+  const from = feedsInto('weed').map((x) => x.product);
+  check('what a product feeds includes the far end', from.includes('pens'),
+        from.join(', '));
+
+  // A root has no parent and must not claim one.
+  check('a root product has nothing above it', !parent.weed && !parent.coke,
+        'weed and coke are roots');
+  check('and a leaf reports no children', (children.pens || []).length === 0);
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

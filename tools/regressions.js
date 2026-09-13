@@ -1616,4 +1616,37 @@ print('=== 22. the new state survives a save ===');
         (back.districts || []).some((d) => d.cityId === res.city.id));
 }
 
+
+print('');
+print('=== 23. an empty property you own can always be given a use ===');
+{
+  const st = world();
+  st.cash.clean = 40000000;
+  // Buy something and deliberately do NOT develop it.
+  const lot = (st.lots || []).filter((l) => !l.owned && l.kind !== 'parking'
+    && l.areaM2 > 120 && l.areaM2 < 600).sort((a, b) => a.price - b.price)[0];
+  A.buyLot(st, lot.id);
+  const fresh = (st.lots || []).find((l) => l.id === lot.id);
+
+  check('it is owned and still empty', fresh.owned && !fresh.buildingId,
+        Math.round(fresh.areaM2) + ' m2');
+
+  // The reported bug looked like the game refusing to let you choose. It was
+  // not: the chooser lives on the Build tab, and selecting the lot from any
+  // other tab rendered the options into a tab nobody was looking at. The
+  // options themselves were always there, which is what this pins.
+  const opts = A.operationOptions(fresh, st);
+  check('it offers things to run', opts.length > 0, opts.length + ' options');
+  check('and some are actually available now', opts.some((o) => !o.locked),
+        opts.filter((o) => !o.locked).length + ' unlocked');
+
+  // Still true after clicking away and back — nothing about selection should
+  // consume or clear what a property can be used for.
+  st.selection = null;
+  st.selection = { kind: 'lot', id: fresh.id };
+  const again = A.operationOptions(fresh, st);
+  check('and still offers them after selecting away and back',
+        again.length === opts.length, again.length + ' options');
+}
+
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

@@ -792,7 +792,17 @@ game.select = (kind, id, opts = {}) => {
   game.buildingLayer.sync(game.state);
   game.lotLayer.setSelected(kind === 'lot' ? id : null, game.state.lots || []);
   game.ui.renderInspector();
-  if (kind === 'lot') game.ui.renderRail();
+
+  // The "what do we run here" chooser only exists on the Build tab. Selecting
+  // an empty property you own while looking at any other tab rendered those
+  // options into a tab you were not looking at, so it read as the game
+  // refusing to let you pick — which is exactly what it looked like. Take the
+  // player where the decision actually is.
+  if (kind === 'lot') {
+    const l = lotById(game.state, id);
+    if (l && l.owned && !l.buildingId) game.ui.goTab('build');
+    else game.ui.renderRail();
+  }
 };
 
 game.setOverlay = (id) => {

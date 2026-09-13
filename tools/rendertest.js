@@ -24,6 +24,9 @@ const state = createState({ origin, cityName: 'Detroit', districts, crews, lots 
 
 // A populated empire, so panels render with real content rather than empties.
 state.cash.clean = 40000000;
+// Progression gating is not what these panels are testing, and a firearms line
+// sits behind nine properties.
+state.adminUnlockAll = true;
 function openSite(type) {
   const lot = cheapestLotFor(state, BUILDINGS[type]);
   A.buyLot(state, lot.id);
@@ -86,6 +89,18 @@ const cases = [
   ['upgradeBlock lab', () => ui.upgradeBlock(lab)],
   ['upgradeBlock shop', () => ui.upgradeBlock(shop)],
   ['dailyNet', () => String(ui.dailyNet())],
+  // The cabinet, both empty and holding something — the populated case is where
+  // all the interpolation is, and an empty one renders a different branch.
+  ['armouryBlock (empty)', () => ui.armouryBlock() || '<!-- nothing to keep -->'],
+  ['armouryBlock (holding)', () => {
+    const line = openSite('machine_shop');
+    line.packs.iron = 10;
+    A.keepFirearm(state, line.id);
+    return ui.armouryBlock();
+  }],
+  ['tabMarket with a cabinet', () => ui.tabMarket()],
+  ['buildingPanel firearms line', () => ui.buildingPanel(
+    state.buildings.find((b) => BUILDINGS[b.type].product === 'iron'))],
 ];
 
 let failed = 0;

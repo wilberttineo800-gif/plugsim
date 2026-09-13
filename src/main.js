@@ -36,7 +36,7 @@ import {
 } from './map/entities.js';
 import { GameUI } from './ui/ui.js';
 import { toast } from './ui/toast.js';
-import { esc } from './ui/format.js';
+import { esc, money } from './ui/format.js';
 import * as diag from './game/diagnostics.js';
 
 const SURPRISE_CITIES = [
@@ -385,6 +385,23 @@ game.equipItem = (itemId, targetId) => {
   if (r.target) toast(`${r.item.name} fitted to ${r.target.name}.`, 'good', 2800);
   game.ui.render();
 };
+
+// Keeping one for yourself: it leaves the line's stock, so the cost is the sale
+// you now will not make.
+game.keepFirearm = (buildingId) => {
+  const r = A.keepFirearm(game.state, buildingId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${r.piece.name} is yours. ${money(r.forgone)} you won't be selling.`, 'info');
+  game.ui.render();
+};
+
+game.releaseFirearm = (pieceId) => {
+  const r = A.releaseFirearm(game.state, pieceId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${r.piece.name} gone for ${money(r.price)}${r.clean ? ' clean' : ''}.`, 'good');
+  game.ui.render();
+};
+
 
 game.sellItem = (itemId) => {
   const r = A.sellItem(game.state, itemId);

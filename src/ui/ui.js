@@ -18,6 +18,10 @@ import {
   LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
   hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
 } from '../game/firearms.js';
+import {
+  armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
+  pieceValue, canKeep, lineUnit, isFirearmLine,
+} from '../game/armoury.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import { rhythmNote, rhythmFactor, darkness, cityClock, DAY_NAMES } from '../game/rhythm.js';
 import {
@@ -370,6 +374,8 @@ export class GameUI {
       case 'sell-item': g.sellItem(id); break;
       case 'fit-attachment': g.equipItem(id, type); break;
       case 'unfit': g.equipItem(id, null); break;
+      case 'keep-firearm': g.keepFirearm(id); break;
+      case 'release-firearm': g.releaseFirearm(id); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -833,7 +839,81 @@ export class GameUI {
         pays more.
       </p>
       ${cards}
-    </div>` + this.licenceBlock();
+    </div>` + this.licenceBlock() + this.armouryBlock();
+  }
+
+  /**
+   * What you kept for yourself.
+   *
+   * Deliberately shown next to the market rather than tucked into a line: the
+   * whole point of a piece in the cabinet is that it is a unit you chose not to
+   * sell, so the price you turned down belongs beside the prices you took.
+   */
+  armouryBlock() {
+    const s = this.game.state;
+    const kept = armouryOf(s);
+    const lines = (s.buildings || []).filter((b) => isFirearmLine(b));
+    if (!kept.length && !lines.length) return '';
+
+    const edge = armouryEdge(s);
+    const heat = armouryHeatPerDay(s);
+
+    const cards = kept.map((piece) => {
+      const worth = pieceValue(s, piece);
+      const cls = FIREARM_CLASSES[piece.classId];
+      return `<div class="card card--art">
+        <div class="card__art">${piece.modelId
+          ? modelArt(piece.modelId, { size: 116 })
+          : gunArt(piece.classId, { size: 110, color: 'var(--text-dim)' })}</div>
+        <div class="card__head">
+          <span class="card__name">${esc(piece.name)}</span>
+          <span class="card__cost ${piece.serialised ? 'good' : 'warn'}">${
+            piece.serialised ? 'serialised' : 'no number'}</span>
+        </div>
+        <div class="card__meta">
+          <span>${esc(cls ? cls.name.replace(/s$/, '') : 'Firearm')}</span>
+          <span>off ${esc(piece.fromName)}</span>
+          <span>day ${piece.takenDay}</span>
+        </div>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="release-firearm" data-id="${piece.id}">
+            Let it go · ${moneyShort(worth)}${piece.serialised ? ' clean' : ' street'}</button>
+        </div>
+      </div>`;
+    }).join('');
+
+    const takeable = lines.map((b) => {
+      const gate = canKeep(s, b);
+      const unit = lineUnit(s, b);
+      const model = unit.modelId ? MODELS[unit.modelId] : null;
+      return `<button class="card ${gate.ok ? '' : 'is-locked'}"
+        data-action="keep-firearm" data-id="${b.id}" ${gate.ok ? '' : 'disabled'}>
+        <div class="card__head">
+          <span class="card__name">Keep one off ${esc(b.name)}</span>
+          <span class="card__cost">${moneyShort(unit.value)} forgone</span>
+        </div>
+        <div class="card__blurb">${esc(model ? model.name : 'No pattern set')}${
+          unit.serialised ? ' — serialised, in the book.' : ' — no number on it.'}</div>
+        ${gate.ok ? '' : `<div class="card__meta"><span class="warn">${esc(gate.error)}</span></div>`}
+      </button>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Cabinet</span>
+        <span>${kept.length}/${armouryCap()}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        A unit you keep is a unit you don\u2019t sell, and you can hold
+        ${armouryCap()}. What you\u2019re carrying tips a move on a block your way,
+        and it costs you attention every day on the block you work from \u2014
+        more for the ones with the number ground off.
+      </p>
+      <div class="card__meta" style="margin:0 0 10px">
+        <span class="${edge > 0 ? 'good' : ''}">+${Math.round(edge * 100)}% odds muscling in</span>
+        <span class="${heat > 0 ? 'bad' : ''}">+${heat.toFixed(2)} heat/day</span>
+      </div>
+      ${kept.length ? cards : '<div class="empty">Nothing kept back yet.</div>'}
+      ${takeable ? `<div class="sect__title" style="margin-top:12px"><span>Take one</span></div>${takeable}` : ''}
+    </div>`;
   }
 
   /**
@@ -2903,7 +2983,19 @@ export class GameUI {
         </div>
       </details>` : '';
 
-    return showcase + patternPicker + `
+    const keepGate = canKeep(s, b);
+    const keepUnit = lineUnit(s, b);
+    const keepRow = `
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="keep-firearm" data-id="${b.id}"
+          ${keepGate.ok ? '' : 'disabled'}
+          title="${esc(keepGate.ok
+            ? `Costs you the sale — ${money(keepUnit.value)}`
+            : keepGate.error)}">
+          Keep one · ${armouryOf(s).length}/${armouryCap()} held</button>
+      </div>`;
+
+    return showcase + keepRow + patternPicker + `
       <details class="upgrades" data-disc="line-${b.id}"
         ${this.discOpen(`line-${b.id}`, false) ? 'open' : ''}>
         <summary><span>Tooled for</span>

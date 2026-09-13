@@ -978,7 +978,7 @@ export const GUN_DETAIL = {
   // drum bolted to the side of a short shotgun. The drum IS the gun — it is
   // most of the mass and all of the silhouette.
   streetsweeper: {
-    box: [-12, -16, 700, 300],
+    box: [-12, -16, 660, 300],
     mounts: { rail: [280, 26], muzzle: [8, 62], under: [150, 100], mag: [300, 150] },
     body: `
       <path d="M10 48 h230 v28 h-230 z" fill="url(#pgBlued)"/>
@@ -1022,12 +1022,29 @@ export const GUN_DETAIL = {
                c-9 0 -13 -5 -11 -14 l14 -80 c1.5 -9 5 -13 6 -13 z" fill="url(#pgPoly)"/>
       <path d="M462 144 c13 22 16 52 12 76 l-26 3 c7 -27 8 -54 4 -79 z"
             fill="url(#pgStipple)" opacity=".75"/>
-      <!-- folding wire stock over the top -->
-      <g fill="none" stroke="#3d434c" stroke-width="11" stroke-linecap="round">
-        <path d="M396 36 h216"/>
-      </g>
-      <path d="M604 26 c24 0 36 10 36 28 c0 18 -12 28 -36 28 z" fill="none"
-            stroke="#3d434c" stroke-width="11" stroke-linecap="round"/>
+      <!-- A real stock, not a wire. The wire loop it had before read as a
+           coat hanger at thumbnail size — nothing there to shoulder. Same
+           shape rule as the rest: it leaves the receiver IN LINE with the
+           bore, the comb runs back level, the wrist is cut in behind the
+           action, and the butt plate is deeper than the wrist. -->
+      <path d="M394 46
+               C460 49 564 56 606 62
+               c13 2 19 9 19 21
+               v54
+               c0 12 -6 19 -19 21
+               C568 168 516 152 488 128
+               C468 112 436 106 394 106 z" fill="url(#pgPolyLt)"/>
+      <path d="M394 46 C460 49 564 56 606 62 c9 1 15 4 17 10
+               C564 64 476 52 396 50 z" fill="#8d97a5" opacity=".25"/>
+      <!-- the hollow behind the wrist, which is what says shaped -->
+      <path d="M424 106 c26 2 50 10 64 24 l-13 11 c-12 -12 -30 -19 -53 -21 z"
+            fill="#0b0d10" opacity=".4"/>
+      <path d="M506 70 h62 v32 h-62 z" fill="#0b0d10" opacity=".32"/>
+      <!-- sling loop on the toe, where a fighting shotgun carries one -->
+      <path d="M544 138 h38 v9 h-38 z" fill="#2a2e34"/>
+      <path d="M606 62 c13 2 19 9 19 21 v54 c0 12 -6 19 -19 21 l-7 1 v-96 z"
+            fill="#15171b"/>
+      <path d="M599 62 h7 v97 h-7 z" fill="#d5dde6" opacity=".2"/>
     `,
   },
 

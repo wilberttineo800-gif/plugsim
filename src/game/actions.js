@@ -21,6 +21,10 @@ import {
   LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
   builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
+import {
+  armouryEdge, keepFromLine as takeFromLine, releasePiece as letPieceGo,
+  canKeep,
+} from './armoury.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
 import {
   projectById, canResearch, ITEM_KINDS, itemValue, attachmentById, ATTACHMENT_SLOTS,
@@ -990,8 +994,10 @@ export function muscleIn(state, districtId) {
     return { ok: false, error: `Need $${cost.toLocaleString()} clean to move on them.` };
   }
 
-  // Your standing on the block is what tips a fight your way.
-  const odds = clamp01(0.28 + d.rep * 0.5 - (d.rivalControl - 0.3) * 0.45);
+  // Your standing on the block is what tips a fight your way — and so does
+  // what you are carrying, which is the point of keeping any of it.
+  const edge = armouryEdge(state);
+  const odds = clamp01(0.28 + d.rep * 0.5 - (d.rivalControl - 0.3) * 0.45 + edge);
   const won = Math.random() < odds;
 
   d.heat = Math.min(100, d.heat + RIVALS.muscleHeat);
@@ -1263,4 +1269,40 @@ export function sendShipment(state, fromBuildingId, toBuildingId, productId, amo
     + `${Math.round(quote.risk * 100)}% chance it doesn't arrive.`,
     'info');
   return { ok: true, shipment, quote };
+}
+
+
+// --- Keeping one for yourself -----------------------------------------------
+
+/**
+ * Take a finished unit off one of your own lines.
+ *
+ * It comes out of that line's stock, so the cost is the sale you now will not
+ * make — and the dearest lines are exactly the ones worth keeping something
+ * from. That tension is the whole mechanic, so it is not softened anywhere.
+ */
+export function keepFirearm(state, buildingId) {
+  const b = buildingById(state, buildingId);
+  if (!b) return { ok: false, error: 'No such premises.' };
+  const gate = canKeep(state, b);
+  if (!gate.ok) return gate;
+
+  const res = takeFromLine(state, b);
+  if (!res.ok) return res;
+  logEvent(state,
+    `Kept a ${res.piece.name} off ${b.name}. That is $${res.forgone.toLocaleString()} you won't be selling.`
+    + (res.piece.serialised ? '' : ' No number on it.'),
+    'info');
+  return res;
+}
+
+/** Let one go again. A serialised piece has paper behind it and pays clean. */
+export function releaseFirearm(state, pieceId) {
+  const res = letPieceGo(state, pieceId);
+  if (!res.ok) return res;
+  logEvent(state,
+    `Let the ${res.piece.name} go for $${res.price.toLocaleString()}`
+    + (res.clean ? ', through the book.' : ', cash in hand.'),
+    'good');
+  return res;
 }

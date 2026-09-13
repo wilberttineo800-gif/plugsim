@@ -22,6 +22,7 @@ import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
 import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor, modelEffects } from './firearms.js';
+import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -1190,6 +1191,15 @@ function stepHeat(state, dt) {
     d.heat = clamp(
       d.heat + def.heatPerDay * effectsFor(b).heatMult * lineHeat * policeFactor * (dt / 24),
       0, HEAT.max);
+  }
+
+  // What you keep for yourself costs attention too, on the block you work
+  // from — iron in a drawer is iron somebody can find, and one with the number
+  // ground off is a different charge to one in a bound book.
+  const armouryHeat = armouryHeatPerDay(state);
+  if (armouryHeat > 0) {
+    const hd = districtById(state, armouryDistrictId(state));
+    if (hd) hd.heat = clamp(hd.heat + armouryHeat * (dt / 24), 0, HEAT.max);
   }
 
   // Attention bleeds outward. Without this you could dump on a hot block

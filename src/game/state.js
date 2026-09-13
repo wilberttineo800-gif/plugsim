@@ -60,6 +60,8 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     research: [],        // projects finished
     researchActive: [],  // projects under way
     items: [],           // things only you have made
+    armoury: [],         // what you kept off your own lines rather than sold
+    armouryCounter: 0,
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
     aiDisabled: false,
@@ -529,6 +531,10 @@ export function loadGame() {
     const data = JSON.parse(raw);
     if (data.version !== SAVE_VERSION && !migrate(data)) return null;
     backfillProducts(data);
+    // Anything added after a save was written has to be filled in here rather
+    // than in migrate(), which is skipped whenever the version already matches.
+    if (!Array.isArray(data.armoury)) data.armoury = [];
+    if (typeof data.armouryCounter !== 'number') data.armouryCounter = data.armoury.length;
     idCounter = data.idCounter || 1;
     delete data.idCounter;
     data.selection = null;

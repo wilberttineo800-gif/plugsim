@@ -169,6 +169,7 @@ function stepOnce(state, dtHours, hooks = {}) {
   stepRents(state, dtHours);
   stepTurf(state, dtHours);
   stepIncidents(state);
+  stepShipments(state);
   stepResearch(state, dtHours);
   stepHeat(state, dtHours);
   stepEnforcement(state, dtHours);
@@ -715,6 +716,57 @@ function crewCut(state, district) {
   const crew = (state.crews || []).find((c) => c.id === district.crewId);
   if (!crew) return 0;
   return Math.min(0.6, control * crew.aggression * RIVALS.tributeRate);
+}
+
+
+// --- Consignments between cities --------------------------------------------
+
+/**
+ * Advance anything in the wind, and settle it when it lands.
+ *
+ * A shipment is a bet, not a delivery: nothing to watch while it runs, and the
+ * only moment that matters is arrival. Losing one has to cost the product AND
+ * be said out loud, because a consignment quietly failing to appear is exactly
+ * the kind of thing a player notices three weeks later, if at all.
+ */
+function stepShipments(state) {
+  const inFlight = state.shipments || [];
+  if (!inFlight.length) return;
+
+  const landed = inFlight.filter((s) => state.minutes >= s.arrivesAtMinute);
+  if (!landed.length) return;
+  state.shipments = inFlight.filter((s) => state.minutes < s.arrivesAtMinute);
+
+  for (const ship of landed) {
+    const to = buildingById(state, ship.toBuildingId);
+    const city = (state.cities || []).find((c) => c.id === ship.toCityId);
+    const where = city ? city.name : 'the other side';
+
+    if (rng() < ship.risk) {
+      state.stats.shipmentsLost = (state.stats.shipmentsLost || 0) + 1;
+      state.stats.unitsLostSmuggling = (state.stats.unitsLostSmuggling || 0) + ship.amount;
+      logEvent(state,
+        `The ${Math.round(ship.amount).toLocaleString()} to ${where} never turned up. `
+        + `Whatever happened, the carry money is gone too.`,
+        'bad');
+      continue;
+    }
+
+    if (!to) {
+      // Nowhere to put it: it does not evaporate, the smuggler keeps it.
+      logEvent(state,
+        `Your consignment reached ${where} with nowhere to land — written off.`, 'bad');
+      continue;
+    }
+
+    to.packQuality[ship.productId] = blendQuality(
+      to.packs[ship.productId], to.packQuality[ship.productId], ship.amount, ship.quality);
+    to.packs[ship.productId] += ship.amount;
+    state.stats.shipmentsLanded = (state.stats.shipmentsLanded || 0) + 1;
+    state.stats.unitsSmuggled = (state.stats.unitsSmuggled || 0) + ship.amount;
+    logEvent(state,
+      `${Math.round(ship.amount).toLocaleString()} landed in ${where}.`, 'good');
+  }
 }
 
 // --- Street sales -----------------------------------------------------------

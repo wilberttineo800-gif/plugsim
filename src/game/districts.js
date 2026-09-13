@@ -41,7 +41,7 @@ function proceduralName(lat, lng, i) {
  * places; each is claimed by its nearest district so real neighbourhood names
  * land where they actually belong.
  */
-export function generateDistricts(origin, placeNames = [], countryCode = null) {
+export function generateDistricts(origin, placeNames = [], countryCode = null, cityId = 'city-home') {
   const cells = hexRing(DISTRICT_RINGS);
   const districts = cells.map((cell, i) => {
     const { x, y } = hexCenterKm(cell.q, cell.r, DISTRICT_RADIUS_KM);
@@ -78,7 +78,10 @@ export function generateDistricts(origin, placeNames = [], countryCode = null) {
     }
 
     return {
-      id: `d${i}`,
+      // Namespaced by city. Without this a second city's blocks reuse the
+      // first's ids, and every building, lot and route that points at "d3"
+      // silently resolves to whichever city happens to be earlier in the array.
+      id: cityId === 'city-home' ? `d${i}` : `${cityId}-d${i}`,
       index: i,
       q: cell.q,
       r: cell.r,
@@ -93,6 +96,7 @@ export function generateDistricts(origin, placeNames = [], countryCode = null) {
       // Where it starts: rough where it's poor and lightly policed.
       crime: clamp01(0.62 - wealth * 0.45 - policing * 0.20),
       rentIndex,
+      cityId,
       demandPerHour: demand,
       // Live state
       marketIndex: 1,

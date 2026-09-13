@@ -1650,6 +1650,41 @@ export const RETAIL_MARKUP = 1.35;
  */
 export const WHOLESALE_FACTOR = 0.75;
 
+/**
+ * Moving weight between cities.
+ *
+ * A courier works a route you can watch on the map. A smuggler takes a
+ * consignment and disappears for days — you are betting on arrival, not
+ * managing a delivery, which is why these numbers are about risk and time
+ * rather than capacity and pace.
+ */
+export const SMUGGLING = {
+  // Opening up somewhere new.
+  foundBase: 2500000,      // the second city; the fifth is an organisation
+  foundGrowth: 1.7,        // each further city is a bigger undertaking
+  distanceCostKm: 1200,    // beyond this, distance starts to dominate the cost
+
+  // Time in the wind. Deliberately slower than the drive: they wait for the
+  // right crossing, the right vehicle, the right night.
+  baseHours: 18,
+  kmPerHour: 55,
+
+  // What it costs to have it carried.
+  feeBase: 25000,
+  feePerUnitPerKm: 0.9,
+  borderFeeMult: 2.2,
+
+  // What can go wrong. Splitting a big load across several runs is genuinely
+  // safer than sending it all at once — that is the decision on offer.
+  riskPerKm: 9000,         // 1% of risk per this many km
+  maxDistanceRisk: 0.22,
+  riskPerUnit: 1200,       // 1% of risk per this many units in one load
+  maxLoadRisk: 0.25,
+  borderRisk: 0.12,
+  heatRisk: 0.15,
+  maxRisk: 0.65,
+};
+
 export const BACKLOG_PAUSE_AT = 0.8;
 
 export const IDLE_UPKEEP_SHARE = 0.35;

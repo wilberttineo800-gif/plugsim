@@ -12,6 +12,10 @@ import {
 import { fetchRoute } from './geo.js';
 import { clamp01 } from './rng.js';
 import { streetPrice } from './economy.js';
+import { citiesOf, homeCity, cityOfBuilding, foundingCost, quoteShipment } from './cities.js';
+import { generateDistricts } from './districts.js';
+import { haversineKm } from './geo.js';
+import { paySoft } from './sim.js';
 import { unlockStatus } from './progression.js';
 import {
   LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
@@ -42,6 +46,8 @@ import {
   logEvent,
   routeById,
   spendClean,
+  nextId,
+  clockOf,
 } from './state.js';
 
 /** Buy a real building. You own the premises; what runs inside is a separate call. */
@@ -1155,4 +1161,106 @@ export function routeLabel(state, route) {
     product,
     km: route.km,
   };
+}
+
+// --- More than one city -----------------------------------------------------
+
+/**
+ * Open up somewhere new.
+ *
+ * The reason to do it is not more room — it is a different market. A city under
+ * another country code prices every product differently, because
+ * `regionMultiplier` is baked into district demand when it is generated.
+ */
+export function foundCity(state, { name, origin, countryCode = null, lots = [] } = {}) {
+  if (!name || !origin) return { ok: false, error: 'Nowhere named to go.' };
+
+  const existing = citiesOf(state);
+  if (existing.some((c) => c.name.toLowerCase() === String(name).toLowerCase())) {
+    return { ok: false, error: `You already work ${name}.` };
+  }
+
+  const from = homeCity(state);
+  const distance = haversineKm(from.origin, origin);
+  const cost = foundingCost(state, distance);
+  if (state.cash.clean < cost) {
+    return { ok: false, error: `Opening ${name} costs $${cost.toLocaleString()} clean.` };
+  }
+
+  const id = `city-${existing.length}`;
+  const city = {
+    id,
+    name,
+    origin,
+    countryCode,
+    foundedDay: clockOf(state.minutes).day,
+    home: false,
+  };
+
+  const districts = generateDistricts(origin, [], countryCode, id);
+  state.cities = [...existing, city];
+  state.districts = [...state.districts, ...districts];
+  if (lots.length) state.lots = [...state.lots, ...lots];
+  state.cash.clean -= cost;
+
+  logEvent(state,
+    `You're in ${name} now — ${Math.round(distance).toLocaleString()} km out, `
+    + `${districts.length} blocks, and it wants different things to home.`,
+    'good');
+  return { ok: true, city, districts, cost };
+}
+
+/**
+ * Hand a consignment to a smuggler.
+ *
+ * Unlike a route, you do not watch this happen. It leaves, it is gone for days,
+ * and it either turns up or it doesn't — so the decision is how much to put in
+ * one load, not which road to take.
+ */
+export function sendShipment(state, fromBuildingId, toBuildingId, productId, amount) {
+  const from = buildingById(state, fromBuildingId);
+  const to = buildingById(state, toBuildingId);
+  if (!from || !to) return { ok: false, error: 'One end of that is gone.' };
+
+  const fromCity = cityOfBuilding(state, from);
+  const toCity = cityOfBuilding(state, to);
+  if (!fromCity || !toCity) return { ok: false, error: 'Cannot place one of those.' };
+  if (fromCity.id === toCity.id) {
+    return { ok: false, error: 'Same city — run a route instead, it is cheaper and safer.' };
+  }
+
+  const have = (from.packs && from.packs[productId]) || 0;
+  const move = Math.min(have, amount || have);
+  if (move <= 0.01) return { ok: false, error: 'Nothing there to send.' };
+
+  const district = districtById(state, from.districtId);
+  const quote = quoteShipment(state, fromCity, toCity, move, district ? district.heat : 0);
+  if (state.cash.dirty + state.cash.clean < quote.fee) {
+    return { ok: false, error: `The carry costs $${quote.fee.toLocaleString()}.` };
+  }
+
+  from.packs[productId] -= move;
+  paySoft(state, quote.fee);
+
+  const shipment = {
+    id: nextId('ship'),
+    fromCityId: fromCity.id,
+    toCityId: toCity.id,
+    toBuildingId,
+    productId,
+    amount: move,
+    quality: (from.packQuality && from.packQuality[productId]) || 0.5,
+    fee: quote.fee,
+    risk: quote.risk,
+    sentAtMinute: state.minutes,
+    arrivesAtMinute: state.minutes + quote.hours * 60,
+  };
+  state.shipments = [...(state.shipments || []), shipment];
+
+  logEvent(state,
+    `${Math.round(move).toLocaleString()} out to ${toCity.name} — `
+    + `${(quote.hours / 24).toFixed(1)} days, $${quote.fee.toLocaleString()} to carry it, `
+    + `${Math.round(quote.risk * 100)}% chance it doesn't arrive.`,
+    'info');
+  return { ok: true, shipment, quote };
 }

@@ -32,6 +32,18 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     districts,
     crews,
     lots,
+    // Where you operate. The first is where you started; the rest you opened.
+    cities: [{
+      id: 'city-home',
+      name: cityName,
+      origin,
+      countryCode,
+      foundedDay: 0,
+      home: true,
+    }],
+    // Consignments in the wind between cities. Not routes — you are betting on
+    // arrival, not watching a delivery.
+    shipments: [],
     drivers: [],
     buildings: [],
     couriers: [],

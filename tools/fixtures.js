@@ -33,7 +33,10 @@ export function syntheticLots(districts, perDistrict = 12) {
       const levels = isParking ? 1 : levelsOf(tags, kind);
       const units = dwellingsIn(kind, areaM2, levels);
       lots.push({
-        id: `L${n++}`,
+        // Namespaced by district, which is itself namespaced by city — a bare
+        // counter restarts on every call, so a second city's lots reuse the
+        // first's ids and buyLot silently buys the wrong property.
+        id: `L${d.id}-${n++}`,
         osmId: n,
         polygon,
         center: c,

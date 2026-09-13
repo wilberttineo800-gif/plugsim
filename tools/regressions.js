@@ -1491,4 +1491,60 @@ print('=== 30. attachments fit the gun they are on ===');
 }
 
 print('');
+print('');
+print('=== 20. more than one city, and weight moving between them ===');
+{
+  const st = world();
+  st.cash.clean = 60000000;
+  const mx = { lat: 19.4326, lng: -99.1332 };
+
+  const before = (st.districts || []).length;
+  const res = A.foundCity(st, { name: 'Mexico City', origin: mx, countryCode: 'mx' });
+  check('a second city can be opened', res.ok, res.ok ? '$' + res.cost.toLocaleString() : res.error);
+  check('it brings its own blocks', st.districts.length > before,
+        (st.districts.length - before) + ' new blocks');
+
+  // The bug this exists to catch: a bare counter restarts, so the second
+  // city's block ids collide with the first's and every building, lot and
+  // route pointing at "d3" resolves to whichever city is earlier in the array.
+  const ids = st.districts.map((d) => d.id);
+  check('block ids stay unique across cities', new Set(ids).size === ids.length,
+        ids.length + ' blocks, ' + new Set(ids).size + ' distinct');
+
+  check('the home city keeps its ids', st.districts.some((d) => d.id === 'd0'),
+        'so existing saves still resolve');
+
+  st.lots = [...st.lots, ...syntheticLots(res.districts, 6)];
+  const here = open(st, 'stash');
+  const thereLot = (st.lots || []).find((l) => !l.owned && l.kind !== 'parking'
+    && l.areaM2 >= BUILDINGS.stash.minAreaM2 && l.areaM2 <= BUILDINGS.stash.maxAreaM2
+    && (st.districts.find((d) => d.id === l.districtId) || {}).cityId === res.city.id);
+  A.buyLot(st, thereLot.id);
+  const there = A.developLot(st, thereLot.id, 'stash').building;
+
+  here.packs.weed = 200;
+  const sent = A.sendShipment(st, here.id, there.id, 'weed', 100);
+  check('weight can be sent to the other city', sent.ok, sent.ok
+    ? Math.round(sent.quote.hours / 24 * 10) / 10 + ' days, ' + Math.round(sent.quote.risk * 100) + '% risk'
+    : sent.error);
+  check('it leaves the building it came from', here.packs.weed === 100);
+  check('and is in the wind, not delivered instantly', (st.shipments || []).length === 1);
+
+  const same = A.sendShipment(st, here.id, here.id, 'weed', 10);
+  check('a shipment to the same city is refused', !same.ok, same.error || '');
+
+  // Run it out and make sure it resolves one way or the other.
+  for (let d = 0; d < 12 && (st.shipments || []).length; d++) {
+    for (let h = 0; h < 24; h += 0.25) stepSim(st, 0.25, {});
+  }
+  const landed = st.stats.shipmentsLanded || 0;
+  const lost = st.stats.shipmentsLost || 0;
+  check('it resolves rather than hanging forever', landed + lost === 1,
+        landed ? 'landed' : 'seized');
+  check('nothing is left in flight', (st.shipments || []).length === 0);
+  if (landed) check('and it actually arrived as stock', there.packs.weed > 0,
+                    Math.round(there.packs.weed) + ' over there');
+}
+
+
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

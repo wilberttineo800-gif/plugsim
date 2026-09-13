@@ -10,6 +10,14 @@ import {
 import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
 import { DESTINATIONS } from './game/cities.js';
 import { markTipSeen } from './game/guide.js';
+import { devToolsOn } from './game/dev.js';
+
+// Strip the testing tools out of the page for anyone but me, immediately —
+// not at bootGame, which only runs once a city is started and leaves the tab
+// sitting on the start screen until then.
+if (!devToolsOn()) {
+  document.querySelectorAll('[data-tab="admin"]').forEach((b) => b.remove());
+}
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
@@ -1038,6 +1046,8 @@ game.foundCity = async (name) => {
     : `${dest.name} is open, but the survey came back empty. Try again shortly.`,
     here ? 'good' : 'bad');
 };
+
+
 
 // --- Admin (testing only) ---------------------------------------------------
 

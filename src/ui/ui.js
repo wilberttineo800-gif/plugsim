@@ -13,6 +13,7 @@ import { sizeScale, sizeCapacity, rentBonusFor } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { pendingTip } from '../game/guide.js';
+import { devToolsOn } from '../game/dev.js';
 import {
   LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
   hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
@@ -1782,6 +1783,14 @@ export class GameUI {
 
   /** Testing controls. Not reachable through ordinary play. */
   tabAdmin() {
+    // Belt as well as braces: removing the button is not enough if the tab can
+    // still be reached by other means. Says plainly what it is rather than
+    // pretending the page is secure.
+    if (!devToolsOn()) {
+      return `<div class="empty">
+        Testing tools aren't on for this device.
+      </div>`;
+    }
     const s = this.game.state;
     const diagSummary = diagnosticsSummary();
     const blocks = [...s.districts]

@@ -7,7 +7,38 @@
 // Drawn as silhouettes on a 64x32 field (guns) or 32x32 (goods), because a
 // side profile is what makes a shotgun read as a shotgun at 40 pixels wide.
 
+import {
+  GUN_DETAIL, DETAIL_DEFS, detailTransform, mountInField,
+  ATTACH_DETAIL, attachTransform,
+} from './gunart-detail.js';
+
 const GUN_VIEWBOX = '0 0 64 32';
+
+/**
+ * The shared paint, emitted once.
+ *
+ * Every detailed drawing references the same gradient ids, so twenty guns on a
+ * screen would otherwise each carry their own copy of the defs block. In a
+ * browser one hidden sprite in the document serves the lot; anywhere else
+ * (the contact-sheet tool, a test under JavaScriptCore) there is no document,
+ * so each SVG carries its own — which is why this returns a string rather
+ * than assuming either.
+ */
+let defsSprited = false;
+function sharedDefs() {
+  if (defsSprited) return '';
+  if (typeof document === 'undefined' || !document.body) return `<defs>${DETAIL_DEFS}</defs>`;
+  const NS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('width', '0');
+  svg.setAttribute('height', '0');
+  svg.style.position = 'absolute';
+  svg.innerHTML = `<defs>${DETAIL_DEFS}</defs>`;
+  document.body.appendChild(svg);
+  defsSprited = true;
+  return '';
+}
 
 /**
  * Firearm categories, drawn in side profile. These match the four production
@@ -515,42 +546,77 @@ const ATTACH_ORIGIN = {
 /**
  * A named pattern with parts bolted on, each moved to that gun's own mounting
  * point. The viewBox widens when something hangs off the muzzle.
+ *
+ * The detailed drawings carry their own mount points in their own drawing
+ * space, so `mountInField` is what turns "the muzzle of a Barrett" into a
+ * coordinate a scope base can be parked on. Patterns with no detailed drawing
+ * still fall through to the old flat silhouettes.
  */
 export function modelWithAttachments(modelId, fitted = [], opts = {}) {
   const { size = 180, color = 'currentColor', accent = null, className = '' } = opts;
   const m = GUN_MODELS[modelId];
-  if (!m) return gunWithAttachments(modelId, fitted, opts);
-  const mounts = MOUNTS[modelId] || MOUNTS.kite;
+  const detail = GUN_DETAIL[modelId];
+  if (!m && !detail) return gunWithAttachments(modelId, fitted, opts);
+
   // Never draw a part the gun couldn't take — a box magazine on a revolver is
   // a lie the picture tells before the rules get a chance to.
-  const barred = new Set([...(m.builtIn || []), ...(m.noParts || [])]);
-  const list = (fitted || []).filter((id) => ATTACHMENT_ART[id] && !barred.has(id));
+  const barred = new Set([...((m && m.builtIn) || []), ...((m && m.noParts) || [])]);
 
-  const hangsOff = list.some((id) => {
-    const [x] = mounts[ATTACH_MOUNT[id]] || [0, 0];
-    return ATTACH_MOUNT[id] === 'muzzle' && x < 6;
-  });
-  const minX = hangsOff ? -10 : 0;
-  const width = hangsOff ? 76 : 64;
-
-  const parts = list.map((id) => {
-    const a = ATTACHMENT_ART[id];
-    const [mx, my] = mounts[ATTACH_MOUNT[id]] || [0, 0];
-    const [ox, oy] = ATTACH_ORIGIN[id] || [0, 0];
-    const paint = a.stroked
-      ? `stroke="${accent || color}" stroke-width="1.4" fill="none" stroke-linecap="round"`
-      : `fill="${accent || color}"`;
-    return `<g transform="translate(${(mx - ox).toFixed(1)}, ${(my - oy).toFixed(1)})">` +
-      `<path d="${a.path.replace(/\s+/g, ' ').trim()}" ${paint}/></g>`;
-  }).join('');
-
-  return `<svg class="art art--gun ${className}" viewBox="${minX} 0 ${width} 32"
+  if (!detail) {
+    const mounts = MOUNTS[modelId] || MOUNTS.kite;
+    const list = (fitted || []).filter((id) => ATTACHMENT_ART[id] && !barred.has(id));
+    const hangsOff = list.some((id) => {
+      const [x] = mounts[ATTACH_MOUNT[id]] || [0, 0];
+      return ATTACH_MOUNT[id] === 'muzzle' && x < 6;
+    });
+    const minX = hangsOff ? -10 : 0;
+    const width = hangsOff ? 76 : 64;
+    const parts = list.map((id) => {
+      const a = ATTACHMENT_ART[id];
+      const [mx, my] = mounts[ATTACH_MOUNT[id]] || [0, 0];
+      const [ox, oy] = ATTACH_ORIGIN[id] || [0, 0];
+      const paint = a.stroked
+        ? `stroke="${accent || color}" stroke-width="1.4" fill="none" stroke-linecap="round"`
+        : `fill="${accent || color}"`;
+      return `<g transform="translate(${(mx - ox).toFixed(1)}, ${(my - oy).toFixed(1)})">`
+        + `<path d="${a.path.replace(/\s+/g, ' ').trim()}" ${paint}/></g>`;
+    }).join('');
+    return `<svg class="art art--gun ${className}" viewBox="${minX} 0 ${width} 32"
     width="${size}" height="${Math.round((size / width) * 32)}" aria-hidden="true"
     ><path d="${m.path.replace(/\s+/g, ' ').trim()}" fill="${color}"/>${parts}</svg>`;
+  }
+
+  const list = (fitted || []).filter((id) => ATTACH_DETAIL[id] && !barred.has(id));
+  const hangsOff = list.some((id) => {
+    const part = ATTACH_DETAIL[id];
+    if (!part.extend) return false;
+    const at = mountInField(detail, part.mount);
+    return !!at && at[0] - part.origin[0] * part.scale < 0;
+  });
+  const minX = hangsOff ? -14 : 0;
+  const width = hangsOff ? 78 : 64;
+
+  const parts = list.map((id) => {
+    const part = ATTACH_DETAIL[id];
+    const at = mountInField(detail, part.mount);
+    if (!at) return '';
+    return `<g transform="${attachTransform(part, at)}">${part.body}</g>`;
+  }).join('');
+
+  return `<svg class="art art--gun art--gun-detail ${className}"
+    viewBox="${minX} 0 ${width} 32"
+    width="${size}" height="${Math.round((size / width) * 32)}" aria-hidden="true"
+    >${sharedDefs()}<g transform="${detailTransform(detail)}">${detail.body}</g>${parts}</svg>`;
 }
 
 /** One named model, drawn. Falls back to its category if it has no art. */
 export function modelArt(id, { size = 150, color = 'currentColor', className = '' } = {}) {
+  const detail = GUN_DETAIL[id];
+  if (detail) {
+    return `<svg class="art art--gun art--gun-detail ${className}" viewBox="${GUN_VIEWBOX}"
+    width="${size}" height="${Math.round(size / 2)}" aria-hidden="true"
+    >${sharedDefs()}<g transform="${detailTransform(detail)}">${detail.body}</g></svg>`;
+  }
   const m = GUN_MODELS[id];
   if (!m) return gunArt(id, { size, color, className });
   return `<svg class="art art--gun ${className}" viewBox="${GUN_VIEWBOX}"
@@ -735,9 +801,20 @@ export function gunWithAttachments(gunId, fitted = [], opts = {}) {
 
 /** One attachment on its own, for a card or a chip. */
 export function attachmentArt(id, { size = 34, color = 'currentColor' } = {}) {
+  const part = ATTACH_DETAIL[id];
+  if (part) {
+    // Framed around the part's own drawing rather than the gun field it is
+    // normally placed into, so a chip shows the thing and not a lot of air.
+    const boxes = {
+      optic: '-4 -6 218 102', suppressor: '-6 -6 178 46', compensator: '-6 -4 76 44',
+      extmag: '-14 -6 62 172', foregrip: '-8 -6 50 104', laser: '-56 -6 130 46',
+    };
+    return `<svg class="art art--attach art--attach-detail" viewBox="${boxes[id]}"
+    width="${size}" height="${size}" preserveAspectRatio="xMidYMid meet" aria-hidden="true"
+    >${sharedDefs()}${part.body}</svg>`;
+  }
   const a = ATTACHMENT_ART[id];
   if (!a) return '';
-  // Each is drawn in gun coordinates, so frame it tightly around itself.
   const boxes = {
     optic: '20 0 20 12', suppressor: '-7 7 12 10', compensator: '-4 6 10 10',
     extmag: '21 14 13 16', foregrip: '12 14 7 14', laser: '9 14 20 7',

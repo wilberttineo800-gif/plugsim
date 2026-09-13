@@ -16,7 +16,16 @@ const SCALE = 7;          // draw each cell big enough to judge
 const PAD = 3;
 const LABEL = 7;
 
-const ids = Object.keys(GUN_DETAIL);
+// qlmanage square-crops a tall thumbnail, so a sheet of every pattern becomes
+// unreadable once there are more than about six. Pass a comma-separated list to
+// render just those and keep the image roughly square:
+//
+//   echo "globalThis.SHEET_ONLY='drover,wasp';" | cat - tools/sheet.js > /tmp/s.js
+//
+const only = (globalThis.SHEET_ONLY || '').split(',').map((s) => s.trim()).filter(Boolean);
+const ids = only.length
+  ? only.filter((id) => GUN_DETAIL[id])
+  : Object.keys(GUN_DETAIL);
 const rows = Math.ceil(ids.length / COLS);
 const W = COLS * (CELL_W + PAD * 2) * SCALE;
 const H = rows * (CELL_H + PAD * 2 + LABEL) * SCALE;

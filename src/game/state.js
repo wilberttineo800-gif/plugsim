@@ -484,12 +484,51 @@ function migrate(data) {
   return true;
 }
 
+/**
+ * Fill any product key a save predates, across every map that has them.
+ *
+ * Run on EVERY load rather than inside a versioned migration, because migrate()
+ * is skipped entirely when the version already matches — and the case that
+ * actually bit was products added without a version bump, so the save was
+ * "current" while its maps were stale. It loaded fine and then took the Ledger
+ * down the moment you opened it, since units(undefined) is not a number.
+ *
+ * Keyed off PRODUCT_IDS rather than a hand-listed set, so adding a product can
+ * never cause this again. Idempotent and cheap: a pass over maps a couple of
+ * dozen keys long.
+ */
+export function backfillProducts(data) {
+  const fill = (m, v) => {
+    if (!m) return;
+    for (const pid of PRODUCT_IDS) if (m[pid] === undefined) m[pid] = v;
+  };
+  for (const d of data.districts || []) {
+    fill(d.supply, 0);
+    fill(d.supplyQuality, 0.5);
+    fill(d.soldTotal, 0);
+    fill(d.servedDirect, 0);
+    // A district that has never heard of a product should not suddenly want a
+    // lot of it, so new demand starts low rather than at some average.
+    fill(d.demandPerHour, 0.15);
+  }
+  for (const b of data.buildings || []) {
+    fill(b.raw, 0); fill(b.packs, 0);
+    fill(b.rawQuality, 0.5); fill(b.packQuality, 0.5);
+  }
+  for (const c of data.couriers || []) { fill(c.cargo, 0); fill(c.cargoQuality, 0.5); }
+  if (data.stats) { fill(data.stats.packsSold, 0); fill(data.stats.seized, 0); }
+  if (data.priceHistory) for (const pid of PRODUCT_IDS) {
+    if (!data.priceHistory[pid]) data.priceHistory[pid] = [];
+  }
+}
+
 export function loadGame() {
   try {
     const raw = localStorage.getItem(SAVE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
     if (data.version !== SAVE_VERSION && !migrate(data)) return null;
+    backfillProducts(data);
     idCounter = data.idCounter || 1;
     delete data.idCounter;
     data.selection = null;

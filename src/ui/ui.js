@@ -67,6 +67,8 @@ export class GameUI {
       hud: document.getElementById('hud'),
       rail: document.getElementById('rail'),
       railTabs: document.getElementById('railTabs'),
+      railMenuBtn: document.getElementById('railMenuBtn'),
+      railMenuLabel: document.getElementById('railMenuLabel'),
       railBody: document.getElementById('railBody'),
       inspector: document.getElementById('inspector'),
       inspectorBody: document.getElementById('inspectorBody'),
@@ -123,7 +125,10 @@ export class GameUI {
     this.dom.rail.classList.toggle('is-open', rail);
     this.dom.inspector.classList.toggle('is-open', which === 'inspector');
     for (const b of this.dom.mobileNav.children) {
-      b.classList.toggle('is-on', which === 'map' ? b.dataset.mtab === 'map' : b.dataset.mtab === this.tab);
+      b.classList.toggle('is-on', which === 'map'
+        ? b.dataset.mtab === 'map'
+        : b.dataset.mtab === this.tab
+          || (b.dataset.mtab === 'more' && !this.dom.mobileNav.querySelector(`[data-mtab="${this.tab}"]`)));
     }
   }
 
@@ -201,13 +206,17 @@ export class GameUI {
   }
 
   wire() {
+    // The menu names where you are and opens the list of panels. Picking one
+    // closes it again — a menu you have to dismiss yourself is a menu in the way.
+    this.dom.railMenuBtn.addEventListener('click', () => this.toggleMenu());
     this.dom.railTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-tab]');
       if (!btn) return;
-      this.tab = btn.dataset.tab;
-      for (const b of this.dom.railTabs.children) b.classList.toggle('is-on', b === btn);
-      this.renderRail();
+      this.goTab(btn.dataset.tab);
+      this.toggleMenu(false);
     });
+    // Anywhere else on the panel closes it, so it never sits open over content.
+    this.dom.railBody.addEventListener('pointerdown', () => this.toggleMenu(false));
 
     this.dom.inspectorClose.addEventListener('click', () => this.game.select(null));
     // `toggle` doesn't bubble, so it has to be caught in the capture phase.
@@ -244,7 +253,14 @@ export class GameUI {
       if (!btn) return;
       const target = btn.dataset.mtab;
       if (target === 'map') { this.closeSheets(); return; }
+      if (target === 'more') {
+        // Everything that does not fit across the bottom of a phone.
+        this.openSheet('rail');
+        this.toggleMenu(true);
+        return;
+      }
       this.goTab(target);
+      this.toggleMenu(false);
       this.openSheet('rail');
     });
 
@@ -405,8 +421,26 @@ export class GameUI {
 
   goTab(tab) {
     this.tab = tab;
-    for (const b of this.dom.railTabs.children) b.classList.toggle('is-on', b.dataset.tab === tab);
+    for (const b of this.dom.railTabs.querySelectorAll('[data-tab]')) {
+      b.classList.toggle('is-on', b.dataset.tab === tab);
+      if (b.dataset.tab === tab) this.dom.railMenuLabel.textContent = b.textContent.trim();
+    }
     this.renderRail();
+  }
+
+  /**
+   * Open or close the panel menu. Pass nothing to flip it.
+   *
+   * Kept in one place because three things close it — picking a panel, touching
+   * the body, and opening it again — and a dropdown that can be left open in
+   * one of those paths is the kind of thing you only notice on a phone.
+   */
+  toggleMenu(force) {
+    const open = force === undefined
+      ? this.dom.railTabs.hidden
+      : !!force;
+    this.dom.railTabs.hidden = !open;
+    this.dom.railMenuBtn.setAttribute('aria-expanded', String(open));
   }
 
   // --- Per-frame HUD --------------------------------------------------------
@@ -2430,12 +2464,15 @@ export class GameUI {
     const connected = ids.filter((id) => parent[id] || (children[id] || []).length);
     const loose = ids.filter((id) => !connected.includes(id));
 
-    const W = 640, rowH = 74, R = 15;
+    // Portrait, because the panel it lives in is tall and narrow. Laid out
+    // across at 640 it was 560px wide inside a 281px rail — it scrolled rather
+    // than broke, but a graph you have to drag sideways to read is not a graph
+    // you will read. Depth runs DOWN, siblings run across.
+    const W = 300, R = 13;
     const pos = {};
-
-    // Connected clusters: one band per root, each generation a column.
     const roots = connected.filter((id) => !parent[id]);
-    let band = 0;
+
+    let y = 40;
     for (const root of roots) {
       const byDepth = {};
       const walk = (id) => {
@@ -2445,25 +2482,24 @@ export class GameUI {
       walk(root);
       const depths = Object.keys(byDepth).map(Number).sort((a, b) => a - b);
       for (const d of depths) {
-        const col = byDepth[d];
-        col.forEach((id, i) => {
+        const row = byDepth[d];
+        row.forEach((id, i) => {
           pos[id] = {
-            x: 70 + d * 190,
-            y: 66 + band * rowH + (i - (col.length - 1) / 2) * 54,
+            x: W / 2 + (i - (row.length - 1) / 2) * 96,
+            y: y + d * 70,
           };
         });
       }
-      band += Math.max(...depths.map((d) => byDepth[d].length)) + 0.4;
+      y += depths.length * 70 + 34;
     }
 
-    // Everything standing alone, in a loose field below — present, clearly not
-    // part of a chain, and still clickable.
-    const looseTop = 66 + band * rowH + 18;
-    const perRow = 6;
+    // Everything standing alone, in a field below.
+    const looseTop = y + 6;
+    const perRow = 3;
     loose.forEach((id, i) => {
       pos[id] = {
-        x: 58 + (i % perRow) * 100 + ((Math.floor(i / perRow) % 2) * 34),
-        y: looseTop + Math.floor(i / perRow) * 62,
+        x: 56 + (i % perRow) * 94 + ((Math.floor(i / perRow) % 2) * 22),
+        y: looseTop + Math.floor(i / perRow) * 58,
       };
     });
 
@@ -2498,8 +2534,8 @@ export class GameUI {
       <summary>Product tree
         <span style="color:var(--text-faint)">· ${connected.length} linked · ${loose.length} standalone</span>
       </summary>
-      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
-        <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:${Math.min(W, 560)}px;height:auto;display:block">
+      <div>
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block">
           ${edges}${nodes}
         </svg>
       </div>

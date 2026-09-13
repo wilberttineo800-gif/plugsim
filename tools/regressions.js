@@ -1735,4 +1735,41 @@ print('=== 25. the tree is discoverable, not guesswork ===');
 
 }
 
+
+print('');
+print('=== 27. a save that predates a product still loads ===');
+{
+  const st = world();
+  st.cash.clean = 5000000;
+  const b = open(st, 'grow_house');
+  st.stats.packsSold.weed = 12;
+
+  // Strip every trace of the newer products, the way a save written before
+  // they existed actually looks.
+  const RECENT = ['heroin', 'fentanyl', 'crack', 'benzos', 'oxy', 'roids', 'dmt',
+                  'spice', 'shine', 'cigs', 'nitrous', 'ghb', 'lean', 'wax', 'pcp',
+                  'mescaline', 'pens'];
+  const strip = (m) => { if (m) for (const k of RECENT) delete m[k]; };
+  for (const d of st.districts) { strip(d.supply); strip(d.supplyQuality); strip(d.demandPerHour); strip(d.soldTotal); }
+  for (const x of st.buildings) { strip(x.raw); strip(x.packs); strip(x.rawQuality); strip(x.packQuality); }
+  strip(st.stats.packsSold);
+  st.version = 22;
+
+  saveGame(st);
+  const back = loadGame();
+  check('it loads at all', !!back, back ? 'loaded' : 'refused');
+
+  // The bug this pins: units(undefined) throws, so a missing key is not a
+  // cosmetic gap — it takes a whole panel down the moment you open it.
+  const missing = PRODUCT_IDS.filter((p) => back.stats.packsSold[p] === undefined);
+  check('every product has a sales figure', missing.length === 0,
+        missing.join(', ') || 'all ' + PRODUCT_IDS.length + ' present');
+  const dMissing = PRODUCT_IDS.filter((p) => (back.districts[0].supply || {})[p] === undefined);
+  check('and every block knows every product', dMissing.length === 0,
+        dMissing.join(', ') || 'all present');
+  const bMissing = PRODUCT_IDS.filter((p) => (back.buildings[0].packs || {})[p] === undefined);
+  check('and so does every building', bMissing.length === 0, bMissing.join(', ') || 'all present');
+  check('and what was already there is untouched', back.stats.packsSold.weed === 12);
+}
+
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

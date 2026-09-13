@@ -61,7 +61,14 @@
 <!-- ── Left rail ────────────────────────────────────────────────────────── -->
 <aside class="rail" id="rail" hidden>
   <button class="sheet__grip" id="railGrip" aria-label="Close panel"></button>
-  <nav class="rail__tabs" id="railTabs">
+  <!-- Nine tabs in 292px was already 10.5px type, and every panel added made
+       it worse. A menu that names where you are scales to any number of them. -->
+  <button class="rail__menubtn" id="railMenuBtn" aria-expanded="false"
+          aria-controls="railTabs">
+    <span id="railMenuLabel">Build</span>
+    <span class="rail__chev" aria-hidden="true">▾</span>
+  </button>
+  <nav class="rail__tabs" id="railTabs" hidden>
     <button data-tab="build" class="is-on">Build</button>
     <button data-tab="market">Market</button>
     <button data-tab="blocks">Blocks</button>
@@ -70,7 +77,7 @@
     <button data-tab="lab">R&amp;D</button>
     <button data-tab="cities">Cities</button>
     <button data-tab="ledger">Ledger</button>
-    <button data-tab="admin" title="Testing tools">⚙</button>
+    <button data-tab="admin" title="Testing tools">Testing tools</button>
   </nav>
   <div class="rail__body" id="railBody"></div>
 </aside>
@@ -93,8 +100,10 @@
   <button data-mtab="blocks">Blocks</button>
   <button data-mtab="fleet">Fleet</button>
   <button data-mtab="routes">Routes</button>
-  <button data-mtab="ledger">Ledger</button>
-  <button data-mtab="admin">⚙</button>
+  <!-- R&D and Cities had no button here at all, so on a phone they could not be
+       reached. Rather than cram ten across a phone, "More" opens the panel with
+       its own menu already open — every panel, one tap further. -->
+  <button data-mtab="more">More</button>
 </nav>
 
 <div class="loading" id="loading" hidden></div>

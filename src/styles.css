@@ -339,6 +339,7 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 
 /* ── Left rail ─────────────────────────────────────────────────────────── */
 
+.rail[hidden] { display: none; }
 .rail {
   position: absolute; top: 61px; left: 12px; bottom: 52px; z-index: 690;
   width: 292px;
@@ -364,6 +365,10 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 .rail__chev { transition: transform .14s ease; color: var(--text-faint); }
 .rail__menubtn[aria-expanded="true"] .rail__chev { transform: rotate(180deg); }
 
+/* A class setting `display` outruns [hidden]'s display:none on specificity, so
+   toggling the attribute changed nothing on screen — the menu reported itself
+   closed and stayed open. Anything given a display here needs this alongside. */
+.rail__tabs[hidden] { display: none; }
 .rail__tabs {
   display: flex; flex-direction: column;
   border-bottom: 1px solid var(--line); flex: 0 0 auto;
@@ -522,6 +527,7 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 
 /* ── Ticker ────────────────────────────────────────────────────────────── */
 
+.ticker[hidden] { display: none; }
 .ticker {
   position: absolute; left: 12px; right: 12px; bottom: 8px; z-index: 680;
   height: 34px; display: flex; align-items: center; gap: 20px;
@@ -780,6 +786,10 @@ kbd {
   .inspector__close { top: 20px; }
 
   /* Bottom navigation replaces the rail tabs as the primary way around. */
+  /* ui.js toggles this by attribute on every resize, and a class setting
+     display outruns [hidden] — so on a phone it was only ever hidden by luck
+     of the media query, not by the code that thinks it controls it. */
+  .mobilenav[hidden] { display: none; }
   .mobilenav {
     position: fixed;
     left: 0; right: 0; bottom: 0;

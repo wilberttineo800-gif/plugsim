@@ -43,6 +43,27 @@ if (!g || !g.state) {
   const s = g.state;
   out.push(`viewport ${W}x${window.innerHeight}`);
   out.push(`phone layout active: ${window.matchMedia('(max-width: 780px)').matches}`);
+
+// Anything the code hides by attribute, against what CSS actually does.
+// A class setting `display` outruns [hidden]'s display:none on specificity, so
+// an element can report itself hidden and stay on screen — which is how the
+// panel menu shipped never collapsing, and how it passed a check that asked
+// the property instead of the computed style.
+{
+  const ids = ['rail', 'inspector', 'railTabs', 'startOverlay', 'helpModal',
+               'loading', 'ticker', 'mobileNav'];
+  const bad = [];
+  for (const id of ids) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    const was = el.hidden;
+    el.hidden = true;
+    if (getComputedStyle(el).display !== 'none') bad.push(id);
+    el.hidden = was;
+  }
+  if (bad.length) { failures++; out.push(`HIDDEN-NO-OP  ${bad.join(', ')}`); }
+  else out.push('ok       [hidden] actually hides');
+}
   out.push('');
 
   chrome('hud', document.getElementById('hud'));

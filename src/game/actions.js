@@ -4,6 +4,7 @@
 import { parkedPosition } from './state.js';
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, DRIVERS, FIXER, RIVALS, MARKET_PROPERTY,
+  WHOLESALE_FACTOR,
 } from './constants.js';
 import {
   lotById, areaScale, areaCapacityScale, lotResale, marketValue, rentPerDay, lotPnL,
@@ -629,7 +630,10 @@ export function sellProductTo(state, buildingId, playerId, productId, amount) {
     return { ok: false, error: `${buyer.name} can't take any more of that right now.` };
   }
 
-  const unit = offerForProduct(buyer, productId, streetPrice(d, productId));
+  // A bulk handoff by weight: they take the lot in one go and carry the risk of
+  // moving it on, so they do not pay corner money for it.
+  const unit = offerForProduct(buyer, productId,
+    streetPrice(d, productId) * WHOLESALE_FACTOR);
   const gross = move * unit;
   b.packs[productId] -= move;
   state.cash.dirty += gross;

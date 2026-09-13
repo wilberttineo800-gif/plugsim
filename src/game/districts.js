@@ -102,6 +102,10 @@ export function generateDistricts(origin, placeNames = [], countryCode = null) {
       supply: Object.fromEntries(PRODUCT_IDS.map((p) => [p, 0])),
       supplyQuality: Object.fromEntries(PRODUCT_IDS.map((p) => [p, 0.5])),
       soldTotal: Object.fromEntries(PRODUCT_IDS.map((p) => [p, 0])),
+      // Served straight to customers off your own premises today. Counts
+      // against the block's appetite the same as stock left sitting on it —
+      // without this a storefront sells into a demand pool that never empties.
+      servedDirect: Object.fromEntries(PRODUCT_IDS.map((p) => [p, 0])),
       revenueTotal: 0,
       discovered: false,
     };

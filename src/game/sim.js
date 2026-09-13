@@ -15,6 +15,7 @@ import {
   LEGIT_WEALTH_SWING,
   IDLE_UPKEEP_SHARE,
   BACKLOG_PAUSE_AT,
+  RETAIL_MARKUP,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -657,7 +658,13 @@ function stepStorefronts(state, dt) {
       const have = b.packs[pid];
       if (have <= 0.0001) continue;
       // Never push more onto the block than it can take.
-      const room = Math.max(0, sellRatePerHour(d, pid) * MARKET.saturationHours - d.supply[pid]);
+      // A block's appetite is finite. Product sitting on it saturates it, and so
+      // does product you served straight off your own counter — otherwise
+      // selling direct bypasses demand entirely and a single storefront could
+      // move a warehouse a day.
+      const servedToday = (d.servedDirect && d.servedDirect[pid]) || 0;
+      const room = Math.max(0,
+        sellRatePerHour(d, pid) * MARKET.saturationHours - d.supply[pid] - servedToday);
       const move = Math.min(have, budget, room);
       if (move <= 0.0001) continue;
 
@@ -669,11 +676,32 @@ function stepStorefronts(state, dt) {
         state.stats.tributePaid = (state.stats.tributePaid || 0) + taken;
       }
 
-      d.supplyQuality[pid] = blendQuality(d.supply[pid], d.supplyQuality[pid], reaching, b.packQuality[pid]);
       maybeMarketIncident(state, d, pid);
-      d.supply[pid] += reaching;
+
+      // Served out of your own door, broken down to eighths and quarters — so
+      // you keep the margin a block's own dealers would take. This is the
+      // difference between holding a storefront and just dropping weight.
+      const unit = streetPrice(d, pid) * RETAIL_MARKUP
+                 * (0.75 + (b.packQuality[pid] || 0.5) * 0.5);
+      const gross = reaching * unit;
+      state.cash.dirty += gross;
+      state.stats.grossRevenue = (state.stats.grossRevenue || 0) + gross;
+      state.stats.packsSold[pid] = (state.stats.packsSold[pid] || 0) + reaching;
+      state.stats.servedRetail = (state.stats.servedRetail || 0) + gross;
+
+      // It still happened on this block: it counts against what the block can
+      // absorb, and it draws the same attention as any other corner sale.
+      d.soldTotal[pid] = (d.soldTotal[pid] || 0) + reaching;
+      d.revenueTotal = (d.revenueTotal || 0) + gross;
+      if (!d.servedDirect) d.servedDirect = {};
+      d.servedDirect[pid] = servedToday + reaching;
+      const notice = 0.6 + d.policing * 0.8;
+      d.heat = clamp(d.heat + reaching * PRODUCTS[pid].heatPerPackSold * notice, 0, HEAT.max);
+      d.rep = clamp01(d.rep + reaching * MARKET.repGainPerSale);
+
       b.packs[pid] -= move;
       b.soldToday = (b.soldToday || 0) + move;
+      b.earnedToday = (b.earnedToday || 0) + gross;
       budget -= move;
       d.discovered = true;
     }
@@ -1281,6 +1309,10 @@ function stepLicences(state) {
 
 function settleDay(state) {
   state.fixerUsedToday = 0;
+  // Yesterday's counter buyers are not still full today.
+  for (const d of state.districts) {
+    if (d.servedDirect) for (const pid of PRODUCT_IDS) d.servedDirect[pid] = 0;
+  }
   stepPlayers(state, rng);
   // People find out about each other by working the same ground.
   for (const met of stepDiscovery(state, 1, rng)) {

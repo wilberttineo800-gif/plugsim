@@ -5,6 +5,7 @@
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
   PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
+  UNIT_LADDER, RETAIL_MARKUP,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
@@ -976,6 +977,40 @@ export class GameUI {
     }
     if (!bits.length) return '';
     return `<div class="card__meta">${bits.join('')}</div>`;
+  }
+
+  /**
+   * What a pound actually goes out of the door as.
+   *
+   * Blocks and other operations buy by weight in one handoff. Nobody on a
+   * corner buys a pound, so serving it yourself means breaking it down — and
+   * that breakdown margin is the whole reason to hold a counter rather than
+   * just dropping weight somewhere.
+   */
+  breakdownRow(b) {
+    const s = this.game.state;
+    const d = s.districts.find((x) => x.id === b.districtId);
+    if (!d) return '';
+    // Price the product it is actually holding most of.
+    const pid = PRODUCT_IDS
+      .filter((p) => (b.packs[p] || 0) > 0)
+      .sort((a, c) => b.packs[c] - b.packs[a])[0];
+    if (!pid) return '';
+    const unit = streetPrice(d, pid) * RETAIL_MARKUP;
+    const cells = UNIT_LADDER
+      .filter((u) => u.perPound > 1)
+      .map((u) => `<div class="row"><span>${u.perPound} × ${esc(u.name)}</span>`
+        + `<span>${money(unit / u.perPound)} each</span></div>`)
+      .join('');
+    return `<details class="upgrades" style="margin-top:8px">
+      <summary>How a pound of ${esc(PRODUCTS[pid].name.toLowerCase())} breaks down`
+      + ` · ${money(unit)}/lb served</summary>
+      <div class="rows">${cells}</div>
+      <p class="card__blurb" style="margin:6px 0 0">
+        Dropping the same weight on a block pays ${money(streetPrice(d, pid))} —
+        the block's own people keep the rest.
+      </p>
+    </details>`;
   }
 
   /** The "what do we run here" chooser for a building you already own. */
@@ -2137,7 +2172,9 @@ export class GameUI {
           <div class="rows">
             <div class="row"><span>Sells up to</span><span>${units(rate)}/h</span></div>
             <div class="row"><span>Moved today</span><span>${units(b.soldToday || 0)} packs</span></div>
+            <div class="row"><span>Retail premium</span><span class="good">+${Math.round((RETAIL_MARKUP - 1) * 100)}% over dropping weight</span></div>
           </div>
+          ${this.breakdownRow(b)}
           <div class="btnrow">
             <button class="ghostbtn" data-action="toggle-selling" data-id="${b.id}">
               ${selling ? 'Stop selling here' : 'Start selling here'}

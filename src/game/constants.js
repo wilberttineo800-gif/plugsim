@@ -1613,6 +1613,43 @@ export const FIXER = {
  * filled, seized, and kept billing. Idling at 80% means falling behind costs
  * you the sales you didn't make, which is the right penalty, and nothing more.
  */
+/**
+ * How a pound breaks down when you serve it yourself.
+ *
+ * A unit of product is a POUND. Blocks and other operations buy it that way —
+ * by weight, in one handoff. Nobody on a corner buys a pound, so serving it out
+ * of your own premises means breaking it into eighths, quarters, halves, zips,
+ * quarter-pounds and half-pounds, and the margin on that breakdown is the whole
+ * reason to hold a storefront instead of just dropping weight on a block.
+ */
+export const UNIT_LADDER = [
+  { id: 'eighth',  name: 'eighth',        perPound: 128 },
+  { id: 'quarter', name: 'quarter',       perPound: 64 },
+  { id: 'half',    name: 'half',          perPound: 32 },
+  { id: 'zip',     name: 'zip (ounce)',   perPound: 16 },
+  { id: 'qp',      name: 'quarter-pound', perPound: 4 },
+  { id: 'hp',      name: 'half-pound',    perPound: 2 },
+  { id: 'lb',      name: 'pound',         perPound: 1 },
+];
+
+/**
+ * What serving it yourself is worth, against dropping the same weight on a
+ * block. You do the breaking down, so you keep the margin the block's own
+ * dealers would otherwise take.
+ *
+ * Deliberately a premium on top of the block price rather than a cut to it:
+ * basePrice is what the whole economy is balanced around, and re-pricing the
+ * main sales path to "wholesale" would halve every number in the game to make
+ * an additive point.
+ */
+export const RETAIL_MARKUP = 1.35;
+
+/**
+ * And what a bulk handoff to another operation fetches. They take it by weight
+ * in one go and carry the risk of moving it on, so they do not pay corner money.
+ */
+export const WHOLESALE_FACTOR = 0.75;
+
 export const BACKLOG_PAUSE_AT = 0.8;
 
 export const IDLE_UPKEEP_SHARE = 0.35;

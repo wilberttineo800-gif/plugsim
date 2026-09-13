@@ -2282,6 +2282,7 @@ export class GameUI {
           ${affordable ? '' : 'disabled'}>
           ${affordable ? 'Buy this building' : `Need ${moneyShort(value)} clean`}
         </button>
+        ${this.couldRunHere(lot)}
         <p class="card__blurb" style="margin-top:8px">
           Priced on floor area, premises type and what the block is doing. Run
           something in it, let it to a tenant, or hold it and sell when the
@@ -2289,6 +2290,67 @@ export class GameUI {
         </p>
       </div>`
     );
+  }
+
+  /**
+   * What this place could be, while it is still on the market.
+   *
+   * The whole point of the preview was to stop you making an investment you
+   * regret — and the moment that matters is BEFORE the money leaves, not after.
+   * It only existed on the develop chooser, which you cannot reach until you
+   * already own the building.
+   *
+   * Deliberately the best few rather than all of them: this is "is this
+   * building worth buying", not "what shall I run here", which is a decision
+   * you make once it is yours and the full list is right there.
+   */
+  couldRunHere(lot) {
+    const s = this.game.state;
+    const opts = operationOptions(lot, s).filter((o) => !o.locked);
+    if (!opts.length) return '';
+
+    // Rank earners against earners. launderPerDay is a CAPACITY — how much
+    // street cash a front can convert — not income, and it is a far bigger
+    // number than anything a grow takes in a day. Sorting the two together put
+    // a car wash above a grow op that actually makes 480 packs, which is
+    // exactly backwards for "is this building worth buying".
+    const priced = opts.map((o) => ({ o, p: buildingPreview(o.def, o.scale, o.capScale) }))
+      .filter((x) => x.p);
+    const makers = priced.filter((x) => x.p.grossPerDay > 0)
+      .sort((a, b) => b.p.grossPerDay - a.p.grossPerDay);
+    const washers = priced.filter((x) => x.p.grossPerDay === 0 && x.p.launderPerDay > 0)
+      .sort((a, b) => b.p.launderPerDay - a.p.launderPerDay);
+    // Two earners and one front: enough to judge the building by, without
+    // turning the panel into the full list you get once it is yours.
+    const ranked = [...makers.slice(0, 2), ...washers.slice(0, 1)];
+    if (!ranked.length) return '';
+
+    const rows = ranked.map(({ o, p }) => {
+      const line = p.packsPerDay > 0
+        ? `${units(p.packsPerDay)} ${esc(p.packName || 'units')}/day`
+        : p.launderPerDay > 0 ? `cleans up to ${moneyShort(p.launderPerDay)}/day` : '';
+      return `<div class="row">
+        <span>${esc(typeLabelFor(o.def, o.scale))}</span>
+        <span>${line}</span>
+      </div>
+      <div class="row" style="opacity:.65">
+        <span style="padding-left:10px">${p.holdsDays > 0
+          ? `holds ${Math.round(p.holdsDays)} days' worth`
+          : 'no storage of its own'}</span>
+        <span>${moneyShort(o.def.cost)} to fit out · ${moneyShort(p.runningPerDay)}/day</span>
+      </div>`;
+    }).join('');
+
+    return `<details class="upgrades" style="margin-top:10px">
+      <summary>What you could run here
+        <span style="color:var(--text-faint)">· ${opts.length} options</span></summary>
+      <div class="rows">${rows}</div>
+      <p class="card__blurb" style="margin:6px 0 0">
+        Output assumes the line keeps running and everything sells — it is a
+        ceiling to compare buildings by, not a forecast. Fitting out costs clean
+        money on top of the asking price.
+      </p>
+    </details>`;
   }
 
   buildingPanel(b) {

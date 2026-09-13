@@ -301,6 +301,249 @@ export const GUN_DETAIL = {
     `,
   },
 
+  // --- Sable Compact --------------------------------------------------------
+  // Glock 26: 6.29" overall, 4.17" tall. Derived from the kestrel rather than
+  // drawn fresh — same family, same frame, and that frame was traced off a
+  // photograph. Only two things actually differ: the slide is 316px instead of
+  // 409, and the grip drops 153px instead of 226. Everything between the
+  // trigger guard and the breech face is where it already was.
+  sable: {
+    box: [87, -6, 371, 262],
+    mounts: { rail: [240, 8], muzzle: [93, 42], under: [150, 92], mag: [330, 228] },
+    body: `
+      <path d="M93 26 h16 v32 h-16 z" fill="#2a2e34"/>
+      <circle cx="100" cy="42" r="7" fill="#0b0d10"/>
+      <!-- slide: shorter at the muzzle, breech face unmoved -->
+      <path d="M95 10 h303 c7 0 11 4 11 11 v35 c0 7 -4 11 -11 11 h-303
+               c-2.4 0 -4 -1.6 -4 -4 v-49 c0 -2.4 1.6 -4 4 -4 z" fill="url(#pgPoly)"/>
+      <path d="M95 10 h303 c7 0 11 4 11 11 v3 h-318 v-10 c0 -2.4 1.6 -4 4 -4 z"
+            fill="#7c8794" opacity=".3"/>
+      <path d="M93 61 h316 c0 4 -3 6 -8 6 h-304 c-2.4 0 -4 -1.6 -4 -4 z"
+            fill="#0b0d10" opacity=".35"/>
+      <!-- ejection port and serrations sit off the breech, so they do not move -->
+      <path d="M268 18 h72 c3.4 0 5.6 2.2 5.6 5.6 v17 c0 3.4 -2.2 5.6 -5.6 5.6 h-72
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-17 c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="#101317"/>
+      <g fill="#101317" opacity=".75">
+        <rect x="350" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="362" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="374" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="386" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="398" y="16" width="5" height="45" rx="2.4"/>
+      </g>
+      <path d="M121 -2 h14 v12 h-14 z" fill="#20242a"/>
+      <circle cx="128" cy="4.4" r="3.6" fill="#e8eef5" opacity=".85"/>
+      <path d="M368 -2 h36 v12 h-36 z" fill="#20242a"/>
+      <path d="M382 -2 h8 v8 h-8 z" fill="#0b0d10"/>
+      <!-- dust cover barely clears the guard on a subcompact -->
+      <path d="M128 67 h36 v27 h-36 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-15.8
+               c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="url(#pgPoly)"/>
+      <path d="M168 67 h22 v11 h-22 z" fill="#4a515b"/>
+      <path d="M196 70 h44 v9 h-44 z" fill="#4a515b"/>
+      <path fill-rule="evenodd" fill="url(#pgPoly)"
+            d="M160 67 h124 v24 h-14 c-4 40 -20 58 -46 58 c-27 0 -42 -18 -46 -58 h-18
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-12.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z
+               M186 91 h72 c-3.4 30 -15 43 -35 43 c-21 0 -33 -13 -37 -43 z"/>
+      <path d="M196 92 h18 v38 h-18 z" fill="#20242a"/>
+      <path d="M202 94 h5 v34 h-5 z" fill="#0b0d10"/>
+      <!-- grip: same 18-degree rearward rake, 153px of drop instead of 226 -->
+      <path d="M284 90
+               C287 135 302 195 317 243
+               c1.6 4.2 5.6 6.4 10 5.4
+               l84 -19 c4.8 -1 7.4 -5 6.4 -9.8
+               C414 175 398 128 386 84
+               c-1.4 -5 -5 -7.6 -10.6 -7.6 h-79 c-10 0 -13.6 6.4 -12.4 13.6 z"
+            fill="url(#pgPoly)"/>
+      <path d="M378 72 h26 c7 0 10 4.4 8 10.4 l-6 18
+               c-2 -14 -9.4 -23 -22 -25.4 z" fill="url(#pgPoly)"/>
+      <path d="M284 90 C287 135 302 195 317 243 c1.6 4.2 5.6 6.4 10 5.4
+               l-13 -2.8 C296 195 288 140 288 88 z" fill="#7c8794" opacity=".22"/>
+      <path d="M296 112 C302 158 314 205 327 240 l74 -17
+               C392 185 378 146 366 106 z" fill="url(#pgStipple)"/>
+      <g fill="#12151a" opacity=".5">
+        <path d="M292 128 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+        <path d="M302 178 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+      </g>
+      <!-- floorplate: a 26 has almost no grip below the hand, which is the tell -->
+      <path d="M319 241 l92 -20 c5 -1.2 8.4 1.4 9.4 6.4 l2 9.6
+               c1 5 -1.6 8.8 -6.6 9.8 l-88 19 c-5 1 -8.6 -1.4 -9.6 -6.2 l-2 -9
+               c-1 -5 1.6 -8.6 2.8 -8.6 z" fill="#20242a"/>
+      <path d="M315 249 l106 -23 .8 4 -106 23 z" fill="#8d97a5" opacity=".3"/>
+    `,
+  },
+
+  // --- Vulcan 10 ------------------------------------------------------------
+  // Glock 40 long slide: 9.49" overall, 5.47" tall, 6.02" barrel. Same frame
+  // and grip as the kestrel — the only thing that changes is that the slide
+  // runs 495px instead of 409, forward of the breech. The blurb calls it a
+  // ported competition gun, so it gets the slide cut, the barrel ports and a
+  // raised adjustable rear sight, which is what that actually looks like.
+  vulcan: {
+    box: [-92, -10, 550, 334],
+    mounts: { rail: [150, 8], muzzle: [-86, 42], under: [20, 92], mag: [366, 296] },
+    body: `
+      <path d="M-86 26 h16 v32 h-16 z" fill="#2a2e34"/>
+      <circle cx="-79" cy="42" r="7" fill="#0b0d10"/>
+      <!-- slide, run forward -->
+      <path d="M-84 10 h482 c7 0 11 4 11 11 v35 c0 7 -4 11 -11 11 h-482
+               c-2.4 0 -4 -1.6 -4 -4 v-49 c0 -2.4 1.6 -4 4 -4 z" fill="url(#pgPoly)"/>
+      <path d="M-84 10 h482 c7 0 11 4 11 11 v3 h-497 v-10 c0 -2.4 1.6 -4 4 -4 z"
+            fill="#7c8794" opacity=".3"/>
+      <path d="M-86 61 h495 c0 4 -3 6 -8 6 h-483 c-2.4 0 -4 -1.6 -4 -4 z"
+            fill="#0b0d10" opacity=".35"/>
+      <!-- lightening cut through the top of the slide: the competition tell -->
+      <path d="M60 14 h112 c4 0 6.4 2.4 6.4 6.4 v9 c0 4 -2.4 6.4 -6.4 6.4 h-112
+               c-4 0 -6.4 -2.4 -6.4 -6.4 v-9 c0 -4 2.4 -6.4 6.4 -6.4 z" fill="#0b0d10"/>
+      <path d="M60 33 h112 c4 0 6.4 2.4 6.4 6.4 v-3 c0 4 -2.4 6.4 -6.4 6.4 h-112
+               c-4 0 -6.4 -2.4 -6.4 -6.4 z" fill="#8d97a5" opacity=".2"/>
+      <!-- barrel ports, cut through the slide onto the barrel beneath -->
+      <g fill="#0b0d10">
+        <rect x="-58" y="17" width="9" height="13" rx="3"/>
+        <rect x="-40" y="17" width="9" height="13" rx="3"/>
+        <rect x="-22" y="17" width="9" height="13" rx="3"/>
+      </g>
+      <path d="M268 18 h72 c3.4 0 5.6 2.2 5.6 5.6 v17 c0 3.4 -2.2 5.6 -5.6 5.6 h-72
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-17 c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="#101317"/>
+      <g fill="#101317" opacity=".75">
+        <rect x="350" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="362" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="374" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="386" y="16" width="5" height="45" rx="2.4"/>
+        <rect x="398" y="16" width="5" height="45" rx="2.4"/>
+      </g>
+      <!-- fibre front, adjustable rear standing proud -->
+      <path d="M-58 -3 h12 v13 h-12 z" fill="#20242a"/>
+      <circle cx="-52" cy="3.4" r="3.4" fill="#ffcf5c" opacity=".9"/>
+      <path d="M364 -8 h42 v18 h-42 z" fill="#20242a"/>
+      <path d="M380 -8 h9 v12 h-9 z" fill="#0b0d10"/>
+      <path d="M364 -8 h42 v3 h-42 z" fill="#8d97a5" opacity=".3"/>
+      <!-- long dust cover with a full accessory rail under it -->
+      <path d="M-46 67 h210 v27 h-210 c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-15.8
+               c0 -3.4 2.2 -5.6 5.6 -5.6 z" fill="url(#pgPoly)"/>
+      <path d="M-46 67 h210 v3.4 h-215.6 c0 -2.2 2.2 -3.4 5.6 -3.4 z"
+            fill="#7c8794" opacity=".24"/>
+      <g fill="#12151a" opacity=".7">
+        <rect x="-14" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="22" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="58" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="94" y="83" width="24" height="11" rx="2.4"/>
+        <rect x="130" y="83" width="24" height="11" rx="2.4"/>
+      </g>
+      <path d="M168 67 h22 v11 h-22 z" fill="#4a515b"/>
+      <path d="M196 70 h44 v9 h-44 z" fill="#4a515b"/>
+      <!-- frame, guard and grip are the kestrel's, unchanged -->
+      <path fill-rule="evenodd" fill="url(#pgPoly)"
+            d="M160 67 h124 v24 h-14 c-4 40 -20 58 -46 58 c-27 0 -42 -18 -46 -58 h-18
+               c-3.4 0 -5.6 -2.2 -5.6 -5.6 v-12.8 c0 -3.4 2.2 -5.6 5.6 -5.6 z
+               M186 91 h72 c-3.4 30 -15 43 -35 43 c-21 0 -33 -13 -37 -43 z"/>
+      <path d="M186 91 h10 c3 27 12 39 28 41 l-2 12 c-24 -3.4 -34 -22 -36 -53 z"
+            fill="#12151a" opacity=".5"/>
+      <path d="M196 92 h18 v38 h-18 z" fill="#20242a"/>
+      <path d="M202 94 h5 v34 h-5 z" fill="#0b0d10"/>
+      <path d="M284 90
+               C288 150 306 240 328 296
+               c1.6 4.2 5.6 6.4 10 5.4
+               l96 -22 c4.8 -1 7.4 -5 6.4 -9.8
+               C424 200 402 140 386 84
+               c-1.4 -5 -5 -7.6 -10.6 -7.6 h-79 c-10 0 -13.6 6.4 -12.4 13.6 z"
+            fill="url(#pgPoly)"/>
+      <path d="M378 72 h26 c7 0 10 4.4 8 10.4 l-6 18
+               c-2 -14 -9.4 -23 -22 -25.4 z" fill="url(#pgPoly)"/>
+      <path d="M284 90 C288 150 306 240 328 296 c1.6 4.2 5.6 6.4 10 5.4
+               l-13 -2.8 C302 242 288 152 288 88 z" fill="#7c8794" opacity=".22"/>
+      <path d="M298 116 C304 176 320 250 338 292 l84 -19
+               C408 216 390 158 372 108 z" fill="url(#pgStipple)"/>
+      <g fill="#12151a" opacity=".5">
+        <path d="M292 132 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+        <path d="M302 188 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+        <path d="M314 244 c9.6 2.4 15.4 6.6 18 12.4 l1.6 -13.6
+               c-4 -5 -9.6 -8 -17 -9.4 z"/>
+      </g>
+      <path d="M330 294 l104 -23 c5 -1.2 8.4 1.4 9.4 6.4 l2 9.6
+               c1 5 -1.6 8.8 -6.6 9.8 l-100 21 c-5 1 -8.6 -1.4 -9.6 -6.2 l-2 -9
+               c-1 -5 1.6 -8.6 2.8 -8.6 z" fill="#20242a"/>
+      <path d="M326 302 l118 -25 .8 4 -118 25 z" fill="#8d97a5" opacity=".3"/>
+    `,
+  },
+
+
+
+  // --- Drover .357 ----------------------------------------------------------
+  // S&W 686, 6" barrel: 12.0" overall, 5.5" tall, at 46 px/in.
+  //
+  // The first attempt drew the barrel, the cylinder and the grip as separate
+  // pieces and it read as a toy. A revolver is ONE frame: the topstrap runs
+  // unbroken from the barrel back over the cylinder to the hammer, and the
+  // grip frame hangs off the bottom of that same casting. Drawn as one outline
+  // here, with the cylinder sitting IN its window rather than beside it.
+  drover: {
+    box: [-8, -14, 560, 288],
+    mounts: { rail: [300, 18], muzzle: [4, 62], under: [140, 106], mag: [316, 100] },
+    body: `
+      <!-- one continuous frame: barrel, topstrap, standing breech, grip frame -->
+      <path fill="url(#pgBlued)" d="
+        M6 42 h250 v-6 h122 c7 0 12 5 12 12 v34
+        c14 26 22 66 22 104 c0 13 -8 21 -22 21 h-60 c-14 0 -22 -8 -20 -22
+        c3 -22 7 -42 13 -60 h-24 c-5 32 -20 48 -43 48 c-25 0 -39 -16 -43 -48
+        h-25 v-24 h-32 v-16 h-150 z"/>
+      <!-- top highlight along the whole spine, so it reads as one casting -->
+      <path d="M6 42 h250 v-6 h122 c7 0 12 5 12 12 v4 h-134 v-4 h-250 z"
+            fill="#8d97a5" opacity=".3"/>
+      <!-- barrel: underlug and bore -->
+      <path d="M6 74 h250 v22 c0 4 -3 6 -7 6 h-236 c-4 0 -7 -2 -7 -6 z"
+            fill="#20242a"/>
+      <circle cx="20" cy="58" r="9" fill="#0b0d10"/>
+      <circle cx="20" cy="58" r="9" fill="none" stroke="#0b0d10" stroke-width="3"/>
+      <!-- ventilated rib -->
+      <g fill="#20242a" opacity=".75">
+        <rect x="44" y="36" width="15" height="6" rx="2"/><rect x="71" y="36" width="15" height="6" rx="2"/>
+        <rect x="98" y="36" width="15" height="6" rx="2"/><rect x="125" y="36" width="15" height="6" rx="2"/>
+        <rect x="152" y="36" width="15" height="6" rx="2"/><rect x="179" y="36" width="15" height="6" rx="2"/>
+      </g>
+      <path d="M30 24 h11 v18 h-11 z" fill="#20242a"/>
+      <path d="M33 26 h5 v14 h-5 z" fill="#e05a5a" opacity=".85"/>
+      <!-- the cylinder window, cut into the frame, with the cylinder in it -->
+      <path d="M256 62 h116 v76 h-116 z" fill="#12151a"/>
+      <ellipse cx="314" cy="100" rx="54" ry="36" fill="url(#pgBlued)"/>
+      <ellipse cx="314" cy="100" rx="54" ry="36" fill="none" stroke="#0b0d10" stroke-width="2.5"/>
+      <!-- flutes, drawn as the shadowed gaps between them -->
+      <g fill="#0b0d10" opacity=".55">
+        <rect x="272" y="74" width="8" height="52" rx="4"/>
+        <rect x="296" y="70" width="8" height="60" rx="4"/>
+        <rect x="322" y="70" width="8" height="60" rx="4"/>
+        <rect x="346" y="74" width="8" height="52" rx="4"/>
+      </g>
+      <ellipse cx="314" cy="82" rx="48" ry="10" fill="#8d97a5" opacity=".18"/>
+      <!-- rear sight and the hammer spur standing behind the frame -->
+      <path d="M352 22 h32 v14 h-32 z" fill="#20242a"/>
+      <path d="M365 22 h7 v10 h-7 z" fill="#0b0d10"/>
+      <path d="M384 24 c24 -2 38 12 38 32 c0 10 -5 17 -13 20 l-25 -12 z"
+            fill="#2f353d"/>
+      <g fill="#0b0d10" opacity=".65">
+        <rect x="394" y="30" width="20" height="3.4" rx="1.7"/>
+        <rect x="396" y="38" width="20" height="3.4" rx="1.7"/>
+        <rect x="398" y="46" width="20" height="3.4" rx="1.7"/>
+      </g>
+      <!-- trigger, inside the guard the frame already cut -->
+      <path d="M296 126 h16 v34 h-16 z" fill="#20242a"/>
+      <path d="M301 128 h5 v30 h-5 z" fill="#0b0d10"/>
+      <!-- grip: walnut panels ON the frame, following its backstrap rather
+           than replacing it. The frame's own curve shows above and below. -->
+      <path d="M392 112
+               c18 26 28 64 30 96 c1 12 -5 20 -16 20 h-44 c-11 0 -17 -7 -15 -18
+               c3 -17 6 -31 10 -43 c9 -4 14 -11 15 -21 c1 -12 -3 -20 -11 -25
+               c8 -12 17 -22 31 -9 z" fill="url(#pgWalnut)"/>
+      <path d="M392 112 c18 26 28 64 30 96 c1 12 -5 20 -16 20 h-10
+               c7 -42 0 -83 -21 -111 z" fill="#3d2313" opacity=".5"/>
+      <path d="M383 138 c13 22 21 54 23 82 l-36 3 c2 -31 6 -60 11 -85 z"
+            fill="url(#pgStipple)" opacity=".7"/>
+      <circle cx="395" cy="178" r="5.5" fill="#c3ccd8" opacity=".5"/>
+    `,
+  },
+
   // --- Warden .45 -----------------------------------------------------------
   // M1911A1: 8.625" overall, 5.5" tall, at 52 px/in — a 448 x 286 field.
   // Longer and slimmer than the Glock, squarer slide, exposed hammer, and a

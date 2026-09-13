@@ -393,6 +393,7 @@ export class GameUI {
       case 'fixer-wash': g.washWithFixer(); break;
       case 'muscle': g.muscleIn(id); break;
       case 'found-city': g.foundCity(type); break;
+      case 'graph-product': this.focusProduct(type); break;
       case 'goto-tab':
         // Acting on a tip counts as having heard it.
         if (type && g.dismissHelper) g.dismissHelper(type);
@@ -1040,6 +1041,7 @@ export class GameUI {
       }).join('');
 
     return (
+      this.productGraph() +
       `<div class="sect">
         <div class="sect__title"><span>Blocks</span><span>${s.districts.length}</span></div>
         <p class="card__blurb" style="margin:0 0 10px">
@@ -2394,6 +2396,119 @@ export class GameUI {
         to run and another line to keep fed.
       </p>` : ''}
     </div>`;
+  }
+
+  /**
+   * The product tree as a graph, the way a vault graph reads.
+   *
+   * A chain written as "Cannabis -> Concentrate -> Vape Pens" tells you about
+   * one line. A graph tells you about the whole board at once: which things
+   * feed other things, which stand alone, and how deep any of it goes. That is
+   * the thing worth seeing when you are deciding what to build next.
+   *
+   * Laid out deterministically rather than by simulating forces — the tree is
+   * small and fixed, so a stable picture you can learn beats one that settles
+   * somewhere different every time you open it.
+   */
+  /** Jump from a graph node to that product's row. */
+  focusProduct(pid) {
+    this.goTab('market');
+    // Let the tab paint before trying to scroll to something inside it.
+    requestAnimationFrame(() => {
+      const el = this.dom.railBody.querySelector(`[data-product="${pid}"]`);
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    });
+  }
+
+  productGraph() {
+    const s = this.game.state;
+    const { parent, children } = productTree();
+    const ids = PRODUCT_IDS;
+
+    // Depth from a root, so connected things lay out left to right.
+    const depthOf = (id) => chainFor(id).length - 1;
+    const connected = ids.filter((id) => parent[id] || (children[id] || []).length);
+    const loose = ids.filter((id) => !connected.includes(id));
+
+    const W = 640, rowH = 74, R = 15;
+    const pos = {};
+
+    // Connected clusters: one band per root, each generation a column.
+    const roots = connected.filter((id) => !parent[id]);
+    let band = 0;
+    for (const root of roots) {
+      const byDepth = {};
+      const walk = (id) => {
+        (byDepth[depthOf(id)] = byDepth[depthOf(id)] || []).push(id);
+        for (const c of children[id] || []) walk(c.product);
+      };
+      walk(root);
+      const depths = Object.keys(byDepth).map(Number).sort((a, b) => a - b);
+      for (const d of depths) {
+        const col = byDepth[d];
+        col.forEach((id, i) => {
+          pos[id] = {
+            x: 70 + d * 190,
+            y: 66 + band * rowH + (i - (col.length - 1) / 2) * 54,
+          };
+        });
+      }
+      band += Math.max(...depths.map((d) => byDepth[d].length)) + 0.4;
+    }
+
+    // Everything standing alone, in a loose field below — present, clearly not
+    // part of a chain, and still clickable.
+    const looseTop = 66 + band * rowH + 18;
+    const perRow = 6;
+    loose.forEach((id, i) => {
+      pos[id] = {
+        x: 58 + (i % perRow) * 100 + ((Math.floor(i / perRow) % 2) * 34),
+        y: looseTop + Math.floor(i / perRow) * 62,
+      };
+    });
+
+    const H = Math.max(...ids.map((id) => pos[id].y)) + 48;
+
+    const edges = ids.filter((id) => parent[id]).map((id) => {
+      const a = pos[parent[id].product], b = pos[id];
+      const mid = (a.x + b.x) / 2;
+      return `<path d="M${a.x} ${a.y} C${mid} ${a.y} ${mid} ${b.y} ${b.x} ${b.y}"
+        fill="none" stroke="var(--line)" stroke-width="1.6" opacity=".55"/>`;
+    }).join('');
+
+    const nodes = ids.map((id) => {
+      const pr = PRODUCTS[id];
+      const { x, y } = pos[id];
+      const linked = connected.includes(id);
+      // Anything on a chain reads solid; anything standing alone is dimmed,
+      // which is exactly the signal you want when hunting for depth.
+      const r = linked ? R : R - 4;
+      return `<g class="pgraph__node" data-action="graph-product" data-type="${id}"
+          style="cursor:pointer">
+          <circle cx="${x}" cy="${y}" r="${r}" fill="${pr.color}"
+            opacity="${linked ? 0.92 : 0.4}" stroke="var(--bg)" stroke-width="2"/>
+          <text x="${x}" y="${y + r + 13}" text-anchor="middle"
+            font-size="10.5" fill="${linked ? 'var(--text-dim)' : 'var(--text-faint)'}"
+            >${esc(pr.short)}</text>
+        </g>`;
+    }).join('');
+
+    return `<details class="upgrades" data-disc="pgraph"
+        ${this.discOpen('pgraph', true) ? 'open' : ''}>
+      <summary>Product tree
+        <span style="color:var(--text-faint)">· ${connected.length} linked · ${loose.length} standalone</span>
+      </summary>
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+        <svg viewBox="0 0 ${W} ${H}" style="width:100%;min-width:${Math.min(W, 560)}px;height:auto;display:block">
+          ${edges}${nodes}
+        </svg>
+      </div>
+      <p class="card__blurb" style="margin:6px 0 0">
+        Lines mean one is made of the other — flower into hash and concentrate,
+        concentrate into carts. Dimmed ones stand alone. Each step along a line
+        is worth more by weight than the last, and another place to keep fed.
+      </p>
+    </details>`;
   }
 
   buildingPanel(b) {

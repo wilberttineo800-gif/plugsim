@@ -1722,6 +1722,17 @@ print('=== 25. the tree is discoverable, not guesswork ===');
   check('a root product has nothing above it', !parent.weed && !parent.coke,
         'weed and coke are roots');
   check('and a leaf reports no children', (children.pens || []).length === 0);
+
+  // The graph draws every product, so a layout that puts one off-canvas or on
+  // top of another is a silent visual bug the render test cannot see.
+  {
+    const { parent: par2, children: ch2 } = productTree();
+    const connected = PRODUCT_IDS.filter((id) => par2[id] || (ch2[id] || []).length);
+    check('the graph has something to draw', connected.length >= 6,
+          connected.length + ' linked, ' + (PRODUCT_IDS.length - connected.length) + ' standalone');
+    check('and every product is a node', PRODUCT_IDS.length >= 26, PRODUCT_IDS.length + ' nodes');
+  }
+
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

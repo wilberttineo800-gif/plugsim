@@ -18,6 +18,7 @@ import {
   LICENCES, FIREARM_CLASSES, hasLicence, MODELS, MODEL_IDS, modelEffects,
 } from '../src/game/firearms.js';
 import { isHeld, districtName, turfUpkeep, TURF_UPGRADES } from '../src/game/turf.js';
+import { pendingTip, markTipSeen, TIPS } from '../src/game/guide.js';
 import {
   GUN_MODELS, GUN_MODEL_IDS, GUN_ART, GUN_IDS, VEHICLE_ART, VEHICLE_ART_IDS,
   MOUNTS, ATTACHMENT_ART, modelWithAttachments,
@@ -1546,5 +1547,73 @@ print('=== 20. more than one city, and weight moving between them ===');
                     Math.round(there.packs.weed) + ' over there');
 }
 
+
+
+print('');
+print('=== 21. Ray guides rather than prescribes ===');
+{
+  const st = world();
+
+  // He never says WHICH building. The opening step is satisfied by anything
+  // that produces, so a closet and a warehouse grow both count and the path
+  // stays the player's.
+  st.cash.clean = 40000000;
+  const base = open(st, 'hq');
+  A.setHeadquarters(st, base.id);
+  const before = currentStep(st);
+  check('after a base, it asks for production without naming a building',
+        before && before.id === 'produce', before ? before.title : 'none');
+  // A closet in a spare room satisfies it exactly as a warehouse grow would.
+  open(st, 'closet_grow');
+  const after = currentStep(st);
+  check('a closet satisfies it as well as a warehouse would',
+        after && after.id !== 'produce', after ? 'moved on to: ' + after.title : 'cleared');
+
+  // Tips fire on the world, once each.
+  const st2 = world();
+  st2.cash.dirty = 900000;               // street money, nowhere to wash it
+  const tip = pendingTip(st2);
+  check('a tip fires when its condition becomes true', !!tip, tip ? tip.id : 'none');
+  markTipSeen(st2, tip.id);
+  check('and does not fire twice', (pendingTip(st2) || {}).id !== tip.id);
+
+  // The rule the whole design turns on: sending him away is respected, but a
+  // genuinely new thing opening up still brings him back.
+  const st3 = world();
+  st3.tutorialDismissed = true;
+  check('dismissing the introduction silences the introduction', !currentStep(st3));
+  st3.cash.dirty = 900000;
+  check('but a new thing opening up still reaches you', !!pendingTip(st3),
+        (pendingTip(st3) || {}).title || '');
+
+  // Every tip has to be reachable and say something.
+  const bad = TIPS.filter((x) => !x.id || !x.title || !x.says || typeof x.when !== 'function');
+  check('every tip is complete', bad.length === 0, TIPS.length + ' tips');
+  const ids = TIPS.map((x) => x.id);
+  check('tip ids are unique', new Set(ids).size === ids.length);
+}
+
+
+print('');
+print('=== 22. the new state survives a save ===');
+{
+  const st = world();
+  st.cash.clean = 60000000;
+  markTipSeen(st, 'wash');
+  const res = A.foundCity(st, { name: 'Toronto', origin: { lat: 43.6532, lng: -79.3832 }, countryCode: 'ca' });
+  st.shipments = [{ id: 'ship-x', toCityId: res.city.id, productId: 'weed', amount: 40,
+                    risk: 0.2, fee: 1000, sentAtMinute: 0, arrivesAtMinute: 99999 }];
+
+  saveGame(st);
+  const back = loadGame();
+  check('cities come back', (back.cities || []).length === 2,
+        (back.cities || []).map((c) => c.name).join(', '));
+  check('consignments in the wind come back', (back.shipments || []).length === 1,
+        'so a reload cannot quietly lose weight you already paid to move');
+  check('what Ray has already said comes back', (back.seenTips || []).includes('wash'),
+        'or he repeats himself on every reload');
+  check('the other city keeps its own blocks',
+        (back.districts || []).some((d) => d.cityId === res.city.id));
+}
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

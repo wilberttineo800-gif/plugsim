@@ -12,6 +12,7 @@ import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
 import { sizeScale, sizeCapacity, rentBonusFor } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
+import { pendingTip } from '../game/guide.js';
 import {
   LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
   hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
@@ -357,7 +358,7 @@ export class GameUI {
         g.sellProductTo(id, pid, product);
         break;
       }
-      case 'dismiss-helper': g.dismissHelper(); break;
+      case 'dismiss-helper': g.dismissHelper(type); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
       case 'sell-building': g.sellBuilding(id); break;
@@ -390,7 +391,11 @@ export class GameUI {
       case 'fixer-wash': g.washWithFixer(); break;
       case 'muscle': g.muscleIn(id); break;
       case 'found-city': g.foundCity(type); break;
-      case 'goto-tab': this.goTab(tab); break;
+      case 'goto-tab':
+        // Acting on a tip counts as having heard it.
+        if (type && g.dismissHelper) g.dismissHelper(type);
+        this.goTab(tab);
+        break;
       default: break;
     }
   }
@@ -630,7 +635,7 @@ export class GameUI {
       ledger: () => this.tabLedger(),
       admin: () => this.tabAdmin(),
     };
-    const html = (map[this.tab] || map.build)();
+    const html = this.helperRail() + (map[this.tab] || map.build)();
     if (force || html !== this._lastRailHtml) {
       this.dom.railBody.innerHTML = html;
       this._lastRailHtml = html;
@@ -670,7 +675,6 @@ export class GameUI {
       : '';
 
     return (
-      this.helperCard() +
       `<div class="sect">
         <div class="sect__title"><span>Property</span><span>${owned.length} owned</span></div>
         ${intro}
@@ -2422,32 +2426,63 @@ export class GameUI {
    * Ray's card. The first thing a new player should read, and the thing that
    * tells them what to do next without a wall of tutorial text.
    */
-  helperCard() {
+  /**
+   * Ray, wherever you are.
+   *
+   * He used to live on the Build tab, which meant a new player had to already
+   * be looking in the right place to be told where to look. He now sits above
+   * whatever tab you are on.
+   *
+   * Two things he might have to say, in priority order: a new thing has opened
+   * up, or you are still standing the operation up. He never prescribes WHICH
+   * building — the opening steps check `has(s, 'production')`, so a closet and
+   * a warehouse grow both satisfy it, and the path stays yours.
+   */
+  helperRail() {
     const s = this.game.state;
-    const step = currentStep(s);
-    const p = onboardingProgress(s);
-    if (!step) return '';
+    const tip = pendingTip(s);
+    const step = tip ? null : currentStep(s);
+    if (!tip && !step) return '';
 
-    const first = p.done === 0;
-    return `
-      <div class="sect sect--helper">
+    const p = onboardingProgress(s);
+    const first = !tip && p.done === 0;
+
+    if (tip) {
+      // Something new has opened up. Worth interrupting for, even if he was
+      // sent away earlier — that is the whole point of him staying on.
+      return `<div class="sect sect--helper">
         <div class="sect__title">
           <span>${esc(HELPER.name)} · ${esc(HELPER.role)}</span>
-          <span>${p.done}/${p.total}</span>
+          <span style="color:var(--sodium)">something new</span>
         </div>
-        ${first ? `<p class="card__blurb" style="margin:0 0 10px">${esc(HELPER.greeting)}</p>` : ''}
-        <div class="meter"><i style="width:${(p.done / p.total) * 100}%"></i></div>
-        <div class="card" style="margin-top:10px">
-          <div class="card__head">
-            <span class="card__name">${esc(step.title)}</span>
-          </div>
-          <div class="card__blurb">${esc(step.brief)}</div>
-          <div class="card__meta"><span class="good">${esc(step.hint)}</span></div>
+        <div class="card" style="margin-top:4px">
+          <div class="card__head"><span class="card__name">${esc(tip.title)}</span></div>
+          <div class="card__blurb">${esc(tip.says)}</div>
         </div>
         <div class="btnrow">
-          <button class="ghostbtn" data-action="dismiss-helper">I've got it from here</button>
+          ${tip.go ? `<button class="ghostbtn" data-action="goto-tab" data-tab="${esc(tip.go)}"
+            data-type="${esc(tip.id)}">Show me</button>` : ''}
+          <button class="ghostbtn" data-action="dismiss-helper" data-type="${esc(tip.id)}">Got it</button>
         </div>
       </div>`;
+    }
+
+    return `<div class="sect sect--helper">
+      <div class="sect__title">
+        <span>${esc(HELPER.name)} · ${esc(HELPER.role)}</span>
+        <span>${p.done}/${p.total}</span>
+      </div>
+      ${first ? `<p class="card__blurb" style="margin:0 0 10px">${esc(HELPER.greeting)}</p>` : ''}
+      <div class="meter"><i style="width:${(p.done / p.total) * 100}%"></i></div>
+      <div class="card" style="margin-top:10px">
+        <div class="card__head"><span class="card__name">${esc(step.title)}</span></div>
+        <div class="card__blurb">${esc(step.brief)}</div>
+        <div class="card__meta"><span class="good">${esc(step.hint)}</span></div>
+      </div>
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="dismiss-helper">I've got it from here</button>
+      </div>
+    </div>`;
   }
 
   /**

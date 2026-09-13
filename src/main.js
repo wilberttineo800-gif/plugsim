@@ -9,6 +9,7 @@ import {
 } from './game/geo.js';
 import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
 import { DESTINATIONS } from './game/cities.js';
+import { markTipSeen } from './game/guide.js';
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
@@ -460,9 +461,22 @@ game.setModel = (buildingId, modelId) => {
   game.ui.render();
 };
 
-game.dismissHelper = () => {
-  game.state.tutorialDismissed = true;
-  toast('Ray\u2019s around if you need him \u2014 press ? for the rundown.', 'info', 4000);
+/**
+ * Send Ray away.
+ *
+ * Two different things, depending on what he was saying. Waving off a tip marks
+ * that ONE tip read — he still speaks up the next time something genuinely new
+ * opens up, which is the whole reason he stays on past the introduction.
+ * Waving off the introduction itself silences that, and only that.
+ */
+game.dismissHelper = (tipId) => {
+  if (tipId) {
+    markTipSeen(game.state, tipId);
+  } else {
+    game.state.tutorialDismissed = true;
+    toast('Ray\u2019s around if you need him \u2014 he\u2019ll say something when there\u2019s something new.',
+      'info', 4000);
+  }
   game.ui.render();
 };
 

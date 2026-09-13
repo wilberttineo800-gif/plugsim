@@ -1649,4 +1649,51 @@ print('=== 23. an empty property you own can always be given a use ===');
         again.length === opts.length, again.length + ' options');
 }
 
+
+print('');
+print('=== 24. some things are made OF other things ===');
+{
+  const st = world();
+  st.cash.clean = 900000000;
+  A.adminUnlockAll(st);
+
+  // Every derived line must point at a product that exists and is itself
+  // makeable, or the tree has a dead branch nobody can ever start.
+  const derived = BUILDING_IDS.filter((id) => BUILDINGS[id].derivedFrom);
+  check('there are derived lines at all', derived.length >= 4, derived.length + ' of them');
+  const broken = derived.filter((id) => {
+    const src = BUILDINGS[id].derivedFrom.product;
+    return !PRODUCTS[src] || !BUILDING_IDS.some((x) => BUILDINGS[x].product === src);
+  });
+  check('every input is a real product somebody can make', broken.length === 0,
+        broken.join(', ') || 'all inputs reachable');
+
+  // No cycles: a chain that eats its own output can never be started.
+  const parentOf = {};
+  for (const id of derived) parentOf[BUILDINGS[id].product] = BUILDINGS[id].derivedFrom.product;
+  const loops = Object.keys(parentOf).filter((start) => {
+    let seen = new Set([start]), cur = parentOf[start];
+    while (cur) { if (seen.has(cur)) return true; seen.add(cur); cur = parentOf[cur]; }
+    return false;
+  });
+  check('and no chain feeds itself', loops.length === 0, loops.join(', ') || 'no loops');
+
+  // The mechanic itself: nothing to work with means it stops, and says so.
+  const press = open(st, 'press_room');
+  for (let h = 0; h < 6; h += 0.25) stepSim(st, 0.25, {});
+  check('a press with no flower stops', !!press.stalledReason, press.stalledReason || '');
+  check('and says what it is missing', /cannabis/i.test(press.stalledReason || ''),
+        'so you are not left guessing why a line is dead');
+  check('and made nothing', (press.raw.hash || 0) === 0);
+
+  // Deliver the input and it runs, consuming it.
+  press.packs.weed = 400;
+  for (let h = 0; h < 24; h += 0.25) stepSim(st, 0.25, {});
+  check('with flower delivered it runs', !press.stalledReason, 'pressing');
+  check('it eats the flower', (press.packs.weed || 0) < 400,
+        Math.round(400 - (press.packs.weed || 0)) + ' used');
+  check('and turns out hash', (press.raw.hash || 0) > 0,
+        (press.raw.hash || 0).toFixed(1) + ' raw hash');
+}
+
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

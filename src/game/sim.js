@@ -219,6 +219,21 @@ function stepProduction(state, dt) {
     // does not buy a full room's worth of nutrient, and charging it as if it
     // did made every small starter grow structurally unprofitable.
     if (!b.cycleStarted) {
+      // Some lines are made OF something else. A press has nothing to press
+      // without flower and a rock house has nothing to wash up without powder,
+      // so the input has to physically be here — delivered by a route like any
+      // other cargo — rather than bought in with the nutrient.
+      const src = def.derivedFrom;
+      if (src) {
+        const need = src.perSlot * def.slots * sizeScale(b);
+        const have = (b.packs && b.packs[src.product]) || 0;
+        if (have < need) {
+          b.stalledReason = `No ${PRODUCTS[src.product].name.toLowerCase()} to work with`
+            + ` — run a line in from where you make it`;
+          continue;
+        }
+      }
+
       const cost = def.supplyCostPerSlot * def.slots * sizeScale(b);
       if (state.cash.dirty + state.cash.clean < cost) {
         b.stalledReason = 'Can’t cover supplies';
@@ -235,6 +250,12 @@ function stepProduction(state, dt) {
         continue;
       }
       b.stalledBroke = false;
+      // Take the input out now, at the same moment the money goes — a cycle
+      // that has started has consumed what it is made from.
+      if (def.derivedFrom) {
+        const src = def.derivedFrom;
+        b.packs[src.product] -= src.perSlot * def.slots * sizeScale(b);
+      }
       paySoft(state, cost);
       b.cycleStarted = true;
       b.cycleProgress = 0;

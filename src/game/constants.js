@@ -402,6 +402,22 @@ export const PRODUCTS = {
     regionPenalty: 0.6,
   },
 
+  pens: {
+    id: 'pens',
+    name: 'Vape Pens',
+    short: 'PENS',
+    color: '#5ec9c0',
+    rawName: 'Filled Carts',
+    packName: 'Pens',
+    packsPerRaw: 9,
+    // Concentrate in a cartridge. Worth more again than the wax it is made of,
+    // and it is the discreet end of the market — very little to smell or see.
+    basePrice: 32000,
+    heatPerPackSold: 0.07,
+    demandBase: [0.35, 2.6],
+    regionBoost: { us: 1.9, ca: 1.6, gb: 1.2 },
+  },
+
 };
 
 export const PRODUCT_IDS = Object.keys(PRODUCTS);
@@ -490,6 +506,8 @@ export const BUILDINGS = {
     name: 'Hash Press',
     blurb: 'Presses trim and resin into slabs. Steady, dense, and worth twice raw flower.',
     icon: 'press',
+    // Made OF something else: the input has to be delivered here.
+    derivedFrom: { product: 'weed', perSlot: 1.9 },
     product: 'hash',
     unlock: { properties: 3, cash: 3000000 },
     cost: 67500,
@@ -501,7 +519,7 @@ export const BUILDINGS = {
     slots: 3,
     cycleHours: 7,
     rawPerSlot: 2.0,
-    supplyCostPerSlot: 19000,
+    supplyCostPerSlot: 900,
     baseQuality: 0.55,
     heatPerDay: 0.55,
     capacity: 100,
@@ -1825,6 +1843,8 @@ export const BUILDINGS = {
     name: 'Rock House',
     blurb: 'A pot, a little soda and somebody who has done it before. Turns powder into something that sells faster.',
     icon: 'press',
+    // Made OF something else: the input has to be delivered here.
+    derivedFrom: { product: 'coke', perSlot: 1.3 },
     product: 'crack',
     unlock: { properties: 6, cash: 7000000 },
     cost: 68750,
@@ -1836,7 +1856,7 @@ export const BUILDINGS = {
     slots: 3,
     cycleHours: 6,
     rawPerSlot: 2.4,
-    supplyCostPerSlot: 18000,
+    supplyCostPerSlot: 2200,
     baseQuality: 0.52,
     heatPerDay: 0.9,
     capacity: 240,
@@ -1967,7 +1987,7 @@ export const BUILDINGS = {
     areaExponent: 0.9,
     upkeepPerDay: 1733,
     // The cheap, heavy goods. Nothing here is difficult — it is a volume problem.
-    handles: ['cigs', 'nitrous'],
+    handles: ['cigs', 'nitrous', 'pens'],
     rawPerHour: 9.5,
     costPerRaw: 90,
     qualityBonus: 0.05,
@@ -2067,6 +2087,8 @@ export const BUILDINGS = {
     name: 'Extraction Bench',
     blurb: 'Closed loop, cold solvent, and flower you already grew coming out worth five times as much.',
     icon: 'flask',
+    // Made OF something else: the input has to be delivered here.
+    derivedFrom: { product: 'weed', perSlot: 2.4 },
     product: 'wax',
     unlock: { properties: 6, cash: 5000000 },
     cost: 118750,
@@ -2078,7 +2100,7 @@ export const BUILDINGS = {
     slots: 3,
     cycleHours: 11,
     rawPerSlot: 2.0,
-    supplyCostPerSlot: 11000,
+    supplyCostPerSlot: 1400,
     baseQuality: 0.7,
     heatPerDay: 0.2,
     capacity: 240,
@@ -2127,6 +2149,32 @@ export const BUILDINGS = {
     baseQuality: 0.74,
     heatPerDay: 0.07,
     capacity: 420,
+  },
+
+  pen_line: {
+    id: 'pen_line',
+    kind: 'production',
+    name: 'Cart Line',
+    sizeNames: [[0.8, 'Filling Bench'], [1.6, 'Cart Line'], [Infinity, 'Cart Plant']],
+    blurb: 'Concentrate into cartridges, cartridges into batteries. The end of the cannabis line and the quietest thing on it.',
+    icon: 'box',
+    // The third step of a chain: flower, then wax, then this.
+    derivedFrom: { product: 'wax', perSlot: 1.1 },
+    product: 'pens',
+    unlock: { properties: 7, cash: 7500000 },
+    cost: 137500,
+    minAreaM2: 60,
+    maxAreaM2: 800,
+    referenceAreaM2: 240,
+    areaExponent: 0.8,
+    upkeepPerDay: 2400,
+    slots: 4,
+    cycleHours: 10,
+    rawPerSlot: 2.1,
+    supplyCostPerSlot: 2600,
+    baseQuality: 0.68,
+    heatPerDay: 0.14,
+    capacity: 300,
   },
 
 };

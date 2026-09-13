@@ -148,7 +148,7 @@ import('../src/main.js').then(async () => {
   // And render every tab and panel through the real UI, which is where an
   // unimported helper or a bad template shows up.
   let broke = 0;
-  for (const tab of ['build', 'market', 'blocks', 'fleet', 'routes', 'lab', 'ledger', 'admin']) {
+  for (const tab of ['build', 'market', 'blocks', 'fleet', 'routes', 'lab', 'cities', 'ledger', 'admin']) {
     try { globalThis.plugsim.ui.goTab(tab); }
     catch (e) { broke++; print('  tab ' + tab + ' threw: ' + e); }
   }

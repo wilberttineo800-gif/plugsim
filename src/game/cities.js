@@ -115,3 +115,43 @@ export function quoteShipment(state, fromCity, toCity, amount, heat = 0) {
     risk: seizureChance(distance, amount, crossesBorder, heat),
   };
 }
+
+/**
+ * Places worth opening up, with the coordinates they actually sit at.
+ *
+ * Deliberately a spread rather than a list of the biggest cities: the next town
+ * over is cheap, quick and low-risk but barely a different market, while a
+ * different country is expensive and dangerous and prices everything
+ * differently. That spread IS the decision.
+ */
+export const DESTINATIONS = [
+  { name: 'Springfield',   origin: { lat: 42.1015, lng: -72.5898 }, countryCode: 'us' },
+  { name: 'Providence',    origin: { lat: 41.8240, lng: -71.4128 }, countryCode: 'us' },
+  { name: 'New York',      origin: { lat: 40.7128, lng: -74.0060 }, countryCode: 'us' },
+  { name: 'Philadelphia',  origin: { lat: 39.9526, lng: -75.1652 }, countryCode: 'us' },
+  { name: 'Baltimore',     origin: { lat: 39.2904, lng: -76.6122 }, countryCode: 'us' },
+  { name: 'Detroit',       origin: { lat: 42.3314, lng: -83.0458 }, countryCode: 'us' },
+  { name: 'Atlanta',       origin: { lat: 33.7490, lng: -84.3880 }, countryCode: 'us' },
+  { name: 'Miami',         origin: { lat: 25.7617, lng: -80.1918 }, countryCode: 'us' },
+  { name: 'Houston',       origin: { lat: 29.7604, lng: -95.3698 }, countryCode: 'us' },
+  { name: 'Los Angeles',   origin: { lat: 34.0522, lng: -118.2437 }, countryCode: 'us' },
+  { name: 'Toronto',       origin: { lat: 43.6532, lng: -79.3832 }, countryCode: 'ca' },
+  { name: 'Mexico City',   origin: { lat: 19.4326, lng: -99.1332 }, countryCode: 'mx' },
+  { name: 'London',        origin: { lat: 51.5074, lng: -0.1278 },  countryCode: 'gb' },
+  { name: 'Amsterdam',     origin: { lat: 52.3676, lng: 4.9041 },   countryCode: 'nl' },
+  { name: 'Madrid',        origin: { lat: 40.4168, lng: -3.7038 },  countryCode: 'es' },
+];
+
+/** The ones you haven't opened yet, nearest first. */
+export function openableFrom(state) {
+  const taken = new Set(citiesOf(state).map((c) => c.name.toLowerCase()));
+  const from = homeCity(state);
+  return DESTINATIONS
+    .filter((d) => !taken.has(d.name.toLowerCase()))
+    .map((d) => ({
+      ...d,
+      distance: haversineKm(from.origin, d.origin),
+      crossesBorder: (d.countryCode || null) !== (from.countryCode || null),
+    }))
+    .sort((a, b) => a.distance - b.distance);
+}

@@ -8,6 +8,7 @@ import {
   overpassCoolingDown, overpassCooldownSeconds,
 } from './game/geo.js';
 import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
+import { DESTINATIONS } from './game/cities.js';
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
@@ -978,6 +979,50 @@ game.editRoute = (routeId, changes) => {
   if (!r.ok) return toast(r.error, 'bad');
   if (r.rerouted) toast('Route changed — re-plotting the drive.', 'info');
   game.routeLayer.sync(game.state);
+};
+
+
+// --- More than one city -----------------------------------------------------
+
+/**
+ * Open up somewhere new, then survey it.
+ *
+ * The buildings have to be fetched the same way the home city's were — a new
+ * city with no property in it is a map you cannot do anything on, so the survey
+ * is part of founding rather than something to discover is missing later.
+ */
+game.foundCity = async (name) => {
+  const dest = DESTINATIONS.find((d) => d.name === name);
+  if (!dest) { toast('Nowhere by that name.', 'bad'); return; }
+
+  const res = A.foundCity(game.state, dest);
+  if (!res.ok) { toast(res.error, 'bad'); return; }
+
+  game.ui.render();
+  toast(`Opening up in ${dest.name} — surveying.`, 'info');
+
+  const pad = 0.001;
+  const tiles = tilesForBounds(
+    dest.origin.lat - pad, dest.origin.lng - pad,
+    dest.origin.lat + pad, dest.origin.lng + pad
+  );
+  try {
+    await loadTiles(game.state, tiles, (s2, w2, n2, e2, cap) =>
+      fetchBuildings(s2, w2, n2, e2, cap));
+  } catch (err) {
+    console.warn('[cities] survey failed', err);
+  }
+  const here = (game.state.lots || []).filter((l) => {
+    const d = game.state.districts.find((x) => x.id === l.districtId);
+    return d && d.cityId === res.city.id;
+  }).length;
+  game.lotLayer.setAll(game.state.lots || []);
+  game.districtLayer.refresh();
+  game.ui.render();
+  toast(here
+    ? `${dest.name} is open — ${here.toLocaleString()} buildings surveyed.`
+    : `${dest.name} is open, but the survey came back empty. Try again shortly.`,
+    here ? 'good' : 'bad');
 };
 
 // --- Admin (testing only) ---------------------------------------------------

@@ -39,6 +39,8 @@ import { crewById } from '../game/crews.js';
 
 import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
 import { unlockStatus, regionNote, buildingPreview} from '../game/progression.js';
+import { citiesOf, cityOfDistrict, distanceKm, foundingCost, openableFrom, quoteShipment,
+  homeCity } from '../game/cities.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgrades,
@@ -387,6 +389,7 @@ export class GameUI {
         break;
       case 'fixer-wash': g.washWithFixer(); break;
       case 'muscle': g.muscleIn(id); break;
+      case 'found-city': g.foundCity(type); break;
       case 'goto-tab': this.goTab(tab); break;
       default: break;
     }
@@ -518,6 +521,103 @@ export class GameUI {
     this.renderTicker();
   }
 
+
+  /**
+   * Where you operate, what is in the wind, and where you could go next.
+   *
+   * The argument for a second city is not more room — it is a different market.
+   * So each city leads with what it pays for your biggest earner, and each
+   * destination leads with what opening it would cost against what the trip
+   * would then be worth.
+   */
+  tabCities() {
+    const s = this.game.state;
+    const cities = citiesOf(s);
+    const home = homeCity(s);
+
+    const cityRows = cities.map((c) => {
+      const blocks = s.districts.filter((d) => (d.cityId || 'city-home') === c.id);
+      const mine = s.buildings.filter((b) => {
+        const d = s.districts.find((x) => x.id === b.districtId);
+        return d && (d.cityId || 'city-home') === c.id;
+      }).length;
+      const best = blocks.slice().sort((a, b) =>
+        (b.demandPerHour.weed || 0) - (a.demandPerHour.weed || 0))[0];
+      const km = c.home ? 0 : distanceKm(home, c);
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${esc(c.name)}${c.home ? ' <span style="color:var(--text-faint)">· home</span>' : ''}</span>
+          <span class="card__cost">${mine} ${mine === 1 ? 'place' : 'places'}</span>
+        </div>
+        <div class="card__meta">
+          <span>${blocks.length} blocks</span>
+          ${km ? `<span>${Math.round(km).toLocaleString()} km out</span>` : ''}
+          ${best ? `<span style="color:var(--money)">${money(streetPrice(best, 'weed'))}/lb</span>` : ''}
+          ${c.countryCode ? `<span style="color:var(--text-faint)">${esc(String(c.countryCode).toUpperCase())}</span>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const flights = (s.shipments || []).map((sh) => {
+      const to = cities.find((c) => c.id === sh.toCityId);
+      const hoursLeft = Math.max(0, (sh.arrivesAtMinute - s.minutes) / 60);
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${units(sh.amount)} ${esc(PRODUCTS[sh.productId].packName)}</span>
+          <span class="card__cost">to ${esc(to ? to.name : '?')}</span>
+        </div>
+        <div class="card__meta">
+          <span>${(hoursLeft / 24).toFixed(1)} days out</span>
+          <span class="${sh.risk > 0.3 ? 'warn' : ''}">${Math.round(sh.risk * 100)}% it doesn't arrive</span>
+          <span style="color:var(--text-faint)">${money(sh.fee)} to carry</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    const options = openableFrom(s).slice(0, 8).map((d) => {
+      const cost = foundingCost(s, d.distance);
+      const short = s.cash.clean < cost;
+      const q = quoteShipment(s, home, d, 100, 0);
+      return `<button class="card ${short ? 'is-locked' : ''}"
+        data-action="found-city" data-type="${esc(d.name)}" ${short ? 'disabled' : ''}>
+        <div class="card__head">
+          <span class="card__name">${esc(d.name)}</span>
+          <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(cost)}</span>
+        </div>
+        <div class="card__meta">
+          <span>${Math.round(d.distance).toLocaleString()} km</span>
+          <span>${(q.hours / 24).toFixed(1)} days by smuggler</span>
+          <span class="${q.risk > 0.3 ? 'warn' : ''}">${Math.round(q.risk * 100)}% risk on 100 lb</span>
+          ${d.crossesBorder ? '<span style="color:var(--warn)">border</span>' : ''}
+        </div>
+      </button>`;
+    }).join('');
+
+    return `<div class="sect">
+        <div class="sect__title"><span>Where you operate</span><span>${cities.length}</span></div>
+        ${cityRows}
+      </div>
+      ${(s.shipments || []).length ? `<div class="sect">
+        <div class="sect__title"><span>In the wind</span><span>${s.shipments.length}</span></div>
+        <p class="card__blurb" style="margin:0 0 8px">
+          Handed to a smuggler. Nothing to watch — it either turns up or it
+          doesn't, and splitting a load across runs is safer than sending it all
+          at once.
+        </p>
+        ${flights}
+      </div>` : ''}
+      <div class="sect">
+        <div class="sect__title"><span>Open somewhere new</span>
+          <span style="color:var(--text-faint)">clean money</span></div>
+        <p class="card__blurb" style="margin:0 0 8px">
+          Not more room — a different market. Another country prices every
+          product differently, which is the whole reason to move weight there
+          rather than sell it at home.
+        </p>
+        ${options || '<div class="empty">Nowhere left on the list.</div>'}
+      </div>`;
+  }
+
   renderRail(force = false) {
     const map = {
       build: () => this.tabBuild(),
@@ -526,6 +626,7 @@ export class GameUI {
       fleet: () => this.tabFleet(),
       routes: () => this.tabRoutes(),
       lab: () => this.tabLab(),
+      cities: () => this.tabCities(),
       ledger: () => this.tabLedger(),
       admin: () => this.tabAdmin(),
     };
@@ -1013,6 +1114,67 @@ export class GameUI {
     </details>`;
   }
 
+  /**
+   * Bucket what can go on this lot into named groups.
+   *
+   * 52 building types, 24 of them fronts, is a scroll rather than a choice.
+   * Production splits by what it MAKES, because that is how you actually think
+   * about it — "where do I put another grow" — and everything else splits by
+   * what it is for.
+   */
+  buildGroups(opts) {
+    const groups = new Map();
+    const put = (key, o) => {
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(o);
+    };
+    for (const o of opts) {
+      const def = o.def;
+      if (def.kind === 'production' && def.product) {
+        put(`Making ${PRODUCTS[def.product].name.toLowerCase()}`, o);
+      } else if (def.kind === 'processing') {
+        put('Processing', o);
+      } else if (def.kind === 'storage' || def.kind === 'depot') {
+        put('Storage and haulage', o);
+      } else if (def.kind === 'front') {
+        put('Legitimate business', o);
+      } else {
+        put('Base and research', o);
+      }
+    }
+    // Production first and in a stable order, then the rest.
+    return [...groups.entries()].sort((a, b) => {
+      const rank = (k) => (k.startsWith('Making') ? 0
+        : k === 'Processing' ? 1
+        : k === 'Storage and haulage' ? 2
+        : k === 'Base and research' ? 3 : 4);
+      return rank(a[0]) - rank(b[0]) || a[0].localeCompare(b[0]);
+    });
+  }
+
+  /**
+   * One collapsible group. Anything with more than a handful inside starts
+   * shut, and the summary carries the count and how many you can afford right
+   * now — so a closed group still tells you whether it is worth opening.
+   */
+  buildGroup(label, items, card, openByDefault) {
+    const usable = items.filter((o) => !o.locked).length;
+    const cheapest = items
+      .filter((o) => !o.locked)
+      .map((o) => o.def.cost)
+      .sort((a, b) => a - b)[0];
+    const open = openByDefault && items.length <= 5 ? ' open' : '';
+    return `<details class="upgrades" style="margin-top:8px"${open}>
+      <summary>${esc(label)}
+        <span style="color:var(--text-faint)">· ${items.length}</span>
+        ${usable === 0
+          ? '<span style="color:var(--text-faint)">· none available yet</span>'
+          : `<span style="color:var(--good)">· from ${moneyShort(cheapest)}</span>`}
+      </summary>
+      ${items.map(card).join('')}
+    </details>`;
+  }
+
   /** The "what do we run here" chooser for a building you already own. */
   lotDevelopBlock(lot) {
     const s = this.game.state;
@@ -1066,7 +1228,9 @@ export class GameUI {
       (illegal.length ? `<div class="sect__title" style="margin-top:4px">
         <span>The chain</span><span style="color:var(--text-faint)">street money</span>
       </div>
-      ${illegal.map(card).join('')}` : '') +
+      ${this.buildGroups(illegal)
+        .map(([label, items]) => this.buildGroup(label, items, card, true))
+        .join('')}` : '') +
       (legal.length ? `<div class="sect__title" style="margin-top:12px">
         <span>Legitimate business</span><span style="color:var(--good)">clean money</span>
       </div>
@@ -1075,7 +1239,7 @@ export class GameUI {
         moment it lands, never raided, and it cools the block down. Washes
         street cash on the side.
       </p>
-      ${legal.map(card).join('')}` : '')
+      ${this.buildGroup('Fronts', legal, card, false)}` : '')
     );
   }
 
@@ -2420,11 +2584,12 @@ export class GameUI {
               })}</div>
               <div class="card__head">
                 <span class="card__name">${live ? '▸ ' : ''}${esc(m.name)}</span>
-                <span class="card__cost" style="color:var(--text-dim)">${m.valueMult.toFixed(2)}× value</span>
+                <span class="card__cost" style="color:var(--text-dim)">${moneyShort(PRODUCTS.iron.basePrice * m.valueMult)} each</span>
               </div>
               <div class="card__blurb">${esc(m.blurb)}</div>
               <div class="card__meta">
                 <span class="${m.yieldMult >= 1 ? 'good' : 'warn'}">${m.yieldMult.toFixed(2)}× output</span>
+                <span style="color:var(--text-faint)">${m.valueMult.toFixed(2)}× a plain unit</span>
               </div>
             </button>`;
           }).join('')}

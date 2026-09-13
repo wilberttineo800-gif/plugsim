@@ -34,7 +34,7 @@ export const PROJECTS = {
     field: 'botany',
     blurb:
       'Pop a few hundred seeds, keep the one plant worth keeping. The slow, real way a strain gets made.',
-    cost: 26000,
+    cost: 2600000,
     hours: 260,
     effects: { qualityAdd: { weed: 0.12 } },
     result: 'Every grow you run turns out a better product.',
@@ -45,7 +45,7 @@ export const PROJECTS = {
     field: 'botany',
     blurb:
       'Clean stock held in vitro instead of a room full of mothers. No drift, no pests, and it takes up a shelf.',
-    cost: 48000,
+    cost: 4800000,
     hours: 400,
     requires: ['phenohunt'],
     effects: { yieldMult: { weed: 1.15 }, cycleMult: 0.92 },
@@ -57,7 +57,7 @@ export const PROJECTS = {
     field: 'botany',
     blurb:
       'Properly pasteurised bulk and still-air work. Contamination is what kills a mushroom operation, not yield.',
-    cost: 31000,
+    cost: 3100000,
     hours: 300,
     effects: { yieldMult: { shrooms: 1.22 }, qualityAdd: { shrooms: 0.1 } },
     result: 'Fruiting rooms lose far less to contamination.',
@@ -70,7 +70,7 @@ export const PROJECTS = {
     field: 'chemistry',
     blurb:
       'Recover your solvent instead of pouring it away. The single biggest cost in any extraction is the thing you throw out.',
-    cost: 54000,
+    cost: 5400000,
     hours: 380,
     effects: { processCostMult: 0.72 },
     result: 'Processing costs drop by nearly a third.',
@@ -81,7 +81,7 @@ export const PROJECTS = {
     field: 'chemistry',
     blurb:
       'Separate the fractions properly and you can sell the good one for what it is actually worth.',
-    cost: 92000,
+    cost: 9200000,
     hours: 520,
     requires: ['reflux'],
     effects: { qualityAdd: { hash: 0.18, pills: 0.14 } },
@@ -95,7 +95,7 @@ export const PROJECTS = {
     field: 'engineering',
     blurb:
       'Jigs and fixtures so parts come out the same every time. This is what separates a workshop from a manufacturer.',
-    cost: 74000,
+    cost: 7400000,
     hours: 420,
     effects: { yieldMult: { iron: 1.2 } },
     result: 'Firearms shops turn out considerably more.',
@@ -106,7 +106,7 @@ export const PROJECTS = {
     field: 'engineering',
     blurb:
       'Proper hardening and finishing. The difference between something that works and something that lasts.',
-    cost: 118000,
+    cost: 11800000,
     hours: 600,
     requires: ['tooling'],
     effects: { qualityAdd: { iron: 0.2 } },

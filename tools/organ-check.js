@@ -262,33 +262,6 @@ for (let i = 0; i < 400; i++) {
 ok(lightLost < lost, `and a handgun does it far less often (${lightLost} against ${lost})`);
 
 
-// --- Selling yourself -------------------------------------------------------
-// The hard rule, taken straight from the reference: the last of a vital organ
-// is not offered with a warning, it is refused. There is no version of it that
-// a mis-tap can reach.
-import { sellableOffSelf, sellOwnPart } from '../src/game/actions.js';
-
-const me = { cash: { clean: 0, dirty: 0 }, log: [], minutes: 0, buildings: [], districts: [] };
-const offered = sellableOffSelf(me);
-ok(offered.length > 30, `${offered.length} things you are made of are worth money`);
-ok(offered.every((o) => o.value > 0), 'and every one of them has a price');
-ok(offered.some((o) => !o.survives), 'some of which you would not survive selling');
-
-const kidney = sellOwnPart(me, 'kidney');
-ok(kidney.ok && kidney.net > 0, `a kidney sells for $${(kidney.net || 0).toLocaleString()}`);
-ok(me.cash.dirty === kidney.net, 'and it is street money — there is no clean version');
-ok(!!kidney.symptom, 'with a permanent consequence attached');
-
-ok(!sellOwnPart(me, 'kidney').ok, 'the second is refused');
-ok(!sellOwnPart(me, 'heart').ok, 'and so is the heart');
-ok(!sellOwnPart(me, 'liver').ok, 'and the liver');
-ok(isAlive(me.character.body), 'and you are still alive, because none of those happened');
-
-// It goes on costing you.
-ok(capacities(me.character.body).breathing === 1, 'a kidney does not affect breathing');
-sellOwnPart(me, 'lung');
-ok(capacities(me.character.body).breathing < 1, 'but a lung does, permanently');
-
 // --- Hidden, not advertised -------------------------------------------------
 //
 // None of this is a goal shown greyed out with a target attached. It is not in

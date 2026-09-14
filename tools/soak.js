@@ -28,7 +28,7 @@ import { PARTS } from '../src/game/anatomy.js';
 import { captivesOf } from '../src/game/captives.js';
 
 const DAYS = Number(globalThis.SOAK_DAYS || 1000);
-let seed = 20260914;
+let seed = Number(globalThis.SOAK_SEED || 20260914);
 const rand = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
 
 const origin = { lat: 42.3314, lng: -83.0458 };
@@ -64,7 +64,8 @@ const tally = {
   snatchTried: 0, snatchGot: 0,
   partsTaken: 0, captivesDied: 0,
   organsHarvested: 0, organsSpoiled: 0, organsSold: 0,
-  organRevenue: 0, selfSold: 0, selfRevenue: 0,
+  organRevenue: 0,
+  docHired: 0, fitted: 0, fitFailed: 0, fitSpend: 0,
   peakHeat: 0, revivals: 0,
 };
 
@@ -164,12 +165,27 @@ for (let day = 1; day <= DAYS; day++) {
     }
   }
 
-  // Sell yourself occasionally, because people do.
-  if (rand() < 0.01) {
-    const offer = A.sellableOffSelf(st).filter((o) => o.survives && o.value > 20000)[0];
-    if (offer) {
-      const r = A.sellOwnPart(st, offer.part.id);
-      if (r.ok) { tally.selfSold++; tally.selfRevenue += r.net; }
+  // Have work done. You cannot sell yourself — you can put something back, and
+  // occasionally put something better in, and neither happens without the
+  // person you are paying a retainer to.
+  if (!A.hasDoc(st) && st.cash.clean > 2000000 && rand() < 0.02) {
+    if (A.hireStreetDoc(st).ok) tally.docHired++;
+  }
+  if (A.hasDoc(st) && rand() < 0.04) {
+    const jobs = A.fitmentsFor(st).filter((j) => j.gap && !j.installed);
+    if (jobs.length) {
+      const job = jobs[Math.floor(rand() * jobs.length)];
+      const affordable = job.tiers.filter((o) => o.cost < st.cash.clean * 0.4
+        && (!o.tier.needsStock || o.stocked));
+      if (affordable.length) {
+        const pick = affordable[Math.floor(rand() * affordable.length)];
+        const r = A.fitPart(st, job.fitment.id, pick.tier.id);
+        if (r.ok) {
+          tally.fitted++;
+          tally.fitSpend += r.cost || 0;
+          if (r.failed) tally.fitFailed++;
+        }
+      }
     }
   }
 
@@ -220,7 +236,11 @@ print(`  harvested        ${tally.organsHarvested} pieces`);
 print(`  sold             ${tally.organsSold}, spoiled ${tally.organsSpoiled} (${pct(tally.organsSpoiled, tally.organsSold + tally.organsSpoiled)} wasted)`);
 print(`  organ revenue    $${Math.round(tally.organRevenue).toLocaleString()}`
   + ` ($${Math.round(tally.organRevenue / Math.max(1, tally.organsSold)).toLocaleString()} a piece)`);
-print(`  sold off self    ${tally.selfSold} for $${Math.round(tally.selfRevenue).toLocaleString()}`);
+print('');
+print('WORK DONE ON YOU');
+print(`  doctors hired    ${tally.docHired}`);
+print(`  things fitted    ${tally.fitted - tally.fitFailed} of ${tally.fitted} attempts`);
+print(`  spent on it      $${Math.round(tally.fitSpend).toLocaleString()}`);
 print(`  peak block heat  ${Math.round(tally.peakHeat)}`);
 print('');
 print('AT THE END');

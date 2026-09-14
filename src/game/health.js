@@ -36,6 +36,7 @@ import { clamp, clamp01 } from './rng.js';
 import {
   targetsIn, PARTS, PART_IDS, countOf, survivesWithout,
 } from './anatomy.js';
+import { installedEfficiency } from './bionics.js';
 
 // --- The body ---------------------------------------------------------------
 
@@ -232,7 +233,13 @@ export function newBody() {
   // `missing` is anatomical parts that have been TAKEN OUT, which is a
   // different thing from a region being shot up. Somebody can be perfectly
   // well and one kidney short.
-  return { parts, wounds: [], blood: 1, woundCounter: 0, deadAt: null, missing: {} };
+  return {
+    parts, wounds: [], blood: 1, woundCounter: 0, deadAt: null,
+    missing: {},
+    // What has been fitted, keyed the same way: a region for a whole limb, an
+    // anatomy part for anything inside one.
+    installed: {},
+  };
 }
 
 /** How many of a given anatomical part have been removed. */
@@ -281,7 +288,11 @@ export function organFactor(body, capacityId) {
     if (p.capacity !== capacityId) continue;
     const n = countOf(p);
     total += n;
-    have += n - missingCount(body, id);
+    const gone = missingCount(body, id);
+    // One of whatever is gone can have been replaced, and it works as well as
+    // the thing that was fitted rather than not at all.
+    const eff = installedEfficiency(body, id);
+    have += (n - gone) + (gone > 0 && eff > 0 ? Math.min(gone, 1) * eff : 0);
   }
   return total ? clamp01(have / total) : 1;
 }
@@ -301,7 +312,14 @@ export function openWounds(body) {
  * worst one of them, which is the whole reason volume of fire matters.
  */
 export function partDamage(body, partId) {
-  if (!body.parts[partId] || body.parts[partId].lost) return 1;
+  if (!body.parts[partId]) return 1;
+  // A limb that has been replaced is not a missing limb. It is a limb that
+  // works as well as whatever was fitted — which for a bionic is better than
+  // the one that was taken off.
+  if (body.parts[partId].lost) {
+    const eff = installedEfficiency(body, partId);
+    return eff > 0 ? clamp01(1 - eff) : 1;
+  }
   const scar = body.parts[partId].scar || 0;
   return clamp01(scar + woundsOn(body, partId).reduce((n, w) => n + w.severity, 0));
 }
@@ -332,7 +350,10 @@ export function capacities(body) {
       counts[cap] = (counts[cap] || 0) + 1;
     }
   }
-  const efficiencyOf = (pid) => (body.parts[pid].lost ? 0 : 1 - partDamage(body, pid));
+  // Ask partDamage rather than short-circuiting on `lost`: a limb that has
+  // been replaced IS lost, and also works. Checking the flag first meant a
+  // bionic arm contributed nothing, which is the opposite of the point.
+  const efficiencyOf = (pid) => 1 - partDamage(body, pid);
   for (const pid of BODY_PART_IDS) {
     for (const cap of BODY_PARTS[pid].capacities || []) {
       out[cap] += efficiencyOf(pid) / counts[cap];
@@ -368,7 +389,11 @@ export function isAlive(body) {
   // The last of a vital organ, whoever took it.
   for (const id of PART_IDS) {
     const p = PARTS[id];
-    if (p.vital && missingCount(body, id) >= countOf(p)) return false;
+    if (!p.vital) continue;
+    if (missingCount(body, id) < countOf(p)) continue;
+    // Unless something was put back in its place.
+    if (installedEfficiency(body, id) > 0) continue;
+    return false;
   }
   const caps = capacities(body);
   return !Object.values(CAPACITIES).some((c) => c.fatalAtZero && caps[c.id] <= 0.001);

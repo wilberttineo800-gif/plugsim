@@ -33,6 +33,13 @@ import {
 } from './health.js';
 import { PARTS, countOf, survivesWithout, partValue } from './anatomy.js';
 import {
+  TIERS, FITMENTS, FITMENT_IDS, tiersFor, fitmentCost, fitmentState,
+  installedTier,
+} from './bionics.js';
+import {
+  STREET_DOC, docOf, hasDoc, hireDoc, releaseDoc, riskOf,
+} from './streetdoc.js';
+import {
   characterOf, protectionOf, armedWith, equip, setTrait, setModel as setLookPreset,
 } from './character.js';
 import {
@@ -1668,63 +1675,6 @@ export function releaseCaptive(state, captiveId) {
   return res;
 }
 
-// --- Selling yourself -------------------------------------------------------
-//
-// The desperation move, and the reason the whole system is worth having. It is
-// available from the moment you have a buyer, it pays rent money now, and the
-// kidney you sold in month one is still hurting you in month six.
-//
-// The hard rule is taken straight from the reference and is correct: the last
-// of a vital organ is instant death, and it is refused outright rather than
-// offered with a warning. There is no version of this that is an accident.
-
-export function sellableOffSelf(state) {
-  const ch = characterOf(state);
-  const atHour = Math.floor((state.minutes || 0) / 60);
-  return Object.keys(PARTS)
-    .map((id) => PARTS[id])
-    .map((part) => {
-      const already = missingCountOf(ch.body, part.id);
-      const left = countOf(part) - already;
-      const worth = partValue(part, 0, 0.8);
-      return {
-        part,
-        left,
-        survives: survivesWithout(part, already),
-        symptom: part.symptom,
-        value: Math.round(worth.value * (1 - ORGAN_TRADE.brokerCut)),
-        market: worth.market,
-      };
-    })
-    .filter((r) => r.left > 0 && r.value > 0)
-    .sort((a, b) => b.value - a.value);
-}
-
-/** Sell one off yourself. Refused outright if there is no spare. */
-export function sellOwnPart(state, partId) {
-  const part = PARTS[partId];
-  if (!part) return { ok: false, error: 'No such thing.' };
-  const ch = characterOf(state);
-  const already = missingCountOf(ch.body, partId);
-  if (already >= countOf(part)) return { ok: false, error: `You have no ${part.name.toLowerCase()} left.` };
-  if (!survivesWithout(part, already)) {
-    return {
-      ok: false,
-      error: `That is the last one. Taking it is not a trade, it is a death.`,
-    };
-  }
-  const res = removePartFrom(ch.body, partId);
-  if (!res.ok) return res;
-
-  const worth = partValue(part, 0, 0.8);
-  const net = Math.round(worth.value * (1 - ORGAN_TRADE.brokerCut));
-  state.cash.dirty += net;
-  logEvent(state,
-    `Sold a ${part.name.toLowerCase()} for $${net.toLocaleString()}. ${part.symptom || ''}`,
-    'bad');
-  return { ok: true, part, net, symptom: part.symptom };
-}
-
 /** Take the lot, whether or not they are still breathing when you start. */
 export function gutCaptive(state, captiveId) {
   if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to do that.' };
@@ -1745,4 +1695,121 @@ export function gutCaptive(state, captiveId) {
     `${res.taken.length} off the table. ${wasAlive ? 'They were alive when it started.' : ''}`,
     'bad');
   return res;
+}
+
+// --- Work done on you -------------------------------------------------------
+//
+// You cannot sell yourself. What you can do is have something put back, or
+// something better put in — and neither happens without somebody who knows
+// how, standing in the room, on a retainer.
+
+export { docOf, hasDoc, riskOf, STREET_DOC } from './streetdoc.js';
+export { TIERS, FITMENTS, tiersFor, fitmentCost } from './bionics.js';
+
+/** Take a street doctor on. The fee is to get them to answer at all. */
+export function hireStreetDoc(state) {
+  if (hasDoc(state)) return { ok: false, error: 'You already have somebody.' };
+  if (!canAfford(state, STREET_DOC.signingFee)) {
+    return { ok: false, error: `Nobody is answering for less than $${STREET_DOC.signingFee.toLocaleString()}.` };
+  }
+  const res = hireDoc(state);
+  if (!res.ok) return res;
+  spendClean(state, STREET_DOC.signingFee);
+  logEvent(state,
+    `${res.doc.name}. On a retainer at $${STREET_DOC.retainerPerDay.toLocaleString()} a day, `
+    + 'whether you need them or not.',
+    'info');
+  return res;
+}
+
+export function letDocGo(state) {
+  const res = releaseDoc(state);
+  if (!res.ok) return res;
+  logEvent(state, 'Stopped paying the retainer. Nobody to call now.', 'warn');
+  return res;
+}
+
+/** Everything that could be fitted to you, and what it would cost. */
+export function fitmentsFor(state) {
+  const ch = characterOf(state);
+  return FITMENT_IDS.map((id) => {
+    const info = fitmentState(ch.body, id, missingCountOf);
+    if (!info) return null;
+    const tiers = tiersFor(id).map((tierId) => ({
+      tier: TIERS[tierId],
+      cost: fitmentCost(id, tierId),
+      risk: riskOf(state, TIERS[tierId], FITMENTS[id]),
+      // A salvaged part is one out of your own stock, so there has to be one.
+      stocked: !TIERS[tierId].needsStock
+        || (state.organs || []).some((p) => p.organ === id
+          || (FITMENTS[id].kind === 'region' && false)),
+    }));
+    return { ...info, tiers };
+  }).filter(Boolean);
+}
+
+/**
+ * Have something fitted.
+ *
+ * It can go wrong, and how likely that is comes from the tier, the job and the
+ * doctor. When it does, the money is gone and so is whatever was being put in
+ * — which is the reason to care who you hired.
+ */
+export function fitPart(state, fitmentId, tierId) {
+  if (!hasDoc(state)) {
+    return { ok: false, error: 'Nobody to do it. You need somebody on a retainer first.' };
+  }
+  const f = FITMENTS[fitmentId];
+  const tier = TIERS[tierId];
+  if (!f || !tier) return { ok: false, error: 'No such job.' };
+  if (!tiersFor(fitmentId).includes(tierId)) {
+    return { ok: false, error: `You cannot fit a ${tier.name.toLowerCase()} ${f.name.toLowerCase()}.` };
+  }
+
+  const ch = characterOf(state);
+  const cost = fitmentCost(fitmentId, tierId);
+  if (!canAfford(state, cost)) {
+    return { ok: false, error: `That is $${cost.toLocaleString()} of work.` };
+  }
+
+  // Salvaged means somebody else's, out of your own stock.
+  let usedStock = null;
+  if (tier.needsStock) {
+    const idx = (state.organs || []).findIndex((p) => p.organ === fitmentId);
+    if (idx < 0) {
+      return { ok: false, error: `You have no ${f.name.toLowerCase()} on ice to put in.` };
+    }
+    usedStock = state.organs[idx];
+  }
+
+  spendClean(state, cost);
+  const doc = docOf(state);
+  doc.jobs = (doc.jobs || 0) + 1;
+  const risk = riskOf(state, tier, f);
+
+  if (Math.random() < risk) {
+    doc.lost = (doc.lost || 0) + 1;
+    if (usedStock) {
+      state.organs = (state.organs || []).filter((p) => p !== usedStock);
+    }
+    // A failed job is not free of consequence — it costs blood and it costs
+    // the thing that was going in.
+    ch.body.blood = clamp01(ch.body.blood - 0.12);
+    logEvent(state,
+      `It did not take. $${cost.toLocaleString()} gone and you are worse off than you were.`,
+      'bad');
+    return { ok: true, failed: true, cost };
+  }
+
+  if (usedStock) state.organs = (state.organs || []).filter((p) => p !== usedStock);
+  ch.body.installed = ch.body.installed || {};
+  ch.body.installed[fitmentId] = tierId;
+  // Putting something back does not un-take it; it stands in for it.
+  logEvent(state,
+    `${tier.name} ${f.name.toLowerCase()} fitted. `
+    + (tier.efficiency > 1
+      ? 'Better than the one you were born with.'
+      : `Works at about ${Math.round(tier.efficiency * 100)}% of the original.`),
+    tier.efficiency > 1 ? 'good' : 'info');
+  return { ok: true, failed: false, tier, cost };
 }

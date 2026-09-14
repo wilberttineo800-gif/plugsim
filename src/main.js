@@ -410,10 +410,24 @@ game.equipGear = (slotId, pieceId) => {
   game.ui.render();
 };
 
-game.sellOwnPart = (partId) => {
-  const r = A.sellOwnPart(game.state, partId);
+game.hireStreetDoc = () => {
+  const r = A.hireStreetDoc(game.state);
   if (!r.ok) { toast(r.error, 'bad'); return; }
-  toast(`${money(r.net)}. ${r.symptom || ''}`, 'bad');
+  toast(`${r.doc.name}. On a retainer now.`, 'info');
+  game.ui.render();
+};
+
+game.letDocGo = () => {
+  const r = A.letDocGo(game.state);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast('Nobody to call now.', 'warn');
+  game.ui.render();
+};
+
+game.fitPart = (fitmentId, tierId) => {
+  const r = A.fitPart(game.state, fitmentId, tierId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.failed ? 'It did not take.' : `${r.tier.name} fitted.`, r.failed ? 'bad' : 'good');
   game.ui.render();
 };
 

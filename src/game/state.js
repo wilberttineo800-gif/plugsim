@@ -67,6 +67,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     casualties: [],      // left on blocks you took by force
     captives: [],        // people you went and got
     discovered: [],      // things somebody put to you, which is not the same as unlocked
+    streetDoc: null,     // somebody who will operate on you, on a retainer
     organCounter: 0,
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
@@ -546,6 +547,7 @@ export function loadGame() {
     if (!Array.isArray(data.casualties)) data.casualties = [];
     if (!Array.isArray(data.captives)) data.captives = [];
     if (!Array.isArray(data.discovered)) data.discovered = [];
+    if (data.streetDoc === undefined) data.streetDoc = null;
     if (typeof data.organCounter !== 'number') data.organCounter = 0;
     idCounter = data.idCounter || 1;
     delete data.idCounter;

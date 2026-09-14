@@ -48,7 +48,9 @@ import {
   ORGAN_TRADE, stockOf, stockValue, stockRows,
 } from '../game/organs.js';
 import { PARTS, PART_KINDS, wholeBodyValue } from '../game/anatomy.js';
-import { hasClinic, casualtiesOf, sellableOffSelf } from '../game/actions.js';
+import {
+  hasClinic, casualtiesOf, docOf, fitmentsFor, STREET_DOC,
+} from '../game/actions.js';
 import {
   CAPTIVES, captivesOf, holdingCapacity, takeableFrom, symptomsOf,
 } from '../game/captives.js';
@@ -443,7 +445,9 @@ export class GameUI {
         break;
       case 'strip-body': g.stripBody(id); break;
       case 'release-captive': g.releaseCaptive(id); break;
-      case 'sell-self': g.sellOwnPart(type); break;
+      case 'hire-doc': g.hireStreetDoc(); break;
+      case 'drop-doc': g.letDocGo(); break;
+      case 'fit-part': g.fitPart(id, type); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -757,60 +761,95 @@ export class GameUI {
 
 
 
-  /**
-   * Your own anatomy with a price on every piece.
-   *
-   * Available from the moment there is a buyer, because the point of it is
-   * that it is there when the rent is not — it pays now and it costs you for
-   * the rest of the run. The last of a vital organ is not offered with a
-   * warning, it is not offered: that is a death, not a trade, and there is no
-   * version of it that should be reachable by a mis-tap.
-   */
-  sellSelfBlock() {
-    const s = this.game.state;
-    if (!hasClinic(s)) return '';
-    const options = sellableOffSelf(s);
-    if (!options.length) return '';
-    const spare = options.filter((o) => o.survives);
-    const noSpare = options.filter((o) => !o.survives).slice(0, 4);
 
-    return `<div class="sect">
-      <div class="sect__title"><span>Worth more in pieces</span>
-        <span class="money">${moneyShort(spare.reduce((n, o) => n + o.value, 0))}</span></div>
-      <p class="card__blurb" style="margin:0 0 10px">
-        There is a buyer, and you are made of things. It pays today and it goes
-        on costing you — the kidney you sell this month is still yours to live
-        without next year. Anything with no spare is not on this list at any
-        price.
-      </p>
-      <details class="upgrades" data-disc="sellself"
-        ${this.discOpen('sellself', false) ? 'open' : ''}>
-        <summary><span>What you could sell</span>
-          <span class="upgrades__count">${spare.length} you would survive</span></summary>
-        <div class="upgrades__body">
-          ${spare.slice(0, 20).map((o) => `
-            <button class="card" data-action="sell-self" data-type="${o.part.id}">
-              <div class="card__head">
-                <span class="card__name">${esc(o.part.name)}${o.left > 1 ? ` (${o.left})` : ''}</span>
-                <span class="card__cost money">${moneyShort(o.value)}</span>
-              </div>
-              <div class="card__blurb">${esc(o.symptom || '')}</div>
-              <div class="card__meta">
-                <span>${o.market === 'transplant' ? 'transplant' : 'tissue'}</span>
-                <span class="warn">permanent</span>
-              </div>
-            </button>`).join('')}
-          ${noSpare.length ? `<div class="sect__title" style="margin-top:10px">
-            <span>Not for sale at any price</span></div>
-            ${noSpare.map((o) => `<div class="card is-locked">
-              <div class="card__head">
-                <span class="card__name">${esc(o.part.name)}</span>
-                <span class="card__cost bad">the last one</span>
-              </div>
-              <div class="card__blurb">${esc(o.symptom || '')}</div>
-            </div>`).join('')}` : ''}
+  /**
+   * Work done on you.
+   *
+   * Sits on the X-ray because that is where you find out what is wrong, and
+   * this is the only answer to it. Leads with the doctor rather than the
+   * catalogue: without somebody on a retainer none of the rest of it is
+   * reachable, and the retainer is a bill that arrives whether you use them or
+   * not — which is the actual decision.
+   */
+  fitmentBlock() {
+    const s = this.game.state;
+    const doc = docOf(s);
+    const body = characterOf(s).body;
+
+    if (!doc) {
+      return `<div class="sect">
+        <div class="sect__title"><span>Nobody to call</span></div>
+        <p class="card__blurb" style="margin:0 0 10px">
+          Nothing goes into you without somebody who knows how. A street doctor
+          is not a service you buy by the job — they are a person you pay to be
+          available, ${moneyShort(STREET_DOC.retainerPerDay)} a day whether you
+          need them this week or not. That is the whole of it: an expense that
+          does nothing most of the time, and the only thing between you and
+          bleeding out in a back room the once it matters.
+        </p>
+        <div class="btnrow">
+          <button class="ghostbtn" data-action="hire-doc">
+            Find somebody · ${moneyShort(STREET_DOC.signingFee)}</button>
         </div>
-      </details>
+      </div>`;
+    }
+
+    const jobs = fitmentsFor(s);
+    const rows = jobs.map((j) => {
+      const f = j.fitment;
+      const fitted = j.installed;
+      return `<details class="upgrades" data-disc="fit-${f.id}"
+        ${this.discOpen(`fit-${f.id}`, false) ? 'open' : ''}>
+        <summary><span>${esc(f.name)}</span>
+          <span class="upgrades__count ${fitted ? 'good' : j.gap ? 'bad' : ''}">${
+            fitted ? `${esc(fitted.name)} · ${Math.round(fitted.efficiency * 100)}%`
+              : j.gap ? 'gone' : 'yours'}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">${
+            j.what === 'restore' ? 'Nothing there. Anything is better than nothing.'
+              : j.what === 'replace' ? 'Already fitted. Putting something else in means taking this out first.'
+              : 'Still yours and still working. Replacing it means losing the one you have.'}</p>
+          ${j.tiers.map((o) => {
+            const blocked = o.tier.needsStock && !o.stocked;
+            return `<button class="card ${blocked ? 'is-locked' : ''}"
+              data-action="fit-part" data-id="${f.id}" data-type="${o.tier.id}"
+              ${blocked ? 'disabled' : ''}>
+              <div class="card__head">
+                <span class="card__name">${esc(o.tier.name)}</span>
+                <span class="card__cost ${o.tier.efficiency > 1 ? 'good' : ''}">${
+                  Math.round(o.tier.efficiency * 100)}%</span>
+              </div>
+              <div class="card__blurb">${esc(o.tier.blurb)}</div>
+              <div class="card__meta">
+                <span class="money">${moneyShort(o.cost)}</span>
+                <span class="${o.risk > 0.25 ? 'bad' : o.risk > 0.12 ? 'warn' : ''}">${
+                  Math.round(o.risk * 100)}% it goes wrong</span>
+                ${blocked ? '<span class="warn">none on ice</span>' : ''}
+              </div>
+            </button>`;
+          }).join('')}
+        </div>
+      </details>`;
+    }).join('');
+
+    const rate = doc.jobs ? Math.round(((doc.jobs - doc.lost) / doc.jobs) * 100) : null;
+    return `<div class="sect">
+      <div class="sect__title"><span>${esc(doc.name)}</span>
+        <span>${moneyShort(STREET_DOC.retainerPerDay)}/day</span></div>
+      <div class="card__meta" style="margin:0 0 10px">
+        <span>${doc.jobs || 0} job${doc.jobs === 1 ? '' : 's'}</span>
+        ${rate != null ? `<span class="${rate > 80 ? 'good' : rate > 55 ? 'warn' : 'bad'}">${
+          rate}% went right</span>` : '<span style="color:var(--text-faint)">no work yet</span>'}
+      </div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        You cannot sell yourself. You can have something put back, or something
+        better put in. A salvaged part is somebody else's, out of your own
+        stock — which is where the rest of this ends up pointing.
+      </p>
+      ${rows}
+      <div class="btnrow">
+        <button class="ghostbtn" data-action="drop-doc">Stop paying the retainer</button>
+      </div>
     </div>`;
   }
 
@@ -1101,7 +1140,7 @@ export class GameUI {
     <div class="sect">
       <div class="sect__title"><span>Open</span><span>${open.length}</span></div>
       ${rows || '<div class="empty">Not a mark on you.</div>'}
-    </div>` + this.sellSelfBlock();
+    </div>` + this.fitmentBlock();
   }
 
 

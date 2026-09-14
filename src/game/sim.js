@@ -28,6 +28,7 @@ import { stepBody, infectionStage, BODY_PARTS } from './health.js';
 import { characterOf } from './character.js';
 import { cullSpoiled } from './organs.js';
 import { stepCaptives, captivesOf, CAPTIVES, hasColdStorage } from './captives.js';
+import { docUpkeep } from './streetdoc.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -1205,6 +1206,10 @@ function stepHeat(state, dt) {
   // infection coming in, tissue closing. A wound is not an event, it is a
   // process, and this is where the process runs.
   stepCharacter(state, dt);
+
+  // Somebody on a retainer is paid whether you needed them this week or not.
+  const doc = docUpkeep(state);
+  if (doc > 0) state.cash.clean = Math.max(0, state.cash.clean - doc * (dt / 24));
 
   // Anything on ice is losing value by the hour, and past its cold time it is
   // simply refuse. Clearing it here rather than at the point of sale means the

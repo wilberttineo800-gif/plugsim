@@ -586,7 +586,36 @@ export const BUILDINGS = {
     upkeepPerDay: 8400,
     // The hottest thing in the game by a wide margin, and it never cools.
     heatPerDay: 6.5,
+    // A chest freezer and a van. It holds a couple and it does not hold them
+    // well, which is the reason to go and get a licence instead.
+    holds: 2,
     capacity: 0,
+  },
+  morgue: {
+    id: 'morgue',
+    kind: 'clinic',
+    name: 'Funeral Home',
+    blurb: 'Chapel of rest at the front, cold room at the back, and a licence on the wall. Bodies arriving here are the least remarkable thing on the street — which is the entire point of owning one.',
+    icon: 'shop',
+    unlock: { properties: 11, cash: 38000000 },
+    cost: 520000,
+    minAreaM2: 180,
+    maxAreaM2: 1400,
+    referenceAreaM2: 420,
+    areaExponent: 0.75,
+    upkeepPerDay: 4200,
+    // A funeral home is a real business before it is anything else, and it
+    // washes money the way any cash business does.
+    revenuePerDay: 1900,
+    wealthSensitivity: 0.6,
+    cut: 0.1,
+    launderPerDay: 320000,
+    // Papered, quiet, and the cold room is the whole reason to have it.
+    heatPerDay: 0.8,
+    coldStorage: true,
+    holds: 4,
+    capacity: 0,
+    needsLicence: 'mortuary',
   },
   proving_range: {
     id: 'proving_range',

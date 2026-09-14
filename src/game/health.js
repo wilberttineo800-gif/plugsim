@@ -33,6 +33,9 @@
 // intended to be, useful outside the game.
 
 import { clamp, clamp01 } from './rng.js';
+import {
+  targetsIn, PARTS, PART_IDS, countOf, survivesWithout,
+} from './anatomy.js';
 
 // --- The body ---------------------------------------------------------------
 
@@ -102,6 +105,7 @@ export const CAPACITIES = {
   breathing: { id: 'breathing', name: 'Breathing', fatalAtZero: true },
   moving: { id: 'moving', name: 'Moving', fatalAtZero: false },
   manipulation: { id: 'manipulation', name: 'Manipulation', fatalAtZero: false },
+  sight: { id: 'sight', name: 'Sight', fatalAtZero: false },
 };
 
 // --- Wounds -----------------------------------------------------------------
@@ -225,7 +229,61 @@ export const HEALTH = {
 export function newBody() {
   const parts = {};
   for (const id of BODY_PART_IDS) parts[id] = { id, lost: false, scar: 0 };
-  return { parts, wounds: [], blood: 1, woundCounter: 0, deadAt: null };
+  // `missing` is anatomical parts that have been TAKEN OUT, which is a
+  // different thing from a region being shot up. Somebody can be perfectly
+  // well and one kidney short.
+  return { parts, wounds: [], blood: 1, woundCounter: 0, deadAt: null, missing: {} };
+}
+
+/** How many of a given anatomical part have been removed. */
+export function missingCount(body, partId) {
+  return ((body && body.missing) || {})[partId] || 0;
+}
+
+/** Everything that has been taken out, for a readout. */
+export function missingParts(body) {
+  const m = (body && body.missing) || {};
+  return Object.keys(m).filter((id) => m[id] > 0).map((id) => ({ part: PARTS[id], n: m[id] }));
+}
+
+/**
+ * Take one out.
+ *
+ * Returns whether they are still alive afterwards. A paired organ with one
+ * left is survivable and costs function; the last of a vital one is not
+ * survivable at all, and saying so here rather than at the call site means
+ * every route into this — a surgeon, a shotgun — gets the same answer.
+ */
+export function removePart(body, partId) {
+  const part = PARTS[partId];
+  if (!part) return { ok: false, error: 'No such part.' };
+  const already = missingCount(body, partId);
+  if (already >= countOf(part)) return { ok: false, error: `No ${part.name.toLowerCase()} left.` };
+  const survives = survivesWithout(part, already);
+  body.missing = body.missing || {};
+  body.missing[partId] = already + 1;
+  // Taking something out is an injury even when it is done properly.
+  body.blood = clamp01(body.blood - (part.kind === 'organ' ? 0.06 : 0.02));
+  if (!survives) body.deadAt = body.deadAt == null ? 0 : body.deadAt;
+  return { ok: true, part, survives, remaining: countOf(part) - (already + 1) };
+}
+
+/**
+ * How much of a capacity the remaining anatomy can still supply, 0 to 1.
+ *
+ * One lung is half the breathing, and it is why somebody can be sold a lung
+ * and walk out of the room.
+ */
+export function organFactor(body, capacityId) {
+  let have = 0, total = 0;
+  for (const id of PART_IDS) {
+    const p = PARTS[id];
+    if (p.capacity !== capacityId) continue;
+    const n = countOf(p);
+    total += n;
+    have += n - missingCount(body, id);
+  }
+  return total ? clamp01(have / total) : 1;
 }
 
 export function woundsOn(body, partId) {
@@ -257,7 +315,13 @@ export function partDamage(body, partId) {
  */
 export function capacities(body) {
   const out = {};
-  for (const id of Object.keys(CAPACITIES)) out[id] = 0;
+  const fromRegions = new Set();
+  for (const pid of BODY_PART_IDS) {
+    for (const cap of BODY_PARTS[pid].capacities || []) fromRegions.add(cap);
+  }
+  // A capacity no region supplies — sight, say — comes entirely from the
+  // anatomy, so it starts whole and is only reduced by what has been removed.
+  for (const id of Object.keys(CAPACITIES)) out[id] = fromRegions.has(id) ? 0 : 1;
 
   // Paired parts each SUPPLY half of their capacity, so losing one arm halves
   // manipulation rather than ending it — which is both true and the reason a
@@ -284,6 +348,12 @@ export function capacities(body) {
     }
   }
 
+  // What has been taken out counts as much as what has been shot. One lung is
+  // half the breathing whether it was a bullet or a scalpel that took it.
+  for (const id of Object.keys(out)) {
+    out[id] = Math.min(out[id], organFactor(body, id));
+  }
+
   // Blood loss takes consciousness before it takes anything else.
   const shock = clamp01((body.blood - HEALTH.deadBelow) / (HEALTH.shockBelow - HEALTH.deadBelow));
   out.consciousness = Math.min(out.consciousness, shock);
@@ -295,6 +365,11 @@ export function capacities(body) {
 export function isAlive(body) {
   if (!body || body.deadAt != null) return false;
   if (body.blood <= HEALTH.deadBelow) return false;
+  // The last of a vital organ, whoever took it.
+  for (const id of PART_IDS) {
+    const p = PARTS[id];
+    if (p.vital && missingCount(body, id) >= countOf(p)) return false;
+  }
   const caps = capacities(body);
   return !Object.values(CAPACITIES).some((c) => c.fatalAtZero && caps[c.id] <= 0.001);
 }
@@ -347,6 +422,53 @@ export function resolveWoundType(threat, protection, rand = Math.random) {
 }
 
 /**
+ * Which structures inside a region a wound actually reached.
+ *
+ * This is why two chest wounds are not the same wound. A round that clips a
+ * rib and a round that finds the heart land in the same place and on the same
+ * drawing, and only one of them is survivable. Depth is what separates them:
+ * a shallow wound cannot reach the things that sit deep, and a severe one
+ * reaches nearly everything on the way through.
+ */
+export function struckBy(regionId, severity, rand = Math.random) {
+  const inside = targetsIn(regionId);
+  if (!inside.length) return [];
+
+  // A bullet makes ONE track. Rolling every structure in the region
+  // independently means a serious chest wound involves two thirds of the
+  // chest at once, which is not a wound, it is an autopsy. So: work out how
+  // far in the track got, take the things that sit at or above that depth,
+  // and pick the handful actually along it.
+  const reached = clamp01(severity * 1.5);
+  const candidates = inside.filter((p) => (p.depth || 0.4) <= reached + 0.12);
+  if (!candidates.length) return [];
+
+  const howMany = Math.max(1, Math.min(candidates.length, Math.round(0.6 + severity * 2.6)));
+  const pool = candidates.map((p) => ({
+    part: p,
+    // Weighted by how many of them there are — two lungs are likelier than one
+    // heart — and by how far the track had left to go when it passed them.
+    // Everything shallower than the terminus is ON the line, so surface bone
+    // is hit more often than the organ the round finally stopped in.
+    weight: countOf(p) * Math.max(0.15, 0.5 + (reached - (p.depth || 0.4)) * 1.2),
+  })).filter((c) => c.weight > 0);
+
+  const hit = [];
+  for (let i = 0; i < howMany && pool.length; i++) {
+    const total = pool.reduce((n, c) => n + c.weight, 0);
+    let r = rand() * total;
+    let idx = 0;
+    for (; idx < pool.length; idx++) {
+      r -= pool[idx].weight;
+      if (r <= 0) break;
+    }
+    const chosen = pool.splice(Math.min(idx, pool.length - 1), 1)[0];
+    if (chosen) hit.push(chosen.part.id);
+  }
+  return hit;
+}
+
+/**
  * Put a round into a body.
  *
  * `threat` is the round, `protection` what was in the way at that part; both
@@ -363,15 +485,25 @@ export function takeHit(body, { part, threat = 0.4, protection = 0, atHour = 0, 
   const bite = clamp01((threat - protection) / 0.7);
   const severity = clamp01((lo + (hi - lo) * (0.35 + rand() * 0.65)) * (0.55 + bite * 0.65));
 
+  // What it found on the way through. A closed injury behind armour does not
+  // reach anything: that is the entire point of the armour.
+  const struck = def.closed ? [] : struckBy(partId, severity, rand);
+  // Finding something that matters makes the same wound a different wound.
+  const foundVital = struck.some((id) => PARTS[id] && PARTS[id].vital);
+  const foundVessel = struck.some((id) => PARTS[id] && PARTS[id].kind === 'vessel');
+  const worse = 1 + (foundVital ? 0.55 : 0) + (foundVessel ? 0.4 : 0);
+
   body.woundCounter = (body.woundCounter || 0) + 1;
   const wound = {
     id: `w${body.woundCounter}`,
     part: partId,
     type,
-    severity,
+    struck,
+    severity: clamp01(severity * (foundVital ? 1.45 : 1)),
     // Bleeding is severity, how hard that part bleeds, and what kind of hole
     // it is. A closed injury does not bleed out of the body at all.
-    bleeding: severity * BODY_PARTS[partId].bleed * def.bleedMult,
+    // A vessel is why a survivable-looking wound empties somebody in minutes.
+    bleeding: severity * BODY_PARTS[partId].bleed * def.bleedMult * worse,
     infection: 0,
     treated: false,
     healed: false,
@@ -381,6 +513,25 @@ export function takeHit(body, { part, threat = 0.4, protection = 0, atHour = 0, 
     retained: !!def.retained && type !== 'babt',
   };
   body.wounds = (body.wounds || []).concat([wound]);
+
+  // Losing a limb is not only something that happens days later to an infected
+  // wound. Enough damage takes it there and then — an avulsive wound is tissue
+  // GONE rather than damaged, and a round that destroys the bone leaves
+  // nothing to hold the rest on.
+  const region = BODY_PARTS[partId];
+  if (region.limb && !body.parts[partId].lost) {
+    const boneGone = struck.some((id) => PARTS[id] && PARTS[id].kind === 'bone')
+      && wound.severity > 0.72;
+    const tissueGone = type === 'avulsive' && wound.severity > 0.66;
+    if (boneGone || tissueGone) {
+      body.parts[partId].lost = true;
+      body.parts[partId].lostTo = tissueGone ? 'the round taking it off' : 'what it did to the bone';
+      wound.tookTheLimb = true;
+      // It stops bleeding from the limb because there is no longer a limb, but
+      // what is left bleeds hard until somebody ties it off.
+      wound.bleeding = wound.bleeding * 0.8;
+    }
+  }
   return wound;
 }
 

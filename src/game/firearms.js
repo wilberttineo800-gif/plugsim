@@ -91,6 +91,22 @@ export const LICENCES = {
     maxHeatToApply: 32,
     requires: ['nij07'],
   },
+
+  // --- The other thing ----------------------------------------------------
+  mortuary: {
+    id: 'mortuary',
+    domain: 'mortuary',
+    name: 'Mortuary Licence',
+    short: 'Mortuary',
+    blurb:
+      'A funeral director\u2019s licence. Cold storage, a hearse, and a completely unremarkable reason to have bodies on the premises. Everything about it is legitimate, which is exactly what it is for.',
+    cost: 1900000,
+    renewalPerYear: 7400,
+    processingDays: 28,
+    // They look at your record, but they are looking for a bankruptcy, not a
+    // conviction.
+    maxHeatToApply: 48,
+  },
 };
 
 export const LICENCE_IDS = Object.keys(LICENCES);

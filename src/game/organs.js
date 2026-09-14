@@ -1,158 +1,153 @@
-// The black market in parts.
+// The trade in parts.
 //
-// Grounded the same way everything else here is. Reported trafficking figures
-// put a kidney at $50-120k, a liver around $99-157k, a heart anywhere from
-// $119k to $290k, and corneas up to $30k. The other number that matters is the
-// one nobody quotes first: the person it came out of gets a thousand or two,
-// and the middlemen take everything else. That gap IS the trade, and it is
-// what this models — you are the middleman.
+// The anatomy — what a person is made of and what each piece is worth — lives
+// in anatomy.js. This is only the trade over the top of it: what comes out of
+// a body, what it is worth by the time you get to a buyer, and what a broker
+// takes for knowing one.
 //
-// The mechanic hangs off cold ischaemia time, which is real and brutal: a heart
-// is good for four to six hours out of a body, a liver eight to twelve, a
-// kidney a day or so, corneas a fortnight. So the most valuable thing you can
-// take is the one you are least likely to get anywhere, and every run is a
-// decision about what to take and how fast you can move it rather than a
-// question of how much you can carry.
+// The shape of the decision is the gap between the two markets. A viable organ
+// is worth a hundred times what the same organ is worth to a research buyer,
+// and the clock on it is measured in hours. So a run is never "how much can I
+// carry" — it is "what do I take first, and can I move it before it turns into
+// tissue".
 
 import { clamp, clamp01 } from './rng.js';
-
-export const ORGANS = {
-  cornea: {
-    id: 'cornea', name: 'Cornea', perBody: 2,
-    // Up to $30k reported. Keeps for a fortnight, which makes it the one you
-    // can actually get to a buyer.
-    price: [9000, 30000],
-    viabilityHours: 336,
-    blurb: 'Keeps for a fortnight in a jar. The only thing here you can take your time with.',
-  },
-  marrow: {
-    id: 'marrow', name: 'Marrow', perBody: 1,
-    price: [14000, 42000],
-    viabilityHours: 48,
-    blurb: 'Drawn from the pelvis. Two days, and a buyer has to be waiting.',
-  },
-  kidney: {
-    id: 'kidney', name: 'Kidney', perBody: 2,
-    // The most trafficked organ there is, and the reason: two of them, and a
-    // day and a half of cold time to find somebody.
-    price: [50000, 120000],
-    viabilityHours: 30,
-    blurb: 'Two of them, and a day and a half on ice. This is what the trade actually runs on.',
-  },
-  pancreas: {
-    id: 'pancreas', name: 'Pancreas', perBody: 1,
-    price: [40000, 90000],
-    viabilityHours: 15,
-    blurb: 'Fifteen hours. Difficult to place and difficult to keep.',
-  },
-  liver: {
-    id: 'liver', name: 'Liver', perBody: 1,
-    price: [99000, 157000],
-    viabilityHours: 11,
-    blurb: 'Eleven hours. Worth a great deal to somebody who is already waiting for it.',
-  },
-  lung: {
-    id: 'lung', name: 'Lung', perBody: 2,
-    price: [70000, 140000],
-    viabilityHours: 6,
-    blurb: 'Six hours. Almost nobody moves one in time.',
-  },
-  heart: {
-    id: 'heart', name: 'Heart', perBody: 1,
-    price: [119000, 290000],
-    viabilityHours: 5,
-    blurb: 'Five hours, and then it is nothing. The most valuable thing here and the hardest to sell.',
-  },
-};
-
-export const ORGAN_IDS = Object.keys(ORGANS);
+import {
+  PARTS, PART_IDS, partsIn, countOf, partValue, viabilityOf, isTransplantable,
+} from './anatomy.js';
 
 export const ORGAN_TRADE = {
-  /** What a body actually yields, before anything is spoiled or botched. */
-  yieldFloor: 0.35,
+  /** Base chance a given piece comes out usable at all. */
+  yieldFloor: 0.3,
   /** What the block thinks of you afterwards. People find out. */
   repHit: 0.34,
   /** Attention, per body, on the block it happened on. */
   heatPerBody: 14,
   /** What a broker takes off the top. */
   brokerCut: 0.28,
-  /** What the person it came out of, or whoever is owed, gets. The gap is you. */
-  donorShare: 0.012,
-  /** Nothing is worth anything past its cold time; this is how fast it falls. */
-  decayCurve: 1.6,
 };
-
-/**
- * What a piece is still worth, 0 to 1, given how long it has been out.
- *
- * Flat for the first third of its cold time, then falling away fast. A heart
- * an hour late is not worth a little less; it is worth nothing.
- */
-export function viability(organ, hoursOut) {
-  const def = ORGANS[organ];
-  if (!def) return 0;
-  const f = hoursOut / def.viabilityHours;
-  if (f <= 0.33) return 1;
-  if (f >= 1) return 0;
-  return clamp01(Math.pow(1 - (f - 0.33) / 0.67, ORGAN_TRADE.decayCurve));
-}
-
-/** What one piece fetches now, before the broker takes his cut. */
-export function organValue(piece, atHour, quality = 1) {
-  const def = ORGANS[piece.organ];
-  if (!def) return 0;
-  const v = viability(piece.organ, Math.max(0, atHour - piece.takenAt));
-  const [lo, hi] = def.price;
-  return Math.round((lo + (hi - lo) * clamp01(quality)) * v);
-}
-
-/**
- * What comes out of one body.
- *
- * Not everything, and not reliably. A body that has been shot is a body with
- * holes in the things you wanted, which is why the yield is rolled per organ
- * rather than handed over as a set.
- */
-export function harvest(body, { atHour = 0, skill = 0.6, rand = Math.random } = {}) {
-  const out = [];
-  for (const id of ORGAN_IDS) {
-    const def = ORGANS[id];
-    for (let i = 0; i < def.perBody; i++) {
-      // Bigger, deeper organs are likelier to have been damaged getting here.
-      const fragile = def.viabilityHours < 12 ? 0.22 : 0;
-      if (rand() > clamp(ORGAN_TRADE.yieldFloor + skill * 0.55 - fragile, 0.05, 0.95)) continue;
-      out.push({
-        organ: id,
-        takenAt: atHour,
-        quality: clamp01(0.35 + skill * 0.5 + rand() * 0.2),
-      });
-    }
-  }
-  return out;
-}
 
 /** Everything currently on ice. */
 export function stockOf(state) {
   return (state && state.organs) || [];
 }
 
+/** How long a piece has been out, in hours. */
+export function hoursOut(piece, atHour) {
+  return Math.max(0, atHour - (piece.takenAt || 0));
+}
+
+/** What one piece is worth now, and which market it is on. */
+export function pieceWorth(piece, atHour) {
+  const part = PARTS[piece.organ];
+  if (!part) return { value: 0, market: 'none', viability: 0 };
+  return partValue(part, hoursOut(piece, atHour), piece.quality != null ? piece.quality : 0.6);
+}
+
+/** Backwards-compatible single number, for anything that just wants the money. */
+export function organValue(piece, atHour, quality) {
+  const part = PARTS[piece.organ];
+  if (!part) return 0;
+  return partValue(part, hoursOut(piece, atHour), quality != null ? quality : piece.quality).value;
+}
+
+/** How good a transplant piece still is, 0 to 1. Tissue does not expire. */
+export function viability(organId, hours) {
+  const part = PARTS[organId];
+  if (!part || !part.transplant) return 1;
+  return viabilityOf(part.transplant.hours, hours);
+}
+
+/**
+ * What comes out of one body.
+ *
+ * Every part is rolled for separately, because a body that has been shot is a
+ * body with holes in some of the things you wanted. Deep structures are harder
+ * to get out intact than surface ones, and the short-clock organs are the ones
+ * most likely to have been ruined on the way here — which is the same reason
+ * they are worth the most.
+ */
+export function harvest(_body, { atHour = 0, skill = 0.6, rand = Math.random } = {}) {
+  const out = [];
+  for (const id of PART_IDS) {
+    const part = PARTS[id];
+    const n = countOf(part);
+    for (let i = 0; i < n; i++) {
+      const deep = (part.depth || 0.4) * 0.3;
+      const fragile = isTransplantable(part) && part.transplant.hours < 12 ? 0.2 : 0;
+      const chance = clamp(ORGAN_TRADE.yieldFloor + skill * 0.6 - deep - fragile, 0.05, 0.95);
+      if (rand() > chance) continue;
+      out.push({
+        organ: id,
+        takenAt: atHour,
+        quality: clamp01(0.3 + skill * 0.5 + rand() * 0.25),
+      });
+    }
+  }
+  return out;
+}
+
 /** What the whole lot would fetch right now, net of the broker. */
 export function stockValue(state, atHour) {
   return stockOf(state).reduce(
-    (n, p) => n + Math.round(organValue(p, atHour, p.quality) * (1 - ORGAN_TRADE.brokerCut)),
+    (n, p) => n + Math.round(pieceWorth(p, atHour).value * (1 - ORGAN_TRADE.brokerCut)),
     0
   );
 }
 
-/** Drop anything that is past saving, and say what went. */
+/**
+ * Drop anything that is genuinely worthless, and say what went.
+ *
+ * Far less than it used to be. A heart past its cold time is no longer a heart
+ * worth a quarter of a million — but the valves in it are tissue and tissue
+ * keeps, so what leaves the ice is only what has no buyer on either market.
+ */
 export function cullSpoiled(state, atHour) {
-  const stock = stockOf(state);
   const keep = [];
   const gone = [];
-  for (const p of stock) {
-    if (viability(p.organ, atHour - p.takenAt) <= 0.001) gone.push(p);
+  for (const p of stockOf(state)) {
+    if (pieceWorth(p, atHour).value <= 0) gone.push(p);
     else keep.push(p);
   }
   state.organs = keep;
   return gone;
 }
+
+/**
+ * What has just dropped off the transplant market since the last check.
+ *
+ * Worth telling the player about: the money did not vanish, it fell through
+ * the floor, and that is the moment the decision they made earlier paid or
+ * did not.
+ */
+export function newlyTissue(state, fromHour, toHour) {
+  return stockOf(state).filter((p) => {
+    const part = PARTS[p.organ];
+    if (!part || !part.transplant) return false;
+    return viability(p.organ, hoursOut(p, fromHour)) > 0
+      && viability(p.organ, hoursOut(p, toHour)) <= 0;
+  });
+}
+
+/** Grouped for a readout: one row per kind of thing, with its market and worth. */
+export function stockRows(state, atHour) {
+  const rows = {};
+  for (const p of stockOf(state)) {
+    const part = PARTS[p.organ];
+    if (!part) continue;
+    const w = pieceWorth(p, atHour);
+    const row = rows[p.organ] || (rows[p.organ] = {
+      part, n: 0, value: 0, market: w.market, worst: 1,
+    });
+    row.n++;
+    row.value += w.value;
+    row.worst = Math.min(row.worst, w.viability != null ? w.viability : 1);
+    if (w.market === 'transplant') row.market = 'transplant';
+  }
+  return Object.values(rows).sort((a, b) => b.value - a.value);
+}
+
+// Kept so anything still importing the old table keeps working; the anatomy is
+// the source of truth now.
+export const ORGANS = PARTS;
+export const ORGAN_IDS = PART_IDS;

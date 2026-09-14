@@ -410,6 +410,42 @@ game.equipGear = (slotId, pieceId) => {
   game.ui.render();
 };
 
+game.sellOwnPart = (partId) => {
+  const r = A.sellOwnPart(game.state, partId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${money(r.net)}. ${r.symptom || ''}`, 'bad');
+  game.ui.render();
+};
+
+game.snatchSomebody = (districtId) => {
+  const r = A.snatchSomebody(game.state, districtId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.got ? `${r.got.name}.` : 'It went wrong. People saw.', r.got ? 'info' : 'bad');
+  game.ui.render();
+};
+
+game.takePart = (captiveId, partId) => {
+  const r = A.takePart(game.state, captiveId, partId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.died ? 'That was the one there was no spare of.' : `${r.part.name} out. They are still breathing.`,
+    r.died ? 'bad' : 'warn');
+  game.ui.render();
+};
+
+game.stripBody = (id) => {
+  const r = A.stripBody(game.state, id);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${r.taken.length} more on ice.`, 'info');
+  game.ui.render();
+};
+
+game.releaseCaptive = (id) => {
+  const r = A.releaseCaptive(game.state, id);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.captive.dead ? 'Gone.' : 'They walked.', 'info');
+  game.ui.render();
+};
+
 game.harvestCasualty = (id) => {
   const r = A.harvestCasualty(game.state, id);
   if (!r.ok) { toast(r.error, 'bad'); return; }

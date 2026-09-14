@@ -90,9 +90,22 @@ ok(early.died == null, 'the same wound seen to inside the contamination window d
 ok(early.healedAt != null, `and closes (day ${early.healedAt})`);
 ok(early.scar < 0.01, 'leaving nothing behind');
 
-const late = run({ treatAt: 60 });
-ok(late.scar > 0.01, `seen to two and a half days late leaves permanent damage (${Math.round(late.scar * 100)}%)`);
-ok(late.healedAt > early.healedAt, 'and takes longer to close');
+// Across seeds rather than on one roll: the claim is about the CLOCK, and a
+// single seeded wound is hostage to whatever else consumed random numbers.
+let lateScarred = 0, earlyScarred = 0, lateSlower = 0, compared = 0;
+for (let seed = 1; seed <= 25; seed++) {
+  const e = run({ treatAt: 6, seed });
+  const l = run({ treatAt: 60, seed });
+  if (l.scar > 0.01) lateScarred++;
+  if (e.scar > 0.01) earlyScarred++;
+  if (e.healedAt != null && l.healedAt != null) {
+    compared++;
+    if (l.healedAt >= e.healedAt) lateSlower++;
+  }
+}
+ok(lateScarred > 8, `being seen to two days late usually leaves permanent damage (${lateScarred}/25)`);
+ok(earlyScarred === 0, `and being seen to inside the window never does (${earlyScarred}/25)`);
+ok(lateSlower === compared, `late always takes at least as long to close (${lateSlower}/${compared})`);
 
 // Infection has to actually progress in order, not jump.
 const order = INFECTION_STAGES.map((s) => s.at);

@@ -27,6 +27,7 @@ import { lineEffects, lineKindOf } from './lines.js';
 import { stepBody, infectionStage, BODY_PARTS } from './health.js';
 import { characterOf } from './character.js';
 import { cullSpoiled } from './organs.js';
+import { stepCaptives, captivesOf, CAPTIVES, hasColdStorage } from './captives.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -1208,6 +1209,21 @@ function stepHeat(state, dt) {
   // Anything on ice is losing value by the hour, and past its cold time it is
   // simply refuse. Clearing it here rather than at the point of sale means the
   // clock is real whether or not the player is looking at it.
+  // Anybody being held is somebody being looked for, and costs money to keep.
+  if (captivesOf(state).length) {
+    const alive = captivesOf(state).filter((c) => !c.dead);
+    if (alive.length) {
+      state.cash.dirty = Math.max(0, state.cash.dirty - CAPTIVES.upkeepPerDay * alive.length * (dt / 24));
+      const hd = districtById(state, armouryDistrictId(state));
+      if (hd) {
+        hd.heat = clamp(hd.heat + CAPTIVES.heatPerDayHeld * alive.length * (dt / 24), 0, HEAT.max);
+      }
+    }
+    for (const e of stepCaptives(state, dt)) {
+      if (e.kind === 'died') logEvent(state, `${e.captive.name} stopped breathing.`, 'bad');
+    }
+  }
+
   if ((state.organs || []).length) {
     const gone = cullSpoiled(state, Math.floor((state.minutes || 0) / 60));
     if (gone.length) {

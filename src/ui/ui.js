@@ -27,6 +27,15 @@ import {
   BODY_PARTS, BODY_PART_IDS, CAPACITIES, WOUND_TYPES, HEALTH,
   capacities, condition, openWounds, infectionStage, treatmentCost,
 } from '../game/health.js';
+import { symptomsFor } from '../game/anatomy.js';
+
+/** What losing a whole limb is like, as against losing something inside one. */
+const LIMB_SYMPTOM = {
+  armL: 'Everything two-handed is now one-handed.',
+  armR: 'Everything two-handed is now one-handed.',
+  legL: 'Crutches, or a chair, and stairs are a negotiation.',
+  legR: 'Crutches, or a chair, and stairs are a negotiation.',
+};
 import {
   SLOTS, SLOT_IDS, characterOf, equippedIn, candidatesFor, coverage,
   armedWith, pieceLabel,
@@ -36,9 +45,13 @@ import {
 } from './bodyart.js';
 import { MODELS as LOOK_MODELS, TRAITS, BUILDS } from '../game/appearance.js';
 import {
-  ORGANS, ORGAN_TRADE, stockOf, stockValue, viability, organValue,
+  ORGAN_TRADE, stockOf, stockValue, stockRows,
 } from '../game/organs.js';
-import { hasClinic, casualtiesOf } from '../game/actions.js';
+import { PARTS, PART_KINDS, wholeBodyValue } from '../game/anatomy.js';
+import { hasClinic, casualtiesOf, sellableOffSelf } from '../game/actions.js';
+import {
+  CAPTIVES, captivesOf, holdingCapacity, takeableFrom, symptomsOf,
+} from '../game/captives.js';
 import {
   armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
   pieceValue, canKeep, lineUnit, isKeepableLine, armourGuard,
@@ -406,6 +419,11 @@ export class GameUI {
       case 'set-model-look': g.setLookModel(id); break;
       case 'harvest': g.harvestCasualty(id); break;
       case 'sell-organs': g.sellOrgans(); break;
+      case 'snatch': g.snatchSomebody(id); break;
+      case 'take-part': g.takePart(id, type); break;
+      case 'strip-body': g.stripBody(id); break;
+      case 'release-captive': g.releaseCaptive(id); break;
+      case 'sell-self': g.sellOwnPart(type); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -718,6 +736,64 @@ export class GameUI {
   }
 
 
+
+  /**
+   * Your own anatomy with a price on every piece.
+   *
+   * Available from the moment there is a buyer, because the point of it is
+   * that it is there when the rent is not — it pays now and it costs you for
+   * the rest of the run. The last of a vital organ is not offered with a
+   * warning, it is not offered: that is a death, not a trade, and there is no
+   * version of it that should be reachable by a mis-tap.
+   */
+  sellSelfBlock() {
+    const s = this.game.state;
+    if (!hasClinic(s)) return '';
+    const options = sellableOffSelf(s);
+    if (!options.length) return '';
+    const spare = options.filter((o) => o.survives);
+    const noSpare = options.filter((o) => !o.survives).slice(0, 4);
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Worth more in pieces</span>
+        <span class="money">${moneyShort(spare.reduce((n, o) => n + o.value, 0))}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        There is a buyer, and you are made of things. It pays today and it goes
+        on costing you — the kidney you sell this month is still yours to live
+        without next year. Anything with no spare is not on this list at any
+        price.
+      </p>
+      <details class="upgrades" data-disc="sellself"
+        ${this.discOpen('sellself', false) ? 'open' : ''}>
+        <summary><span>What you could sell</span>
+          <span class="upgrades__count">${spare.length} you would survive</span></summary>
+        <div class="upgrades__body">
+          ${spare.slice(0, 20).map((o) => `
+            <button class="card" data-action="sell-self" data-type="${o.part.id}">
+              <div class="card__head">
+                <span class="card__name">${esc(o.part.name)}${o.left > 1 ? ` (${o.left})` : ''}</span>
+                <span class="card__cost money">${moneyShort(o.value)}</span>
+              </div>
+              <div class="card__blurb">${esc(o.symptom || '')}</div>
+              <div class="card__meta">
+                <span>${o.market === 'transplant' ? 'transplant' : 'tissue'}</span>
+                <span class="warn">permanent</span>
+              </div>
+            </button>`).join('')}
+          ${noSpare.length ? `<div class="sect__title" style="margin-top:10px">
+            <span>Not for sale at any price</span></div>
+            ${noSpare.map((o) => `<div class="card is-locked">
+              <div class="card__head">
+                <span class="card__name">${esc(o.part.name)}</span>
+                <span class="card__cost bad">the last one</span>
+              </div>
+              <div class="card__blurb">${esc(o.symptom || '')}</div>
+            </div>`).join('')}` : ''}
+        </div>
+      </details>
+    </div>`;
+  }
+
   // --- You ------------------------------------------------------------------
 
   /**
@@ -944,6 +1020,15 @@ export class GameUI {
             ${w.retained ? '<span class="warn">metal still in it</span>' : ''}
             ${w.treated ? '<span class="good">seen to</span>' : '<span class="bad">not seen to</span>'}
           </div>
+          ${(w.struck || []).length ? `<div class="card__meta">
+            <span style="color:var(--text-faint)">found:</span>
+            ${w.struck.map((pid) => {
+              const ap = PARTS[pid];
+              if (!ap) return '';
+              return `<span class="${ap.vital ? 'bad' : ap.kind === 'vessel' ? 'warn' : ''}">${
+                esc(ap.name.toLowerCase())}</span>`;
+            }).join('')}
+          </div>` : ''}
           ${stage.id !== 'clean'
             ? `<div class="card__meta"><span class="${stage.tone}">${esc(stage.blurb)}</span></div>`
             : ''}
@@ -952,6 +1037,8 @@ export class GameUI {
 
     const lost = BODY_PART_IDS.filter((id) => body.parts[id].lost);
     const scarred = BODY_PART_IDS.filter((id) => (body.parts[id].scar || 0) > 0.01);
+    // Anything actually removed, and what being short of it is like.
+    const short = symptomsFor(body.missing);
 
     return `<div class="sect">
       <div class="sect__title"><span>X-ray</span>
@@ -975,17 +1062,26 @@ export class GameUI {
         </div>
       </div>
     </div>
-    ${lost.length || scarred.length ? `<div class="sect">
+    ${lost.length || scarred.length || short.length ? `<div class="sect">
       <div class="sect__title"><span>Permanent</span></div>
-      ${lost.map((id) => `<div class="row"><span>${esc(BODY_PARTS[id].name)}</span>
-        <span class="bad">gone — ${esc(body.parts[id].lostTo || 'the damage')}</span></div>`).join('')}
+      ${lost.map((id) => `<div class="row">
+        <span>${esc(BODY_PARTS[id].name)}</span>
+        <span class="bad" style="text-align:right">gone — ${esc(body.parts[id].lostTo || 'the damage')}${
+          LIMB_SYMPTOM[id] ? `<br><span style="color:var(--text-dim)">${esc(LIMB_SYMPTOM[id])}</span>` : ''}</span>
+      </div>`).join('')}
+      ${short.map((x) => `<div class="row">
+        <span>${esc(x.part.name)}${x.n > 1 ? ` ×${x.n}` : ''}</span>
+        <span class="${x.gone ? 'bad' : 'warn'}" style="text-align:right">${
+          x.gone ? 'all of them gone' : 'one short'}<br>
+          <span style="color:var(--text-dim)">${esc(x.symptom)}</span></span>
+      </div>`).join('')}
       ${scarred.map((id) => `<div class="row"><span>${esc(BODY_PARTS[id].name)}</span>
         <span class="warn">${Math.round(body.parts[id].scar * 100)}% never came back</span></div>`).join('')}
     </div>` : ''}
     <div class="sect">
       <div class="sect__title"><span>Open</span><span>${open.length}</span></div>
       ${rows || '<div class="empty">Not a mark on you.</div>'}
-    </div>`;
+    </div>` + this.sellSelfBlock();
   }
 
 
@@ -999,6 +1095,122 @@ export class GameUI {
    * most valuable thing you can take is the one you are least likely to move
    * in time.
    */
+
+  /**
+   * People you are holding.
+   *
+   * The whole reason this is a list of people rather than a number of bodies:
+   * somebody can be sold a kidney and walk out of it, because there were two
+   * and one is enough. The panel leads with what each of them is now short of
+   * and what that is like, because that is the actual content of the decision
+   * — not "harvest for $86,000" but "they will drink more water" against "that
+   * was the one there was no spare of".
+   */
+  captiveBlock() {
+    const s = this.game.state;
+    const held = captivesOf(s);
+    const room = holdingCapacity(s);
+    if (!room && !held.length) return '';
+    const atHour = Math.floor((s.minutes || 0) / 60);
+
+    const cards = held.map((c) => {
+      const cond = condition(c.body);
+      const caps = capacities(c.body);
+      const symptoms = symptomsOf(c);
+      const worthOf = (r) => (r.part.transplant ? r.part.transplant.price[1] : r.part.tissue[1]);
+      const options = c.dead ? [] : takeableFrom(c)
+        .filter((r) => r.part.transplant || r.part.tissue)
+        .sort((a, b) => {
+          if (a.survives !== b.survives) return a.survives ? -1 : 1;
+          return worthOf(b) - worthOf(a);
+        });
+
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${esc(c.name)}</span>
+          <span class="card__cost ${c.dead ? 'bad' : cond.tone}">${
+            c.dead ? 'dead' : esc(cond.label)}</span>
+        </div>
+        <div class="card__meta">
+          <span>held ${Math.max(0, Math.floor((atHour - c.takenAt) / 24))}d</span>
+          ${!c.dead ? `<span class="${caps.consciousness > 0.6 ? '' : 'warn'}">awake ${
+            Math.round(caps.consciousness * 100)}%</span>` : ''}
+          ${!c.dead ? `<span class="${c.body.blood > 0.7 ? '' : 'bad'}">blood ${
+            Math.round(c.body.blood * 100)}%</span>` : ''}
+        </div>
+        ${symptoms.length ? `<div class="rows" style="margin-top:6px">${symptoms.map((x) => `
+          <div class="row"><span>${esc(x.part.name)}${x.n > 1 ? ` ×${x.n}` : ''}</span>
+          <span style="color:var(--text-dim);text-align:right">${esc(x.symptom)}</span></div>`).join('')}</div>` : ''}
+        ${c.dead
+          ? `<div class="btnrow">
+              <button class="ghostbtn" data-action="strip-body" data-id="${c.id}">Take the rest</button>
+              <button class="ghostbtn" data-action="release-captive" data-id="${c.id}">Put them out</button>
+            </div>`
+          : `<details class="upgrades" data-disc="take-${c.id}"
+              ${this.discOpen(`take-${c.id}`, false) ? 'open' : ''}>
+              <summary><span>Take something</span>
+                <span class="upgrades__count">${options.filter((o) => o.survives).length} of ${
+                  options.length} they'd survive</span></summary>
+              <div class="upgrades__body">
+                ${options.map((o) => `
+                  <button class="card ${o.survives ? '' : 'is-locked'}"
+                    data-action="take-part" data-id="${c.id}" data-type="${o.part.id}">
+                    <div class="card__head">
+                      <span class="card__name">${esc(o.part.name)}${o.left > 1 ? ` (${o.left} left)` : ''}</span>
+                      <span class="card__cost ${o.survives ? 'warn' : 'bad'}">${
+                        o.survives ? 'survivable' : 'kills them'}</span>
+                    </div>
+                    <div class="card__blurb">${esc(o.symptom || '')}</div>
+                    <div class="card__meta">
+                      ${o.part.transplant
+                        ? `<span class="money">${moneyShort(o.part.transplant.price[1])}</span>
+                           <span>${o.part.transplant.hours}h cold time</span>`
+                        : `<span>${moneyShort(o.part.tissue[1])} tissue</span>`}
+                    </div>
+                  </button>`).join('')}
+              </div>
+            </details>
+            <div class="btnrow">
+              <button class="ghostbtn" data-action="release-captive" data-id="${c.id}">Let them go</button>
+            </div>`}
+      </div>`;
+    }).join('');
+
+    const blocks = (s.districts || [])
+      .filter((d) => (d.heat || 0) < 70)
+      .sort((a, b) => (a.heat || 0) - (b.heat || 0))
+      .slice(0, 4)
+      .map((d) => `<button class="card" data-action="snatch" data-id="${d.id}"
+        ${held.length >= room ? 'disabled' : ''}>
+        <div class="card__head">
+          <span class="card__name">${esc(d.name)}</span>
+          <span class="card__cost">${moneyShort(CAPTIVES.snatchCost)}</span>
+        </div>
+        <div class="card__meta">
+          <span class="${d.heat > 40 ? 'bad' : ''}">heat ${Math.round(d.heat)}</span>
+          <span class="bad">+${CAPTIVES.heatPerTry} whatever happens</span>
+        </div>
+      </button>`).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Held</span><span>${held.length}/${room}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        There are two kidneys and one is enough — somebody can be sold one and
+        walk out of it, carrying whatever that costs them for the rest of their
+        life. There is one heart. Holding anybody costs
+        ${moneyShort(CAPTIVES.upkeepPerDay)} a day and raises the temperature
+        where you work, every day, for as long as you do it.
+      </p>
+      ${cards || '<div class="empty">Nobody.</div>'}
+      ${blocks && held.length < room ? `<div class="sect__title" style="margin-top:12px">
+        <span>Go and get somebody</span></div>
+        <p class="card__blurb" style="margin:0 0 8px">
+          A quiet block is an easier one. It costs the same whether it works or not,
+          and the block notices either way.
+        </p>${blocks}` : ''}
+    </div>`;
+  }
+
   organBlock() {
     const s = this.game.state;
     if (!hasClinic(s) && !stockOf(s).length && !casualtiesOf(s).length) return '';
@@ -1006,32 +1218,29 @@ export class GameUI {
     const stock = stockOf(s);
     const waiting = casualtiesOf(s);
     const net = stockValue(s, atHour);
+    const rows = stockRows(s, atHour);
 
-    const byOrgan = {};
-    for (const p of stock) {
-      const v = viability(p.organ, atHour - p.takenAt);
-      const row = byOrgan[p.organ] || (byOrgan[p.organ] = { n: 0, worst: 1, value: 0 });
-      row.n++;
-      row.worst = Math.min(row.worst, v);
-      row.value += organValue(p, atHour, p.quality);
-    }
+    const onTransplant = rows.filter((r) => r.market === 'transplant');
+    const onTissue = rows.filter((r) => r.market !== 'transplant');
 
-    const rows = Object.keys(byOrgan).map((id) => {
-      const def = ORGANS[id];
-      const r = byOrgan[id];
-      const pct = Math.round(r.worst * 100);
+    const card = (r) => {
+      const pct = Math.round((r.worst != null ? r.worst : 1) * 100);
+      const tx = r.part.transplant;
       return `<div class="card">
         <div class="card__head">
-          <span class="card__name">${esc(def.name)}${r.n > 1 ? ` ×${r.n}` : ''}</span>
-          <span class="card__cost ${pct > 60 ? 'good' : pct > 20 ? 'warn' : 'bad'}">${pct}% good</span>
+          <span class="card__name">${esc(r.part.name)}${r.n > 1 ? ` ×${r.n}` : ''}</span>
+          <span class="card__cost ${r.market === 'transplant'
+            ? (pct > 60 ? 'good' : pct > 20 ? 'warn' : 'bad') : ''}">${
+            r.market === 'transplant' ? `${pct}% viable` : 'tissue'}</span>
         </div>
-        <div class="card__blurb">${esc(def.blurb)}</div>
+        ${r.part.note ? `<div class="card__blurb">${esc(r.part.note)}</div>` : ''}
         <div class="card__meta">
-          <span>${def.viabilityHours}h cold time</span>
+          <span>${esc(PART_KINDS[r.part.kind] ? PART_KINDS[r.part.kind].name : r.part.kind)}</span>
+          ${tx ? `<span>${tx.hours}h cold time</span>` : '<span>keeps</span>'}
           <span class="money">${moneyShort(r.value)}</span>
         </div>
       </div>`;
-    }).join('');
+    };
 
     const bodies = waiting.map((c) => {
       const d = districtById(s, c.districtId);
@@ -1048,16 +1257,29 @@ export class GameUI {
       </button>`;
     }).join('');
 
+    const whole = wholeBodyValue();
+
     return `<div class="sect">
       <div class="sect__title"><span>On ice</span>
         <span class="${net > 0 ? 'money' : ''}">${net > 0 ? moneyShort(net) : 'nothing'}</span></div>
       <p class="card__blurb" style="margin:0 0 10px">
-        A heart is good for five hours out of a body, a liver eleven, a kidney a
-        day and a half, corneas a fortnight. The most valuable thing here is the
-        one you are least likely to get anywhere in time. A broker takes
-        ${Math.round(ORGAN_TRADE.brokerCut * 100)}% and what is left is street money.
+        Two markets, about a hundred times apart. A viable organ goes to
+        somebody waiting for one and the clock on it is hours — a heart five, a
+        liver eleven, a kidney a day and a half. Past that it is not worthless,
+        it is TISSUE: research and training pay small money and do not care how
+        long it has been. Intact, a person is about ${moneyShort(whole.transplant)}
+        on the first market and ${moneyShort(whole.tissue)} on the second. A
+        broker takes ${Math.round(ORGAN_TRADE.brokerCut * 100)}% of whichever.
       </p>
-      ${rows || '<div class="empty">Nothing on ice.</div>'}
+      ${onTransplant.length ? `<div class="sect__title" style="margin-top:4px">
+        <span>Still viable</span><span class="money">${moneyShort(
+          onTransplant.reduce((n, r) => n + r.value, 0))}</span></div>
+        ${onTransplant.map(card).join('')}` : ''}
+      ${onTissue.length ? `<div class="sect__title" style="margin-top:12px">
+        <span>Tissue</span><span>${moneyShort(
+          onTissue.reduce((n, r) => n + r.value, 0))}</span></div>
+        ${onTissue.map(card).join('')}` : ''}
+      ${!rows.length ? '<div class="empty">Nothing on ice.</div>' : ''}
       ${stock.length ? `<div class="btnrow">
         <button class="ghostbtn" data-action="sell-organs">Move the lot · ${moneyShort(net)}</button>
       </div>` : ''}
@@ -1223,7 +1445,7 @@ export class GameUI {
         pays more.
       </p>
       ${cards}
-    </div>` + this.licenceBlock() + this.armouryBlock() + this.organBlock();
+    </div>` + this.licenceBlock() + this.armouryBlock() + this.captiveBlock() + this.organBlock();
   }
 
   /**
@@ -1327,6 +1549,10 @@ export class GameUI {
         `Iron sells two ways. Over a counter it's clean money at legal prices, and
          nobody comes through the door. Unserialised on the street it's worth far
          more, and it's the hottest thing you can move.`)
+      + this.paperworkSection('mortuary', 'Funeral directing',
+        `Nobody licenses a back room. A funeral home is a real business with a
+         real licence, and the reason to want one is that bodies arriving at it
+         are the least remarkable thing on the street.`)
       + this.paperworkSection('armour', 'Armour certification',
         `Nobody needs a permit to sew a vest. What a buyer wants is proof, and
          proof means an independent lab shooting your product until it passes.

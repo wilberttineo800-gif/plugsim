@@ -22,10 +22,16 @@ import {
   builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
 import { lineKindOf } from './lines.js';
+import { ORGAN_TRADE, harvest, stockOf, organValue } from './organs.js';
 import {
-  ORGANS, ORGAN_TRADE, harvest, organValue, stockOf, viability,
-} from './organs.js';
-import { takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS } from './health.js';
+  CAPTIVES, captivesOf, holdingCapacity, snatch as doSnatch, takeFrom,
+  takeableFrom, symptomsOf, release as doRelease,
+} from './captives.js';
+import {
+  takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS,
+  removePart as removePartFrom, missingCount as missingCountOf,
+} from './health.js';
+import { PARTS, countOf, survivesWithout, partValue } from './anatomy.js';
 import {
   characterOf, protectionOf, armedWith, equip, setTrait, setModel as setLookPreset,
 } from './character.js';
@@ -1450,7 +1456,9 @@ export function setLookModel(state, modelId) {
 
 /** Have you built somewhere for this? That IS the opt-in. */
 export function hasClinic(state) {
-  return (state.buildings || []).some((b) => b.type === 'back_clinic' && b.active);
+  return (state.buildings || []).some(
+    (b) => b.active && (BUILDINGS[b.type] || {}).kind === 'clinic'
+  );
 }
 
 /** Bodies left on blocks you took, that have not already been dealt with. */
@@ -1531,4 +1539,149 @@ export function sellOrgans(state) {
     + (spoiled ? `, ${spoiled} spoiled.` : '.'),
     'info');
   return { ok: true, sold, spoiled, net, gross };
+}
+
+// --- People you are holding -------------------------------------------------
+
+export { captivesOf, holdingCapacity, takeableFrom, symptomsOf } from './captives.js';
+
+/**
+ * Send somebody to go and get somebody.
+ *
+ * Costs money whether it works or not, and costs the block either way — a
+ * failed attempt is still an attempt people noticed.
+ */
+export function snatchSomebody(state, districtId) {
+  if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to keep anybody.' };
+  if (!canAfford(state, CAPTIVES.snatchCost)) {
+    return { ok: false, error: `A crew wants $${CAPTIVES.snatchCost.toLocaleString()} for that.` };
+  }
+  const res = doSnatch(state, districtId);
+  if (!res.ok) return res;
+  spendClean(state, CAPTIVES.snatchCost);
+  const d = districtById(state, districtId);
+  if (!res.got) {
+    logEvent(state, `It went wrong in ${d ? d.name : 'the block'}. Nobody came back with anybody, and people saw.`, 'bad');
+    return { ok: true, got: null };
+  }
+  logEvent(state, `${res.got.name}. Nobody is looking for them yet.`, 'warn');
+  return res;
+}
+
+/** Take one specific thing off somebody you are holding. */
+export function takePart(state, captiveId, partId) {
+  if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to do that.' };
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const res = takeFrom(state, captiveId, partId, { atHour });
+  if (!res.ok) return res;
+  const c = captivesOf(state).find((x) => x.id === captiveId);
+  if (res.died) {
+    logEvent(state, `Took the ${res.part.name.toLowerCase()}. That was the one there was no spare of.`, 'bad');
+  } else {
+    logEvent(state,
+      `Took a ${res.part.name.toLowerCase()}. ${res.part.symptom || 'They are still breathing.'}`,
+      'warn');
+  }
+  return res;
+}
+
+/** Strip somebody who is already dead, which is everything left at once. */
+export function stripBody(state, captiveId) {
+  if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to do that.' };
+  const list = captivesOf(state);
+  const c = list.find((x) => x.id === captiveId);
+  if (!c) return { ok: false, error: 'Nobody by that name.' };
+  if (!c.dead) return { ok: false, error: 'They are still alive. Take what you want one at a time.' };
+
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const clinic = (state.buildings || []).find(
+    (b) => b.active && (BUILDINGS[b.type] || {}).kind === 'clinic'
+  );
+  const def = clinic ? BUILDINGS[clinic.type] : null;
+  const room = clinic && def
+    ? clamp((clinic.areaM2 || def.referenceAreaM2) / def.referenceAreaM2, 0.4, 2.2)
+    : 1;
+  // Whatever has already been taken is already gone.
+  const taken = harvest(null, { atHour, skill: clamp01(0.36 + room * 0.22) })
+    .filter((piece) => (c.body.missing || {})[piece.organ] == null
+      || (c.body.missing[piece.organ] || 0) < 99);
+  state.organs = stockOf(state).concat(taken);
+  state.captives = list.filter((x) => x.id !== captiveId);
+
+  const d = districtById(state, c.districtId);
+  if (d) {
+    d.rep = clamp01(d.rep - ORGAN_TRADE.repHit);
+    d.heat = Math.min(100, d.heat + ORGAN_TRADE.heatPerBody);
+  }
+  logEvent(state, `${taken.length} more off the table. Nothing left of them worth keeping.`, 'bad');
+  return { ok: true, taken };
+}
+
+/** Let somebody go. They know your face and they will use it. */
+export function releaseCaptive(state, captiveId) {
+  const res = doRelease(state, captiveId);
+  if (!res.ok) return res;
+  logEvent(state,
+    res.captive.dead
+      ? 'Put out with the rest of it.'
+      : 'Let them go. They walked, and they will talk.',
+    res.captive.dead ? 'info' : 'bad');
+  return res;
+}
+
+// --- Selling yourself -------------------------------------------------------
+//
+// The desperation move, and the reason the whole system is worth having. It is
+// available from the moment you have a buyer, it pays rent money now, and the
+// kidney you sold in month one is still hurting you in month six.
+//
+// The hard rule is taken straight from the reference and is correct: the last
+// of a vital organ is instant death, and it is refused outright rather than
+// offered with a warning. There is no version of this that is an accident.
+
+export function sellableOffSelf(state) {
+  const ch = characterOf(state);
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  return Object.keys(PARTS)
+    .map((id) => PARTS[id])
+    .map((part) => {
+      const already = missingCountOf(ch.body, part.id);
+      const left = countOf(part) - already;
+      const worth = partValue(part, 0, 0.8);
+      return {
+        part,
+        left,
+        survives: survivesWithout(part, already),
+        symptom: part.symptom,
+        value: Math.round(worth.value * (1 - ORGAN_TRADE.brokerCut)),
+        market: worth.market,
+      };
+    })
+    .filter((r) => r.left > 0 && r.value > 0)
+    .sort((a, b) => b.value - a.value);
+}
+
+/** Sell one off yourself. Refused outright if there is no spare. */
+export function sellOwnPart(state, partId) {
+  const part = PARTS[partId];
+  if (!part) return { ok: false, error: 'No such thing.' };
+  const ch = characterOf(state);
+  const already = missingCountOf(ch.body, partId);
+  if (already >= countOf(part)) return { ok: false, error: `You have no ${part.name.toLowerCase()} left.` };
+  if (!survivesWithout(part, already)) {
+    return {
+      ok: false,
+      error: `That is the last one. Taking it is not a trade, it is a death.`,
+    };
+  }
+  const res = removePartFrom(ch.body, partId);
+  if (!res.ok) return res;
+
+  const worth = partValue(part, 0, 0.8);
+  const net = Math.round(worth.value * (1 - ORGAN_TRADE.brokerCut));
+  state.cash.dirty += net;
+  logEvent(state,
+    `Sold a ${part.name.toLowerCase()} for $${net.toLocaleString()}. ${part.symptom || ''}`,
+    'bad');
+  return { ok: true, part, net, symptom: part.symptom };
 }

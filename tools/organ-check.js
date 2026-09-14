@@ -5,7 +5,13 @@
 // cost — and the whole decision the mechanic exists to pose would be gone.
 
 import { PRODUCTS, BUILDINGS } from '../src/game/constants.js';
-import { ORGANS, ORGAN_IDS, ORGAN_TRADE, viability, organValue, harvest, cullSpoiled, stockValue } from '../src/game/organs.js';
+import {
+  ORGAN_TRADE, viability, organValue, harvest, cullSpoiled, stockValue, pieceWorth,
+} from '../src/game/organs.js';
+import {
+  PARTS, PART_IDS, partsIn, targetsIn, countOf, partValue, wholeBodyValue,
+  isTransplantable,
+} from '../src/game/anatomy.js';
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
@@ -16,55 +22,87 @@ let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; } else { fail++; print('  FAIL ' + m); } };
 const seeded = (n) => () => (n = (n * 1103515245 + 12345) % 2147483648) / 2147483648;
 
-// --- Prices and clocks ------------------------------------------------------
-ok(ORGAN_IDS.length >= 7, ORGAN_IDS.length + ' kinds');
-for (const id of ORGAN_IDS) {
-  const d = ORGANS[id];
-  ok(d.price[0] < d.price[1] && d.price[0] > 0, `${d.name} has a real price range`);
-  ok(d.viabilityHours > 0, `${d.name} has a cold time`);
+// --- The anatomy ------------------------------------------------------------
+ok(PART_IDS.length >= 40, PART_IDS.length + ' parts, which is a whole person');
+for (const region of ['head', 'neck', 'thorax', 'abdomen', 'armL', 'armR', 'legL', 'legR']) {
+  ok(partsIn(region).length >= 4, `${region} has an inside (${partsIn(region).length} parts)`);
+}
+for (const id of PART_IDS) {
+  const p = PARTS[id];
+  ok(!!p.region, `${id} belongs to a region`);
+  ok(p.transplant || p.tissue, `${p.name} is worth something to somebody`);
+  if (p.transplant) {
+    ok(p.transplant.price[0] < p.transplant.price[1] && p.transplant.hours > 0,
+      `${p.name} has a transplant price and a cold clock`);
+  }
+  if (p.tissue) ok(p.tissue[0] < p.tissue[1] && p.tissue[0] > 0, `${p.name} has a tissue price`);
 }
 
-// The central claim: the dearest thing spoils fastest.
-const byPrice = ORGAN_IDS.slice().sort((a, b) => ORGANS[b].price[1] - ORGANS[a].price[1]);
-ok(ORGANS[byPrice[0]].id === 'heart', 'a heart is the most valuable thing here');
-ok(ORGANS[byPrice[0]].viabilityHours <= 6, 'and is good for hours, not days');
-ok(ORGANS.cornea.viabilityHours > ORGANS.kidney.viabilityHours * 5,
-  'while corneas keep for a fortnight');
-// A kidney IS both valuable and keeps a day and a half — that is exactly why
-// it is the most trafficked organ there is, and the model should say so. What
-// must not exist is something at the very top of the range that also keeps.
-const dearAndSlow = ORGAN_IDS.filter((id) =>
-  ORGANS[id].price[1] >= 140000 && ORGANS[id].viabilityHours > 24);
-ok(dearAndSlow.length === 0,
-  'nothing at the top of the range also keeps: ' + (dearAndSlow.join(', ') || 'none'));
-ok(ORGANS.kidney.viabilityHours >= 24 && ORGANS.kidney.price[1] >= 100000,
-  'a kidney is valuable AND movable, which is why it is the one that actually trades');
+// --- Two markets, about a hundred times apart -------------------------------
+const whole = wholeBodyValue();
+ok(whole.transplant > whole.tissue * 8,
+  `intact is worth far more than parted: $${whole.transplant.toLocaleString()} against $${whole.tissue.toLocaleString()}`);
+
+const heart = PARTS.heart;
+ok(heart.transplant.price[1] >= 250000, 'a heart is the most valuable single thing here');
+ok(heart.transplant.hours <= 6, 'and is good for hours');
+ok(heart.tissue[1] < heart.transplant.price[0] / 30,
+  'and past that it is worth a fraction of it, not nothing');
+
+// Nothing is ever worthless — that is the whole point of the second market.
+const stale = PART_IDS.filter((id) => partValue(PARTS[id], 100000, 1).value <= 0);
+ok(stale.length === 0, 'nothing is ever worth nothing: ' + (stale.join(', ') || 'everything keeps a floor'));
+
+// A heart past its window falls back to its valves, not to zero.
+const oldHeart = { organ: 'heart', takenAt: 0, quality: 1 };
+ok(pieceWorth(oldHeart, 0).market === 'transplant', 'a fresh heart is a transplant');
+ok(pieceWorth(oldHeart, 20).market === 'tissue', 'and a day later it is tissue');
+ok(pieceWorth(oldHeart, 20).value > 0 && pieceWorth(oldHeart, 20).value < pieceWorth(oldHeart, 0).value / 40,
+  'worth a fraction of what it was, which is what makes moving fast matter');
 
 // The curve itself: flat, then off a cliff.
 ok(viability('heart', 1) === 1, 'a heart is untouched for the first hour');
-ok(viability('heart', 4) > 0 && viability('heart', 4) < 1, 'and degrading by the fourth');
-ok(viability('heart', 6) === 0, 'and worth nothing past its cold time');
+ok(viability('heart', 4) > 0 && viability('heart', 4) < 1, 'degrading by the fourth');
+ok(viability('heart', 6) === 0, 'and gone as a transplant past its cold time');
 ok(viability('cornea', 200) > 0.35, 'corneas are still worth having after eight days');
+ok(viability('skull', 5000) === 1, 'and a bone has no clock at all');
 
-const fresh = { organ: 'heart', takenAt: 0, quality: 1 };
-ok(organValue(fresh, 0, 1) >= ORGANS.heart.price[1] * 0.95, 'a fresh heart is worth the top of the range');
-ok(organValue(fresh, 8, 1) === 0, 'and an hour late it is worth nothing at all');
+// A kidney IS both valuable and keeps a day and a half — which is exactly why
+// it is the most trafficked organ there is. What must not exist is something
+// at the very top of the range that also keeps.
+const dearAndSlow = PART_IDS.filter((id) => {
+  const p = PARTS[id];
+  return p.transplant && p.transplant.price[1] >= 140000 && p.transplant.hours > 24;
+});
+ok(dearAndSlow.length === 0, 'nothing at the top of the range also keeps: ' + (dearAndSlow.join(', ') || 'none'));
+ok(PARTS.kidney.transplant.hours >= 24 && PARTS.kidney.transplant.price[1] >= 100000,
+  'a kidney is valuable AND movable, which is why it is the one that actually trades');
+
+// Components are harvestable but are not things a bullet finds on its own.
+ok(!!PARTS.heartValve.component, 'a valve is part of the heart');
+ok(!targetsIn('thorax').some((p) => p.id === 'heartValve'),
+  'so a wound track cannot strike one directly');
+ok(partsIn('thorax').some((p) => p.id === 'heartValve'),
+  'but it is still in there to be taken');
 
 // --- Yield ------------------------------------------------------------------
-let heartsFrom100 = 0, corneasFrom100 = 0;
+let hearts = 0, skin = 0, total = 0;
 for (let i = 0; i < 100; i++) {
   const got = harvest(null, { atHour: 0, skill: 0.6, rand: seeded(i + 1) });
-  heartsFrom100 += got.filter((p) => p.organ === 'heart').length;
-  corneasFrom100 += got.filter((p) => p.organ === 'cornea').length;
+  total += got.length;
+  hearts += got.filter((p) => p.organ === 'heart').length;
+  skin += got.filter((p) => p.organ === 'legSkin').length;
 }
-ok(heartsFrom100 > 0 && heartsFrom100 < 100, `a heart does not come out every time (${heartsFrom100}/100)`);
-ok(corneasFrom100 > heartsFrom100, 'and the shallow, robust things come out more often');
+ok(hearts > 0 && hearts < 100, `a heart does not come out every time (${hearts}/100)`);
+ok(skin > hearts, 'and the shallow, robust things come out more often');
+ok(total / 100 > 15, `a body yields a lot of separate things (${Math.round(total / 100)} on average)`);
 
 // --- Spoilage runs whether you are watching or not --------------------------
 const st = { organs: [{ organ: 'heart', takenAt: 0, quality: 1 }, { organ: 'cornea', takenAt: 0, quality: 1 }] };
 const gone = cullSpoiled(st, 24);
-ok(gone.length === 1 && gone[0].organ === 'heart', 'a day later the heart is refuse');
-ok(st.organs.length === 1 && st.organs[0].organ === 'cornea', 'and the corneas are still good');
+ok(gone.length === 0, 'nothing is thrown away at a day — the heart is tissue now, not refuse');
+ok(pieceWorth(st.organs[0], 24).market === 'tissue', 'the heart has fallen to the second market');
+ok(pieceWorth(st.organs[1], 24).market === 'transplant', 'and the cornea has not');
 
 // --- The cost ---------------------------------------------------------------
 const clinic = BUILDINGS.back_clinic;
@@ -112,3 +150,138 @@ ok(sale.net < sale.gross, `and a broker takes ${Math.round(ORGAN_TRADE.brokerCut
 ok(!A.sellOrgans(state).ok, 'and then there is nothing left to sell');
 
 print(fail ? `organs: ${fail} FAILED, ${pass} passed` : `organs: all ${pass} checks passed`);
+
+// --- People you are holding -------------------------------------------------
+//
+// The claim worth pinning: somebody can be sold an organ and live with it.
+// There are two kidneys and one is enough; there is one heart and there is no
+// version of taking it that anybody walks away from.
+
+import {
+  CAPTIVES, snatch, takeFrom, takeableFrom, symptomsOf, holdingCapacity,
+  hasColdStorage, release, stepCaptives,
+} from '../src/game/captives.js';
+import {
+  newBody, isAlive, capacities, removePart, missingCount, organFactor, takeHit,
+} from '../src/game/health.js';
+import { symptomOf, survivesWithout } from '../src/game/anatomy.js';
+
+// Every part says what being short of it is actually like.
+const noSymptom = PART_IDS.filter((id) => !symptomOf(id));
+ok(noSymptom.length === 0, 'every part has a symptom: ' + (noSymptom.join(', ') || 'all of them'));
+
+// Survivability is about spares, not about importance.
+const b1 = newBody();
+ok(removePart(b1, 'kidney').survives, 'one kidney is survivable — there were two');
+ok(isAlive(b1), 'and they are still alive');
+ok(!removePart(b1, 'kidney').survives, 'the second is not');
+ok(!isAlive(b1), 'and they are not');
+
+const b2 = newBody();
+ok(!removePart(b2, 'heart').survives, 'there is no spare heart');
+ok(!isAlive(b2), 'so taking it is killing them');
+
+const b3 = newBody();
+removePart(b3, 'lung');
+ok(isAlive(b3), 'one lung is survivable');
+ok(capacities(b3).breathing < 1, `and breathing is worse for it (${Math.round(capacities(b3).breathing * 100)}%)`);
+removePart(b3, 'spleen'); removePart(b3, 'gallbladder'); removePart(b3, 'eye');
+ok(isAlive(b3), 'as are a spleen, a gallbladder and an eye');
+ok(capacities(b3).sight === 0.5, 'with half the sight gone');
+ok(symptomsOf({ body: b3 }).length === 4, 'and four things now wrong with them');
+
+// Capacities no region supplies start whole rather than at zero.
+ok(capacities(newBody()).sight === 1, 'somebody with both eyes can see');
+
+// Holding people needs somewhere to hold them.
+const hold = {
+  districts: [{ id: 'd1', name: 'A block', heat: 8, rep: 0.4 }],
+  buildings: [], minutes: 0, captives: [],
+};
+ok(holdingCapacity(hold) === 0, 'nowhere to keep anybody to begin with');
+ok(!snatch(hold, 'd1').ok, 'so nobody can be taken');
+hold.buildings.push({ id: 'b', type: 'morgue', active: true });
+ok(holdingCapacity(hold) > 0, 'a funeral home is somewhere to keep people');
+ok(hasColdStorage(hold), 'and it has a cold room, which is the point of it');
+
+const before = hold.districts[0].heat;
+let snatchRand = seeded(2);
+const tries = [];
+for (let i = 0; i < 6; i++) tries.push(snatch(hold, 'd1', { rand: snatchRand }));
+ok(hold.districts[0].heat > before, 'trying raises the temperature whether it works or not');
+ok(tries.some((r) => r.got) && tries.some((r) => !r.got), 'and it does not always work');
+ok(hold.captives.length <= holdingCapacity(hold), 'never more than there is room for');
+
+// Taking from somebody alive gives a better piece than cutting up a corpse.
+const c = hold.captives.find((x) => !x.dead);
+if (c) {
+  const got = takeFrom(hold, c.id, 'kidney', { atHour: 0 });
+  ok(got.ok && got.survives && !got.died, 'a kidney comes out and they live');
+  ok(got.piece.quality > 0.55, `and it is in good condition (${got.piece.quality.toFixed(2)})`);
+  ok(takeableFrom(c).find((r) => r.part.id === 'kidney').left === 1, 'one kidney left');
+  ok(takeableFrom(c).find((r) => r.part.id === 'heart').survives === false,
+    'and the heart is offered with the truth attached');
+  const killed = takeFrom(hold, c.id, 'heart', { atHour: 1 });
+  ok(killed.died, 'taking it kills them');
+  ok(!takeFrom(hold, c.id, 'kidney', { atHour: 2 }).ok, 'and you cannot operate on a corpse one piece at a time');
+}
+
+// Letting somebody go is worse for you than a body nobody finds.
+const alive = hold.captives.find((x) => !x.dead);
+if (alive) {
+  // Six snatch attempts have already driven standing to nothing, and nothing
+  // cannot fall further — which is correct behaviour, not the thing under test.
+  hold.districts[0].rep = 0.6;
+  const repBefore = hold.districts[0].rep, heatBefore2 = hold.districts[0].heat;
+  release(hold, alive.id);
+  ok(hold.districts[0].heat > heatBefore2, 'somebody who walks is somebody who talks');
+  ok(hold.districts[0].rep < repBefore, 'and the block hears all of it');
+}
+
+// --- Losing limbs in combat -------------------------------------------------
+let lost = 0, kept = 0;
+for (let i = 0; i < 400; i++) {
+  const body = newBody();
+  const w = takeHit(body, { part: 'legL', threat: 0.92, protection: 0, rand: seeded(i + 40) });
+  if (w.tookTheLimb) lost++; else kept++;
+}
+ok(lost > 0, `heavy rounds take limbs off outright (${lost} of 400)`);
+ok(kept > lost, 'but not most of the time');
+
+let lightLost = 0;
+for (let i = 0; i < 400; i++) {
+  const body = newBody();
+  const w = takeHit(body, { part: 'legL', threat: 0.34, protection: 0, rand: seeded(i + 900) });
+  if (w.tookTheLimb) lightLost++;
+}
+ok(lightLost < lost, `and a handgun does it far less often (${lightLost} against ${lost})`);
+
+
+// --- Selling yourself -------------------------------------------------------
+// The hard rule, taken straight from the reference: the last of a vital organ
+// is not offered with a warning, it is refused. There is no version of it that
+// a mis-tap can reach.
+import { sellableOffSelf, sellOwnPart } from '../src/game/actions.js';
+
+const me = { cash: { clean: 0, dirty: 0 }, log: [], minutes: 0, buildings: [], districts: [] };
+const offered = sellableOffSelf(me);
+ok(offered.length > 30, `${offered.length} things you are made of are worth money`);
+ok(offered.every((o) => o.value > 0), 'and every one of them has a price');
+ok(offered.some((o) => !o.survives), 'some of which you would not survive selling');
+
+const kidney = sellOwnPart(me, 'kidney');
+ok(kidney.ok && kidney.net > 0, `a kidney sells for $${(kidney.net || 0).toLocaleString()}`);
+ok(me.cash.dirty === kidney.net, 'and it is street money — there is no clean version');
+ok(!!kidney.symptom, 'with a permanent consequence attached');
+
+ok(!sellOwnPart(me, 'kidney').ok, 'the second is refused');
+ok(!sellOwnPart(me, 'heart').ok, 'and so is the heart');
+ok(!sellOwnPart(me, 'liver').ok, 'and the liver');
+ok(isAlive(me.character.body), 'and you are still alive, because none of those happened');
+
+// It goes on costing you.
+ok(capacities(me.character.body).breathing === 1, 'a kidney does not affect breathing');
+sellOwnPart(me, 'lung');
+ok(capacities(me.character.body).breathing < 1, 'but a lung does, permanently');
+
+print(fail ? `organs+captives+self: ${fail} FAILED in total` : `organs+captives+self: all ${pass} checks passed in total`);

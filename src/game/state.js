@@ -62,6 +62,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     items: [],           // things only you have made
     armoury: [],         // what you kept off your own lines rather than sold
     armouryCounter: 0,
+    character: null,     // you: a body, and what is on it
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
     aiDisabled: false,
@@ -535,6 +536,7 @@ export function loadGame() {
     // than in migrate(), which is skipped whenever the version already matches.
     if (!Array.isArray(data.armoury)) data.armoury = [];
     if (typeof data.armouryCounter !== 'number') data.armouryCounter = data.armoury.length;
+    if (!data.character || !data.character.body) data.character = null;
     idCounter = data.idCounter || 1;
     delete data.idCounter;
     data.selection = null;

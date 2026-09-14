@@ -108,6 +108,8 @@ export function licencesFor(domain) {
 export const FIREARM_CLASSES = {
   shotgun: {
     id: 'shotgun',
+    // Buckshot: a lot of energy spread over a lot of pellets, and terrible past a room.
+    threat: 0.42,
     // A cylinder is not a magazine well, and so on.
     noParts: ['extmag'],
     name: 'Shotguns',
@@ -119,6 +121,8 @@ export const FIREARM_CLASSES = {
   },
   handgun: {
     id: 'handgun',
+    // The round most people are actually shot with, and the one every vest is built for.
+    threat: 0.34,
     name: 'Handguns',
     blurb: 'What the street actually asks for. Small, concealable, and always moving.',
     valueMult: 1,
@@ -128,6 +132,8 @@ export const FIREARM_CLASSES = {
   },
   rifle: {
     id: 'rifle',
+    // Intermediate rifle. Soft armour does nothing at all against it.
+    threat: 0.72,
     name: 'Rifles',
     blurb: 'Stripped receivers, barrels and furniture. More machining, more money.',
     valueMult: 1.7,
@@ -137,6 +143,8 @@ export const FIREARM_CLASSES = {
   },
   smg: {
     id: 'smg',
+    // Pistol calibre out of a longer barrel. Faster, not fundamentally different.
+    threat: 0.36,
     name: 'Submachine Guns',
     blurb: 'Pistol calibre, magazine through the grip, folding stock. Simple to build and it never stops moving.',
     valueMult: 1.45,
@@ -146,6 +154,8 @@ export const FIREARM_CLASSES = {
   },
   revolver: {
     id: 'revolver',
+    // Heavier and slower. A magnum is about the limit of what IIIA is rated to.
+    threat: 0.38,
     // A cylinder is not a magazine well, and so on.
     noParts: ['extmag', 'foregrip'],
     name: 'Revolvers',
@@ -157,6 +167,8 @@ export const FIREARM_CLASSES = {
   },
   precision: {
     id: 'precision',
+    // Full-power and deliberate. Nothing worn on a body stops .50.
+    threat: 0.96,
     // A cylinder is not a magazine well, and so on.
     noParts: ['foregrip'],
     name: 'Precision Rifles',
@@ -168,6 +180,8 @@ export const FIREARM_CLASSES = {
   },
   machinegun: {
     id: 'machinegun',
+    // Rifle rounds, and a great many of them.
+    threat: 0.80,
     name: 'Machine Guns',
     blurb: 'Belt-fed and unambiguous. The most valuable thing you can build and the fastest way to end a run.',
     valueMult: 4.2,
@@ -178,6 +192,8 @@ export const FIREARM_CLASSES = {
   },
   nfa: {
     id: 'nfa',
+    // Suppressed and short-barrelled, mostly. Quiet rather than powerful.
+    threat: 0.50,
     name: 'NFA Items',
     blurb: 'Suppressors, short barrels, select-fire. Needs a tax stamp to touch legally.',
     valueMult: 3.4,
@@ -189,6 +205,16 @@ export const FIREARM_CLASSES = {
 };
 
 export const FIREARM_CLASS_IDS = Object.keys(FIREARM_CLASSES);
+
+/**
+ * How hard a category hits armour, 0 to 1, on the same scale `protectionAt`
+ * returns. Armour that rates above the threat stops the round and turns it
+ * into blunt trauma; armour below it slows the round down and no more.
+ */
+export function threatOf(classId) {
+  const cls = FIREARM_CLASSES[classId];
+  return cls && cls.threat != null ? cls.threat : 0.4;
+}
 
 /**
  * The actual patterns a shop can be set up to build, within a category. Each is

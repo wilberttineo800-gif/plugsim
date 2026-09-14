@@ -15,6 +15,11 @@ import { GameUI } from '../src/ui/ui.js';
 
 const log = (...a) => print(a.join(' '));
 
+// The character exists on demand; this is the same call the UI makes.
+function require_character() {
+  return state.character;
+}
+
 const origin = { lat: 42.3314, lng: -83.0458 };
 const districts = generateDistricts(origin, []);
 const crews = generateCrews(districts, origin);
@@ -110,6 +115,30 @@ const cases = [
   ['armourLineBlock (certified)', () => {
     const plant = openSite('plate_plant');
     return ui.armourLineBlock(plant);
+  }],
+  // The character and the film, both unhurt and badly shot up — the injured
+  // case is where every interpolation lives.
+  ['tabCharacter (unhurt)', () => ui.tabCharacter()],
+  ['tabXray (unhurt)', () => ui.tabXray()],
+  ['tabCharacter (kitted)', () => {
+    const line = state.buildings.find((b) => BUILDINGS[b.type].product === 'plate');
+    line.packs.plate = 20;
+    A.setProductionLine(state, line.id, 'ceramic');
+    A.setModel(state, line.id, 'carbide');
+    A.keepFirearm(state, line.id);
+    A.setProductionLine(state, line.id, 'helmet');
+    A.setModel(state, line.id, 'highcut');
+    A.keepFirearm(state, line.id);
+    const kept = (state.armoury || []).filter((p) => p.kind === 'plate');
+    A.equipGear(state, 'torso', kept.find((p) => p.classId === 'ceramic').id);
+    A.equipGear(state, 'head', kept.find((p) => p.classId === 'helmet').id);
+    return ui.tabCharacter();
+  }],
+  ['tabXray (shot up)', () => {
+    A.takeFire(state, { rounds: 5, threat: 0.8 });
+    // Push it forward far enough for the infection clock to have run.
+    const ch = require_character();
+    return ui.tabXray();
   }],
   ['buildingPanel armour line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],

@@ -402,6 +402,22 @@ game.releaseFirearm = (pieceId) => {
   game.ui.render();
 };
 
+// Putting something on, and taking it off again.
+game.equipGear = (slotId, pieceId) => {
+  const r = A.equipGear(game.state, slotId, pieceId);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.piece ? `${r.piece.name} on.` : 'Off.', 'info');
+  game.ui.render();
+};
+
+game.getTreated = () => {
+  const r = A.getTreated(game.state);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`Patched up — ${money(r.cost)}.`, 'good');
+  game.ui.render();
+};
+
+
 
 game.sellItem = (itemId) => {
   const r = A.sellItem(game.state, itemId);
@@ -433,6 +449,9 @@ game.__boot = (state) => bootGame(state);
 // a clipped muzzle can't be seen from the markup alone.
 import('./ui/art.js').then((art) => { window.__plugsimArt = art; }).catch(() => {});
 import('./game/incidents.js').then((m) => { window.__plugsimIncidents = m; }).catch(() => {});
+// Exposed for the browser check, which has to be able to put a round into a
+// body and wind the clock on without waiting for a turf war to go wrong.
+import('./game/health.js').then((m) => { window.__plugsimHealth = m; }).catch(() => {});
 
 game.sellItemTo = (itemId, playerId) => {
   diag.trace('sell item to operation');

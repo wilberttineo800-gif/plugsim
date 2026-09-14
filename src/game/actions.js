@@ -22,6 +22,8 @@ import {
   builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
 import { lineKindOf } from './lines.js';
+import { takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS } from './health.js';
+import { characterOf, protectionOf, armedWith, equip } from './character.js';
 import {
   armouryEdge, armourGuard, keepFromLine as takeFromLine, releasePiece as letPieceGo,
   canKeep,
@@ -1009,9 +1011,13 @@ export function muscleIn(state, districtId) {
     // What you were wearing is what decides how badly a bad move goes. Armour
     // does not stop you losing the block; it stops losing it costing as much.
     const guard = armourGuard(state);
+    // And it is not only money. A move that goes wrong is people shooting at
+    // you, and this is where the cabinet stops being a spreadsheet entry.
+    const hurt = takeFire(state, { rounds: 1 + Math.floor(Math.random() * 3), heat: d.heat });
     spendClean(state, Math.round(cost * RIVALS.muscleBackfireCost * (1 - guard)));
     d.rivalControl = clamp01(d.rivalControl + 0.06 * (1 - guard));
     logEvent(state, `Move on ${crew.name} in ${d.name} went bad. They held the block.`, 'bad');
+    reportFire(state, hurt);
     return {
       ok: true, won: false, guard,
       cost: Math.round(cost * RIVALS.muscleBackfireCost * (1 - guard)),
@@ -1314,4 +1320,93 @@ export function releaseFirearm(state, pieceId) {
     + (res.clean ? ', through the book.' : ', cash in hand.'),
     'good');
   return res;
+}
+
+
+// --- Getting shot at, and getting seen to -----------------------------------
+
+/**
+ * Rounds coming the other way.
+ *
+ * Each one picks a body part by how much of you it is, then asks what you had
+ * on at that spot. A plate covers your chest and nothing else — your arms are
+ * the most commonly hit part of anybody who lives to be counted, and no vest
+ * made covers them.
+ */
+export function takeFire(state, { rounds = 1, threat = null, heat = 0 } = {}) {
+  const ch = characterOf(state);
+  const body = ch.body;
+  if (body.deadAt != null) return { wounds: [], died: false };
+  // A hotter block is a better-armed block.
+  const incoming = threat != null ? threat : clamp(0.3 + (heat / 100) * 0.45, 0.28, 0.8);
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const taken = [];
+  for (let i = 0; i < rounds; i++) {
+    const part = rollPartFor(state);
+    const w = takeHit(body, {
+      part,
+      threat: incoming,
+      protection: protectionOf(state, part),
+      atHour,
+    });
+    if (w) taken.push(w);
+  }
+  return { wounds: taken, died: body.deadAt != null };
+}
+
+function rollPartFor() {
+  let r = Math.random();
+  for (const id of Object.keys(BODY_PARTS)) {
+    r -= BODY_PARTS[id].hitShare;
+    if (r <= 0) return id;
+  }
+  return 'thorax';
+}
+
+/** Put what just happened to you into the log, in plain words. */
+export function reportFire(state, hurt) {
+  if (!hurt || !hurt.wounds.length) return;
+  const stopped = hurt.wounds.filter((w) => w.type === 'babt');
+  const through = hurt.wounds.filter((w) => w.type !== 'babt');
+  if (stopped.length && !through.length) {
+    logEvent(state,
+      `You got hit. The armour held — ${stopped.length === 1 ? 'a bruise' : 'bruises'} and nothing more.`,
+      'warn');
+    return;
+  }
+  const worst = through.sort((a, b) => b.severity - a.severity)[0];
+  logEvent(state,
+    `You got hit${stopped.length ? ' — the armour caught one' : ''}. `
+    + `${BODY_PARTS[worst.part].name}, and it went in. Get seen to.`,
+    'bad');
+}
+
+/**
+ * Get patched up.
+ *
+ * Priced off how bad it is, which is what makes leaving it a real temptation
+ * when money is tight — and leaving it is exactly what turns a hole into
+ * sepsis. It buys the bleeding stopping, the metal coming out, and
+ * antibiotics; it does not undo an infection that has already walled itself
+ * off or got into bone.
+ */
+export function getTreated(state) {
+  const ch = characterOf(state);
+  const open = openWounds(ch.body).filter((w) => !w.treated);
+  if (!open.length) return { ok: false, error: 'Nothing that needs seeing to.' };
+  const cost = treatmentCost(ch.body);
+  if (!canAfford(state, cost)) {
+    return { ok: false, error: `A clinic that asks nothing wants $${cost.toLocaleString()}.` };
+  }
+  spendClean(state, cost);
+  const n = treat(ch.body, { atHour: Math.floor((state.minutes || 0) / 60) });
+  logEvent(state,
+    `Somebody who doesn't keep records saw to ${n} ${n === 1 ? 'wound' : 'wounds'}. $${cost.toLocaleString()}.`,
+    'good');
+  return { ok: true, treated: n, cost };
+}
+
+/** Put a kept piece on, or take it off with a null id. */
+export function equipGear(state, slotId, pieceId) {
+  return equip(state, slotId, pieceId || null);
 }

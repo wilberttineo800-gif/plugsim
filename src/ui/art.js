@@ -14,6 +14,7 @@ import {
 import {
   ARMOUR_DETAIL, ARMOUR_DEFS, armourTransform, ARMOUR_FIELD,
 } from './armourart.js';
+import { BODY_DEFS } from './bodyart.js';
 
 const GUN_VIEWBOX = '0 0 64 32';
 
@@ -31,7 +32,7 @@ let defsSprited = false;
 function sharedDefs() {
   if (defsSprited) return '';
   if (typeof document === 'undefined' || !document.body) {
-    return `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}</defs>`;
+    return `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}${BODY_DEFS}</defs>`;
   }
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
@@ -39,7 +40,7 @@ function sharedDefs() {
   svg.setAttribute('width', '0');
   svg.setAttribute('height', '0');
   svg.style.position = 'absolute';
-  svg.innerHTML = `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}</defs>`;
+  svg.innerHTML = `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}${BODY_DEFS}</defs>`;
   document.body.appendChild(svg);
   defsSprited = true;
   return '';
@@ -985,3 +986,8 @@ export function armourClassArt(patterns, opts = {}) {
 }
 
 export const ARMOUR_ART_IDS = Object.keys(ARMOUR_DETAIL);
+
+/** The figure's own paint, on the same one-sprite-per-document basis. */
+export function sharedBodyDefs() {
+  return sharedDefs();
+}

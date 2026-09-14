@@ -28,6 +28,8 @@
 export const ARMOUR_CLASSES = {
   stab: {
     id: 'stab',
+    // Edged and spike rated. Against a bullet it is a shirt.
+    protection: { level: 0.05, covers: ['thorax', 'abdomen'] },
     name: 'Stab Vests',
     blurb: 'Edged and spike rated, not ballistic. Layered aramid on a sewing machine — the simplest thing in the trade and it always moves.',
     valueMult: 0.72,
@@ -37,6 +39,8 @@ export const ARMOUR_CLASSES = {
   },
   carrier: {
     id: 'carrier',
+    // A carrier holds plates. On its own it stops nothing at all.
+    protection: { level: 0.02, covers: ['thorax'] },
     name: 'Plate Carriers',
     blurb: 'Cordura, webbing and buckles. Stops nothing on its own, which is exactly why everybody who buys plates buys one too.',
     valueMult: 0.85,
@@ -46,6 +50,8 @@ export const ARMOUR_CLASSES = {
   },
   covert: {
     id: 'covert',
+    // Level II: 9mm and .357. What most people who are shot at are shot with.
+    protection: { level: 0.38, covers: ['thorax', 'abdomen'] },
     name: 'Concealable Vests',
     blurb: 'Level II, worn under a shirt. The vest most people who wear one every day are actually wearing.',
     valueMult: 1,
@@ -55,6 +61,8 @@ export const ARMOUR_CLASSES = {
   },
   helmet: {
     id: 'helmet',
+    // Handgun rounds and fragments. A rifle round through a helmet is still a rifle round.
+    protection: { level: 0.40, covers: ['head'] },
     name: 'Ballistic Helmets',
     blurb: 'A moulded aramid shell, a suspension and a shroud. Slow work — the shell is pressed in one piece or it is scrap — and worth more than a vest, which is why it is worth the wait.',
     valueMult: 1.75,
@@ -64,6 +72,8 @@ export const ARMOUR_CLASSES = {
   },
   soft: {
     id: 'soft',
+    // Level IIIA: everything a handgun throws, up to .44 Magnum.
+    protection: { level: 0.50, covers: ['thorax', 'abdomen'] },
     name: 'Soft Armour',
     blurb: 'Level IIIA panels. Stops everything a handgun throws and nothing a rifle does. The working vest, and the volume seller.',
     valueMult: 1.55,
@@ -73,6 +83,8 @@ export const ARMOUR_CLASSES = {
   },
   rifle: {
     id: 'rifle',
+    // Level III: rifle ball. Only over the plate — the plate is smaller than you are.
+    protection: { level: 0.78, covers: ['thorax'] },
     name: 'Rifle Plates',
     blurb: 'Level III and III+. Where armour stops being clothing and starts being engineering.',
     valueMult: 2.1,
@@ -82,6 +94,8 @@ export const ARMOUR_CLASSES = {
   },
   ceramic: {
     id: 'ceramic',
+    // Level IV: armour-piercing rifle. The most that is made.
+    protection: { level: 0.92, covers: ['thorax'] },
     name: 'Ceramic Plates',
     blurb: 'Level IV. Silicon carbide pressed against a backer, cured, and tested one at a time. Stops armour-piercing rifle and costs accordingly.',
     valueMult: 3.4,
@@ -91,6 +105,8 @@ export const ARMOUR_CLASSES = {
   },
   shield: {
     id: 'shield',
+    // Whatever is behind it, when it happens to be in the way.
+    protection: { level: 0.60, covers: ['thorax', 'abdomen', 'armL'] },
     name: 'Ballistic Shields',
     blurb: 'Handheld and barricade. Almost nobody but a department buys one, and a department will not buy one without paper.',
     valueMult: 4,
@@ -102,6 +118,20 @@ export const ARMOUR_CLASSES = {
 };
 
 export const ARMOUR_CLASS_IDS = Object.keys(ARMOUR_CLASSES);
+
+/**
+ * How well a set protects a given body part, 0 to 1.
+ *
+ * A plate carrier and a plate are not the same thing, and neither covers your
+ * arms — the single most-hit part of anybody who survives being shot. So this
+ * asks per part rather than returning one number for "wearing armour".
+ */
+export function protectionAt(classId, partId) {
+  const cls = ARMOUR_CLASSES[classId];
+  const p = cls && cls.protection;
+  if (!p || !p.covers.includes(partId)) return 0;
+  return p.level;
+}
 
 /**
  * The patterns within a class. Each is a real trade-off in materials: steel is

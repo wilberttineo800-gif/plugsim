@@ -24,6 +24,8 @@ import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor, modelEffects } from './firearms.js';
 import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { lineEffects, lineKindOf } from './lines.js';
+import { stepBody, infectionStage, BODY_PARTS } from './health.js';
+import { characterOf } from './character.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -1197,6 +1199,11 @@ function stepHeat(state, dt) {
       0, HEAT.max);
   }
 
+  // Your own body is on the same clock as everything else: bleeding out,
+  // infection coming in, tissue closing. A wound is not an event, it is a
+  // process, and this is where the process runs.
+  stepCharacter(state, dt);
+
   // What you keep for yourself costs attention too, on the block you work
   // from — iron in a drawer is iron somebody can find, and one with the number
   // ground off is a different charge to one in a bound book.
@@ -1451,5 +1458,31 @@ function settleDay(state) {
   } else {
     state.unpaid = false;
     logEvent(state, `Day settled — $${total.toLocaleString()} out for upkeep and payroll.`, 'info');
+  }
+}
+
+/** An hour of the player's own body, and anything worth interrupting for. */
+function stepCharacter(state, dt) {
+  const ch = characterOf(state);
+  if (!ch.body || ch.body.deadAt != null) return;
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const { events } = stepBody(ch.body, dt, { atHour });
+  for (const e of events) {
+    if (e.kind === 'infection') {
+      logEvent(state,
+        `That ${BODY_PARTS[e.wound.part].name.toLowerCase()} wound: ${e.stage.name.toLowerCase()}. `
+        + e.stage.blurb,
+        e.stage.tone === 'good' ? 'info' : e.stage.tone === 'warn' ? 'warn' : 'bad');
+    } else if (e.kind === 'lost') {
+      logEvent(state, `You lost the ${e.part.name.toLowerCase()} to ${e.to}.`, 'bad');
+    } else if (e.kind === 'scarred') {
+      logEvent(state,
+        `The ${e.part.name.toLowerCase()} closed, but it was left too long. It won't be what it was.`,
+        'warn');
+    } else if (e.kind === 'healed') {
+      logEvent(state, `A wound closed up.`, 'good');
+    } else if (e.kind === 'died') {
+      logEvent(state, `You ${e.how}.`, 'bad');
+    }
   }
 }

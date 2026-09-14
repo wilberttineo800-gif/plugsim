@@ -16,12 +16,24 @@ import { pendingTip } from '../game/guide.js';
 import { devToolsOn } from '../game/dev.js';
 import {
   LICENCES, LICENCE_IDS, licencesFor, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
+  threatOf,
   hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
 } from '../game/firearms.js';
 import {
   ARMOUR_CLASSES, ARMOUR_CLASS_IDS, ARMOUR_MODELS,
   armourClassOf, armourModelOf, armourModelsFor,
 } from '../game/armour.js';
+import {
+  BODY_PARTS, BODY_PART_IDS, CAPACITIES, WOUND_TYPES, HEALTH,
+  capacities, condition, openWounds, infectionStage, treatmentCost,
+} from '../game/health.js';
+import {
+  SLOTS, SLOT_IDS, characterOf, equippedIn, candidatesFor, coverage,
+  armedWith, pieceLabel,
+} from '../game/character.js';
+import {
+  BODY_ART, BODY_DEFS, SKELETON, FIGURE_W, FIGURE_H, figure, partTransform,
+} from './bodyart.js';
 import {
   armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
   pieceValue, canKeep, lineUnit, isKeepableLine, armourGuard,
@@ -36,6 +48,7 @@ import {
 import {
   gunArt, gunWithAttachments, attachmentArt, productArt, modelArt, modelWithAttachments,
   armourArt, armourClassArt,
+  sharedBodyDefs,
   vehicleArt,
 } from './art.js';
 import {
@@ -381,6 +394,9 @@ export class GameUI {
       case 'unfit': g.equipItem(id, null); break;
       case 'keep-firearm': g.keepFirearm(id); break;
       case 'release-firearm': g.releaseFirearm(id); break;
+      case 'equip': g.equipGear(type, id); break;
+      case 'unequip': g.equipGear(type, null); break;
+      case 'get-treated': g.getTreated(); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -680,6 +696,8 @@ export class GameUI {
       routes: () => this.tabRoutes(),
       lab: () => this.tabLab(),
       cities: () => this.tabCities(),
+      character: () => this.tabCharacter(),
+      xray: () => this.tabXray(),
       ledger: () => this.tabLedger(),
       admin: () => this.tabAdmin(),
     };
@@ -688,6 +706,239 @@ export class GameUI {
       this.dom.railBody.innerHTML = html;
       this._lastRailHtml = html;
     }
+  }
+
+
+  // --- You ------------------------------------------------------------------
+
+  /**
+   * The character screen.
+   *
+   * The point of it is the coverage readout underneath the figure. A plate
+   * carrier protects a rectangle about ten inches by twelve, and your arms —
+   * the most commonly hit part of anybody who survives being shot — are not in
+   * it. Showing protection per body part rather than as one "armour" number is
+   * what makes that legible instead of a surprise.
+   */
+  tabCharacter() {
+    const s = this.game.state;
+    const ch = characterOf(s);
+    const body = ch.body;
+    const cover = coverage(s);
+    const caps = capacities(body);
+    const cond = condition(body);
+
+    const worn = {};
+    for (const id of SLOT_IDS) worn[id] = equippedIn(s, id);
+
+    // The figure, with whatever is on it drawn over the parts it covers.
+    const overlay = (partId) => {
+      const p = cover[partId] || 0;
+      if (p <= 0) return '';
+      const part = BODY_ART[partId];
+      const tr = partTransform(part);
+      return `<g${tr ? ` transform="${tr}"` : ''}>
+        <path d="${part.path}" fill="#8a9b7e" opacity="${(0.18 + p * 0.34).toFixed(2)}"/>
+        <path d="${part.path}" fill="none" stroke="#a8b79b" stroke-width="3" opacity=".55"/>
+      </g>`;
+    };
+    const fig = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
+      width="190" height="${Math.round(190 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
+      ${sharedBodyDefs()}
+      ${figure({
+        fillFor: (id) => (body.parts[id].lost ? '#1a1e24' : 'url(#bfSkin)'),
+        extra: overlay,
+      })}
+    </svg>`;
+
+    const slots = SLOT_IDS.map((id) => {
+      const slot = SLOTS[id];
+      const piece = worn[id];
+      const options = candidatesFor(s, id);
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${esc(slot.name)}</span>
+          ${piece ? `<span class="card__cost ${piece.serialised ? 'good' : 'warn'}">${
+            piece.serialised ? 'papered' : 'no paper'}</span>` : ''}
+        </div>
+        ${piece ? `<div class="showcase" style="padding:0;margin:4px 0">
+            <div class="showcase__art">${piece.kind === 'plate'
+              ? armourArt(piece.modelId, { size: 72 })
+              : modelArt(piece.modelId, { size: 108 })}</div>
+            <div class="showcase__meta">
+              <div class="showcase__name">${esc(pieceLabel(piece))}</div>
+              <div class="showcase__stats">
+                ${slot.armour
+                  ? `<span>${esc((ARMOUR_CLASSES[piece.classId] || {}).name || '')}</span>`
+                  : `<span>threat ${Math.round(threatOf(piece.classId) * 100)}</span>`}
+              </div>
+            </div>
+          </div>
+          <div class="btnrow">
+            <button class="ghostbtn" data-action="unequip" data-type="${id}">Take it off</button>
+          </div>`
+        : `<div class="card__blurb">${esc(slot.empty)}</div>`}
+        ${options.length ? `<div class="chips">${options
+          .filter((o) => !piece || o.id !== piece.id)
+          .map((o) => `<button class="chip" data-action="equip" data-id="${o.id}"
+            data-type="${id}">${esc(pieceLabel(o))}</button>`).join('')}</div>`
+          : '<div class="card__meta"><span style="color:var(--text-faint)">Nothing in the cabinet fits here.</span></div>'}
+      </div>`;
+    }).join('');
+
+    const coverRows = BODY_PART_IDS.map((id) => {
+      const part = BODY_PARTS[id];
+      const p = cover[id] || 0;
+      return `<div class="row">
+        <span>${esc(part.name)}${body.parts[id].lost ? ' <b class="bad">(gone)</b>' : ''}</span>
+        <span class="${p > 0.6 ? 'good' : p > 0 ? 'warn' : 'bad'}">${
+          p > 0 ? `${Math.round(p * 100)}% covered` : 'bare'}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>${esc(ch.name || 'You')}</span>
+        <span class="${cond.tone}">${esc(cond.label)}</span></div>
+      <div class="showcase">
+        <div class="showcase__art">${fig}</div>
+        <div class="showcase__meta">
+          <div class="showcase__stats">
+            <span class="${body.blood > 0.8 ? 'good' : body.blood > HEALTH.shockBelow ? 'warn' : 'bad'}">
+              blood ${Math.round(body.blood * 100)}%</span>
+          </div>
+          ${Object.values(CAPACITIES).map((c) => `<div class="row">
+            <span>${esc(c.name)}</span>
+            <span class="${caps[c.id] > 0.85 ? 'good' : caps[c.id] > 0.4 ? 'warn' : 'bad'}">${
+              Math.round(caps[c.id] * 100)}%</span>
+          </div>`).join('')}
+        </div>
+      </div>
+      <p class="card__blurb" style="margin:10px 0">
+        A plate covers a rectangle about ten inches by twelve. Your arms are the
+        most commonly hit part of anybody who lives to be counted, and nothing
+        made covers them.
+      </p>
+      <div class="rows">${coverRows}</div>
+    </div>
+    <div class="sect">
+      <div class="sect__title"><span>Carried</span>
+        <span>${armedWith(s) ? `threat ${Math.round(armedWith(s) * 100)}` : 'unarmed'}</span></div>
+      ${slots}
+    </div>`;
+  }
+
+  // --- X-ray ----------------------------------------------------------------
+
+  /**
+   * Every injury, where it landed and where it is going.
+   *
+   * The film shows retained metal, because that is the thing an X-ray is
+   * actually for and it is also the thing that decides what happens next: a
+   * round left inside is a foreign body, and a foreign body is what turns a
+   * hole into an abscess.
+   */
+  tabXray() {
+    const s = this.game.state;
+    const ch = characterOf(s);
+    const body = ch.body;
+    const open = openWounds(body);
+    const cost = treatmentCost(body);
+    const untreated = open.filter((w) => !w.treated);
+
+    const marks = (partId) => {
+      const here = open.filter((w) => w.part === partId);
+      if (!here.length) return '';
+      const part = BODY_ART[partId];
+      const [cx, cy] = part.at;
+      return here.map((w, i) => {
+        const stage = infectionStage(w);
+        const dx = ((i % 3) - 1) * 13;
+        const dy = (Math.floor(i / 3) - 0.5) * 16;
+        const r = 9 + w.severity * 15;
+        const septic = stage.id === 'sepsis' || stage.id === 'gangrene';
+        return `<circle cx="${cx + dx}" cy="${cy + dy}" r="${r.toFixed(1)}"
+            fill="url(#${septic ? 'bfSepsis' : 'bfWound'})"/>
+          ${w.retained ? `<rect x="${cx + dx - 3}" y="${cy + dy - 4}" width="6" height="8" rx="2"
+            fill="#f2f6fa"/>` : ''}`;
+      }).join('');
+    };
+
+    const film = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
+      width="210" height="${Math.round(210 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
+      ${sharedBodyDefs()}
+      <rect width="${FIGURE_W}" height="${FIGURE_H}" fill="#070d14"/>
+      ${figure({
+        fillFor: (id) => (body.parts[id].lost ? '#04080c' : 'url(#bfFilm)'),
+        stroke: '#1b2836',
+      })}
+      ${SKELETON}
+      ${BODY_PART_IDS.map(marks).join('')}
+    </svg>`;
+
+    const rows = open
+      .slice()
+      .sort((a, b) => b.severity - a.severity)
+      .map((w) => {
+        const part = BODY_PARTS[w.part];
+        const type = WOUND_TYPES[w.type];
+        const stage = infectionStage(w);
+        const ageH = Math.max(0, Math.floor((s.minutes || 0) / 60) - w.atHour);
+        return `<div class="card">
+          <div class="card__head">
+            <span class="card__name">${esc(part.name)} · ${esc(type.name)}</span>
+            <span class="card__cost ${stage.tone}">${esc(stage.name)}</span>
+          </div>
+          <div class="card__blurb">${esc(type.blurb)}</div>
+          <div class="card__meta">
+            <span class="${w.severity > 0.6 ? 'bad' : w.severity > 0.3 ? 'warn' : ''}">
+              severity ${Math.round(w.severity * 100)}</span>
+            <span>${ageH < 24 ? `${ageH}h old` : `${Math.floor(ageH / 24)}d old`}</span>
+            ${w.bleeding > 0.02 ? '<span class="bad">still bleeding</span>' : ''}
+            ${w.retained ? '<span class="warn">metal still in it</span>' : ''}
+            ${w.treated ? '<span class="good">seen to</span>' : '<span class="bad">not seen to</span>'}
+          </div>
+          ${stage.id !== 'clean'
+            ? `<div class="card__meta"><span class="${stage.tone}">${esc(stage.blurb)}</span></div>`
+            : ''}
+        </div>`;
+      }).join('');
+
+    const lost = BODY_PART_IDS.filter((id) => body.parts[id].lost);
+    const scarred = BODY_PART_IDS.filter((id) => (body.parts[id].scar || 0) > 0.01);
+
+    return `<div class="sect">
+      <div class="sect__title"><span>X-ray</span>
+        <span class="${condition(body).tone}">${esc(condition(body).label)}</span></div>
+      <div class="showcase">
+        <div class="showcase__art">${film}</div>
+        <div class="showcase__meta">
+          <p class="card__blurb" style="margin:0 0 8px">
+            Bright marks are open wounds. A white block is metal still in there —
+            it is a foreign body, and a foreign body is what turns a hole into an
+            abscess.
+          </p>
+          ${untreated.length ? `<div class="btnrow">
+            <button class="ghostbtn" data-action="get-treated">
+              Get seen to · ${moneyShort(cost)}</button>
+          </div>
+          <p class="card__blurb" style="margin:8px 0 0">
+            Past about half a day in the open a wound starts to contaminate, and
+            past a day it is sepsis, amputation, or both.
+          </p>` : '<div class="card__meta"><span class="good">Nothing outstanding.</span></div>'}
+        </div>
+      </div>
+    </div>
+    ${lost.length || scarred.length ? `<div class="sect">
+      <div class="sect__title"><span>Permanent</span></div>
+      ${lost.map((id) => `<div class="row"><span>${esc(BODY_PARTS[id].name)}</span>
+        <span class="bad">gone — ${esc(body.parts[id].lostTo || 'the damage')}</span></div>`).join('')}
+      ${scarred.map((id) => `<div class="row"><span>${esc(BODY_PARTS[id].name)}</span>
+        <span class="warn">${Math.round(body.parts[id].scar * 100)}% never came back</span></div>`).join('')}
+    </div>` : ''}
+    <div class="sect">
+      <div class="sect__title"><span>Open</span><span>${open.length}</span></div>
+      ${rows || '<div class="empty">Not a mark on you.</div>'}
+    </div>`;
   }
 
   // --- Build tab ------------------------------------------------------------

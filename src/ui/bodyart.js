@@ -269,6 +269,21 @@ function facialShape(style, hex) {
  * is, and a figure in nothing but skin reads as unfinished art rather than as
  * somebody who has not bought a vest yet.
  */
+/**
+ * Shift a hex colour lighter or darker.
+ *
+ * Needed because a sleeve filled with exactly the torso colour vanishes into
+ * the torso — which is the same mistake the firearms went through twice, and
+ * the reason the rule is written down: a part drawn in the same fill as the
+ * part behind it is not a part, it is a lump.
+ */
+function shade(hex, amount) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = [(n >> 16) & 255, (n >> 8) & 255, n & 255].map((v) =>
+    Math.max(0, Math.min(255, Math.round(v + 255 * amount))));
+  return `#${ch.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 function clothingShapes(def, hex, build) {
   const g = (id, extra = '') => {
     const part = BODY_ART[id];
@@ -276,17 +291,41 @@ function clothingShapes(def, hex, build) {
     return `<g${tr ? ` transform="${tr}"` : ''}>
       <path d="${part.path}" fill="${hex}"/>${extra}</g>`;
   };
-  const out = [g('thorax'), g('abdomen')];
+  const body = (id) => {
+    const part = BODY_ART[id];
+    const tr = partTransform(part, build);
+    return `<g${tr ? ` transform="${tr}"` : ''}>
+      <path d="${part.path}" fill="${hex}"/></g>`;
+  };
+  const out = [body('thorax'), body('abdomen')];
 
-  if (def.sleeve === 'long') { out.push(g('armL'), g('armR')); }
+  // Sleeves are a shade off the body and carry a shoulder seam and a cuff.
+  // Without those three things the arm is the same silhouette-coloured mass as
+  // the chest and simply is not visible.
+  // Seam and cuff are drawn as translucent shadow rather than as computed
+  // colours: shifting a already-dark cloth darker lands on black, and a black
+  // block at the shoulder reads as a hole rather than a seam.
+  const sleeveHex = shade(hex, -0.05);
+  const sleeve = (id, clip) => {
+    const part = BODY_ART[id];
+    const tr = partTransform(part, build);
+    return `<g${tr ? ` transform="${tr}"` : ''}>
+      ${clip ? `<clipPath id="${clip.id}"><rect x="0" y="${clip.y}" width="${FIGURE_W}"
+        height="${clip.h}"/></clipPath>` : ''}
+      <path d="${part.path}" fill="${sleeveHex}"${clip ? ` clip-path="url(#${clip.id})"` : ''}/>
+      <path d="${part.path}" fill="#000" opacity=".12"${clip ? ` clip-path="url(#${clip.id})"` : ''}/>
+      <path d="M29 100 c11 -7 24 -9 35 -5" fill="none" stroke="#000" stroke-width="4"
+            opacity=".22" stroke-linecap="round"/>
+      ${clip ? '' : `<path d="M20 240 c10 4 20 5 29 2" fill="none" stroke="#000"
+            stroke-width="7" opacity=".2" stroke-linecap="round"/>`}
+    </g>`;
+  };
+
+  if (def.sleeve === 'long') { out.push(sleeve('armL'), sleeve('armR')); }
   else if (def.sleeve === 'short') {
     // Only the upper arm: clip the sleeve to the top third of the limb.
     for (const id of ['armL', 'armR']) {
-      const part = BODY_ART[id];
-      const tr = partTransform(part, build);
-      out.push(`<g${tr ? ` transform="${tr}"` : ''}>
-        <clipPath id="slv-${id}"><rect x="0" y="86" width="${FIGURE_W}" height="60"/></clipPath>
-        <path d="${part.path}" fill="${hex}" clip-path="url(#slv-${id})"/></g>`);
+      out.push(sleeve(id, { id: `slv-${id}`, y: 86, h: 60 }));
     }
   }
 
@@ -305,6 +344,7 @@ function clothingShapes(def, hex, build) {
       const tr = partTransform(part, build);
       out.push(`<g${tr ? ` transform="${tr}"` : ''}>
         <path d="${part.path}" fill="${legHex}"/>
+        <path d="${part.path}" fill="#000" opacity="${id === 'legR' ? '.1' : '0'}"/>
         ${def.stripe ? `<clipPath id="stp-${id}"><path d="${part.path}"/></clipPath>
           <path d="M56 268 h7 v180 h-7 z" fill="${hex}" opacity=".85"
                 clip-path="url(#stp-${id})"/>` : ''}</g>`);

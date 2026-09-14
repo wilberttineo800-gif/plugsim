@@ -26,6 +26,7 @@ import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { lineEffects, lineKindOf } from './lines.js';
 import { stepBody, infectionStage, BODY_PARTS } from './health.js';
 import { characterOf } from './character.js';
+import { resolveDeath } from './actions.js';
 import { cullSpoiled } from './organs.js';
 import { stepCaptives, captivesOf, CAPTIVES, hasColdStorage } from './captives.js';
 import { docUpkeep } from './streetdoc.js';
@@ -1514,7 +1515,8 @@ function stepCharacter(state, dt) {
     } else if (e.kind === 'healed') {
       logEvent(state, `A wound closed up.`, 'good');
     } else if (e.kind === 'died') {
-      logEvent(state, `You ${e.how}.`, 'bad');
+      // Not just a line in the log — it spends a life, and there are not many.
+      resolveDeath(state);
     }
   }
 }

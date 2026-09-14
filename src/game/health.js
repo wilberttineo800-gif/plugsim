@@ -221,6 +221,18 @@ export const HEALTH = {
   loseLimbBelow: 0.12,
   /** The most permanent damage one badly-infected wound can leave behind. */
   scarMax: 0.22,
+  /**
+   * One free life. After that it is permanent unless you pay, and what you
+   * pay doubles each time — so the second is survivable, the fourth is the
+   * kind of money that ends the run anyway.
+   */
+  freeLives: 1,
+  lifeCost: 12000000,
+  lifeCostGrowth: 2.2,
+  /** You do not come back the way you went. */
+  reviveBlood: 0.55,
+  /** How far past whole a body can be pushed by what is fitted to it. */
+  capacityCeiling: 1.25,
   /** What treatment costs, per point of severity, at a clinic that asks nothing. */
   treatCostPerSeverity: 9000,
 };
@@ -294,7 +306,7 @@ export function organFactor(body, capacityId) {
     const eff = installedEfficiency(body, id);
     have += (n - gone) + (gone > 0 && eff > 0 ? Math.min(gone, 1) * eff : 0);
   }
-  return total ? clamp01(have / total) : 1;
+  return total ? clamp(have / total, 0, HEALTH.capacityCeiling) : 1;
 }
 
 export function woundsOn(body, partId) {
@@ -313,15 +325,27 @@ export function openWounds(body) {
  */
 export function partDamage(body, partId) {
   if (!body.parts[partId]) return 1;
-  // A limb that has been replaced is not a missing limb. It is a limb that
-  // works as well as whatever was fitted — which for a bionic is better than
-  // the one that was taken off.
   if (body.parts[partId].lost) {
     const eff = installedEfficiency(body, partId);
     return eff > 0 ? clamp01(1 - eff) : 1;
   }
   const scar = body.parts[partId].scar || 0;
   return clamp01(scar + woundsOn(body, partId).reduce((n, w) => n + w.severity, 0));
+}
+
+/**
+ * How well a region actually works, which is NOT one minus its damage.
+ *
+ * A fitted limb works at whatever was fitted, and a bionic one works at better
+ * than one — so this can exceed 1 where `partDamage` cannot. Upgrading an
+ * intact limb has to go through here too, or fitting a bionic leg to a leg you
+ * still have would do nothing at all, which is the opposite of the point.
+ */
+export function partEfficiency(body, partId) {
+  if (!body.parts[partId]) return 0;
+  const eff = installedEfficiency(body, partId);
+  if (eff > 0) return eff;
+  return 1 - partDamage(body, partId);
 }
 
 /**
@@ -353,7 +377,7 @@ export function capacities(body) {
   // Ask partDamage rather than short-circuiting on `lost`: a limb that has
   // been replaced IS lost, and also works. Checking the flag first meant a
   // bionic arm contributed nothing, which is the opposite of the point.
-  const efficiencyOf = (pid) => 1 - partDamage(body, pid);
+  const efficiencyOf = (pid) => partEfficiency(body, pid);
   for (const pid of BODY_PART_IDS) {
     for (const cap of BODY_PARTS[pid].capacities || []) {
       out[cap] += efficiencyOf(pid) / counts[cap];
@@ -371,14 +395,22 @@ export function capacities(body) {
 
   // What has been taken out counts as much as what has been shot. One lung is
   // half the breathing whether it was a bullet or a scalpel that took it.
+  //
+  // Multiplied rather than min-ed: the anatomy should REDUCE what a region can
+  // do, never cap it. Taking the minimum pinned a bionic leg back to 100%,
+  // because the knee inside it is an ordinary knee and an ordinary knee is
+  // only ever 1 — which quietly deleted the entire reason to fit one.
   for (const id of Object.keys(out)) {
-    out[id] = Math.min(out[id], organFactor(body, id));
+    out[id] *= Math.min(1, organFactor(body, id));
   }
 
   // Blood loss takes consciousness before it takes anything else.
   const shock = clamp01((body.blood - HEALTH.deadBelow) / (HEALTH.shockBelow - HEALTH.deadBelow));
   out.consciousness = Math.min(out.consciousness, shock);
-  for (const id of Object.keys(out)) out[id] = clamp01(out[id]);
+  // Capacities cap ABOVE one, not at it: a bionic limb is better than the one
+  // it replaced, and clamping to 1 silently deleted the only reason anybody
+  // would fit one on purpose.
+  for (const id of Object.keys(out)) out[id] = clamp(out[id], 0, HEALTH.capacityCeiling);
   return out;
 }
 

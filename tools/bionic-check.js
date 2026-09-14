@@ -124,4 +124,144 @@ ok(A.letDocGo(s6).ok, 'and can be stopped');
 ok(!hasDoc(s6), 'after which there is nobody to call');
 ok(!A.fitPart(s6, 'armL', 'crude').ok, 'and nothing can be fitted again');
 
-print(fail ? `bionics: ${fail} FAILED, ${pass} passed` : `bionics: all ${pass} checks passed`);
+
+// --- What being hurt costs you ----------------------------------------------
+// Until now an injury was tracked, progressing, and invisible to every other
+// system. These pin that it bites.
+import { STATS, STAT_IDS, getStat, allStats, activePenalties } from '../src/game/stats.js';
+import { IMPAIRMENTS, addImpairment } from '../src/game/impairments.js';
+import { rollEfficiency, TIERS as BTIERS } from '../src/game/bionics.js';
+
+const hurt = fresh();
+const hb = characterOf(hurt).body;
+ok(STAT_IDS.every((id) => getStat(hurt, id) === 1), 'an unhurt body is at full on every stat');
+
+hb.parts.legL.lost = true;
+ok(getStat(hurt, 'muscle') < 1, 'a lost leg makes taking a block harder');
+ok(getStat(hurt, 'evade') < getStat(hurt, 'muscle'), 'and getting away harder still');
+ok(getStat(hurt, 'deal') === 1, 'while it does not change what a handoff is worth');
+
+const head = fresh();
+const hd = characterOf(head).body;
+hd.parts.head.scar = 0.5;
+ok(getStat(head, 'deal') < 1, 'a head injury changes what you negotiate');
+ok(getStat(head, 'wash') < 1, 'and how much money you can move');
+
+// Floors, so the game never silently stops responding.
+const wrecked = fresh();
+const wb = characterOf(wrecked).body;
+for (const id of ['legL', 'legR', 'armL', 'armR']) wb.parts[id].lost = true;
+wb.parts.head.scar = 0.9;
+ok(STAT_IDS.every((id) => getStat(wrecked, id) >= STATS[id].floor - 1e-9),
+  'every stat has a floor, however bad it gets');
+ok(activePenalties(wrecked).length > 0, 'and the player is told about all of it');
+
+// --- Impairments ------------------------------------------------------------
+const imp = fresh();
+const ib = characterOf(imp).body;
+const beforeImp = getStat(imp, 'manipulation') || 1;
+addImpairment(ib, 'palsy');
+ok(getStat(imp, 'muscle') < 1, 'a nerve palsy costs you, permanently');
+addImpairment(ib, 'chronicPain');
+ok(getStat(imp, 'deal') < 1, 'and chronic pain costs you everywhere');
+ok(Object.keys(IMPAIRMENTS).every((id) => IMPAIRMENTS[id].symptom && IMPAIRMENTS[id].effect),
+  'every impairment says what it is like and what it does');
+
+// --- Bionics improve, by 15-25% ---------------------------------------------
+const rolls = [];
+for (let i = 0; i < 200; i++) rolls.push(rollEfficiency('bionic'));
+ok(Math.min(...rolls) >= 1.15 && Math.max(...rolls) <= 1.25,
+  `a bionic limb comes out between 115% and 125% (${Math.round(Math.min(...rolls) * 100)}-${Math.round(Math.max(...rolls) * 100)}%)`);
+ok(new Set(rolls.map((r) => Math.round(r * 100))).size > 3, 'and not always the same number');
+
+const up = fresh();
+A.hireStreetDoc(up); up.streetDoc.skill = 1;
+const ub = characterOf(up).body;
+const base = getStat(up, 'muscle');
+let n = 0;
+while (!ub.installed.legL && n++ < 30) { up.cash.clean = 5e8; A.fitPart(up, 'legL', 'bionic'); }
+ok(getStat(up, 'muscle') > base, 'fitting one to a leg you still have makes you better than you were');
+n = 0;
+while (!ub.installed.legR && n++ < 30) { up.cash.clean = 5e8; A.fitPart(up, 'legR', 'bionic'); }
+ok(getStat(up, 'muscle') > 1.05, `and two of them is a real difference (${Math.round(getStat(up, 'muscle') * 100)}%)`);
+
+// --- Lives ------------------------------------------------------------------
+const mortal = fresh();
+ok(A.livesLeft(mortal) === 1, 'one free life');
+characterOf(mortal).body.blood = 0;
+const first = A.resolveDeath(mortal);
+ok(first.revived, 'the first death is survivable');
+ok(A.livesLeft(mortal) === 0, 'and spends the free one');
+ok(!!first.impairment, 'you do not come back the way you went in');
+ok(characterOf(mortal).body.blood < 1, 'and you come back short of blood');
+
+characterOf(mortal).body.blood = 0;
+const second = A.resolveDeath(mortal);
+ok(!second.revived, 'the second is not');
+ok(!!mortal.gameOver, 'and the run is over');
+
+const rich = fresh();
+const cost1 = A.nextLifeCost(rich);
+ok(A.buyLife(rich).ok, 'another can be bought');
+ok(A.nextLifeCost(rich) > cost1 * 2 - 1, `and the next one costs more ($${cost1.toLocaleString()} then $${A.nextLifeCost(rich).toLocaleString()})`);
+
+// --- Treatment --------------------------------------------------------------
+import { takeHit as hit } from '../src/game/health.js';
+
+/** Put a wound of the kind a hospital has to report into a body. */
+function reportableHit(body, part = 'thorax') {
+  for (let i = 0; i < 60; i++) {
+    const w = hit(body, { part, threat: 0.7, protection: 0, atHour: 0, rand: Math.random });
+    if (w && ['penetrating', 'perforating', 'avulsive', 'fracture'].includes(w.type)) return w;
+  }
+  return null;
+}
+const pat = fresh();
+const pb = characterOf(pat).body;
+reportableHit(pb, 'legL');
+
+ok(A.TREATMENT_IDS.length === 3, 'three ways to be seen to');
+ok(A.treatmentRisk(pat, 'self') > A.treatmentRisk(pat, 'hospital'),
+  'doing it yourself goes wrong more often than a hospital does');
+ok(A.treatmentPrice(pat, 'hospital') > A.treatmentPrice(pat, 'self') * 5,
+  'and costs a great deal more');
+ok(!A.getTreated(pat, 'street').ok, 'a street doctor you have not hired cannot see you');
+A.hireStreetDoc(pat);
+ok(A.treatmentRisk(pat, 'street') < A.treatmentRisk(pat, 'self'),
+  'and one you have is better than doing it yourself');
+
+ok(A.reportableWounds(pb).length > 0, 'a hole is the kind of thing a hospital reports');
+ok(A.hushCost(pat) > 0, 'and there is a price for it not to');
+
+const loud = fresh();
+loud.districts = [{ id: 'd1', name: 'A block', heat: 5, rep: 0.3 }];
+const lb = characterOf(loud).body;
+reportableHit(lb);
+loud.buildings = [{ id: 'b1', type: 'hq', active: true, districtId: 'd1' }];
+const heatBefore = loud.districts[0].heat;
+A.getTreated(loud, 'hospital');
+ok(loud.districts[0].heat > heatBefore, 'a hospital rings it in and the block gets hot');
+
+const quiet = fresh();
+quiet.districts = [{ id: 'd1', name: 'A block', heat: 5, rep: 0.3 }];
+quiet.buildings = [{ id: 'b1', type: 'hq', active: true, districtId: 'd1' }];
+const qb = characterOf(quiet).body;
+reportableHit(qb);
+const qHeat = quiet.districts[0].heat;
+const hushed = A.getTreated(quiet, 'hospital', { hush: true });
+ok(hushed.ok && !hushed.reported, 'paying the quiet money stops the call');
+ok(quiet.districts[0].heat === qHeat, 'and the block never hears about it');
+ok(hushed.hush > 0, 'and it is not cheap');
+
+// Failure can leave something permanent.
+let leftMark = 0;
+for (let i = 0; i < 80; i++) {
+  const bad = fresh();
+  const bb = characterOf(bad).body;
+  reportableHit(bb, 'legL');
+  const r = A.getTreated(bad, 'self');
+  if (r.ok && r.impairment) leftMark++;
+}
+ok(leftMark > 0, `patching yourself up can leave something permanent (${leftMark}/80)`);
+
+print(fail ? `bionics+stats+lives: ${fail} FAILED in total` : `bionics+stats+lives: all ${pass} checks passed in total`);

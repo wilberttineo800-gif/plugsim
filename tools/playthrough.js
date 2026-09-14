@@ -17,6 +17,7 @@ import { createState, createRoute } from '../src/game/state.js';
 import { stepSim, seedWorld } from '../src/game/sim.js';
 import { syntheticLots } from './fixtures.js';
 import { BUILDINGS, START_CASH_CLEAN } from '../src/game/constants.js';
+import { unlockStatus } from '../src/game/progression.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
 import { lotResale } from '../src/game/lots.js';
@@ -172,7 +173,8 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   for (const type of LADDER) {
     const def = BUILDINGS[type];
     if (!def || !def.unlock || seenUnlocked.has(type)) continue;
-    if (props >= (def.unlock.properties || 0) && cash >= (def.unlock.cash || 0)) {
+    const reach = unlockStatus(st, type);
+    if (!reach || !reach.locked) {
       seenUnlocked.add(type);
       mark(day, 'unlocked ' + def.name + '  ($' + Math.round(cash).toLocaleString() + ', '
                 + props + ' properties)');
@@ -218,6 +220,17 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     }
   }
 
+  // KNOWN LIMITATION, left deliberately rather than chased further.
+  //
+  // `healthy` requires every route to have a courier, and in long runs one
+  // route stays unserved however many vehicles are bought — so expansion stops
+  // at around ten properties and the run measures cash accumulation rather
+  // than progress. The unlock gate is fixed (this asks the game now instead of
+  // keeping a second copy of its rules) and the depot deadlock is fixed, but
+  // this last stall is a bot problem rather than a game problem, and chasing
+  // it further was costing more than it was worth. Treat "days to finish" from
+  // this tool as unmeasured until somebody sorts it.
+  //
   // Only grow the operation when it is demonstrably healthy: everything is
   // being hauled, and there is real clean money spare after the reserve.
   const healthy = unserved.length === 0 && cash > 2500000;
@@ -235,7 +248,9 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     for (const type of LADDER) {
       const def = BUILDINGS[type];
       if (!def) continue;
-      if (def.unlock && (props < (def.unlock.properties || 0) || cash < (def.unlock.cash || 0))) continue;
+      // Ask the game rather than keeping a second copy of its rules here.
+      const gate = unlockStatus(st, type);
+      if (gate && gate.locked) continue;
       if (has(st, type) >= 14) continue;            // spread out rather than stack one type
       const lot = bestLotFor(st, type, cash - float);
       if (!lot) continue;
@@ -268,7 +283,8 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     for (const f of FRONTS) {
       const def = BUILDINGS[f];
       if (!def) continue;
-      if (def.unlock && (props < (def.unlock.properties || 0) || cash < (def.unlock.cash || 0))) continue;
+      const fgate = unlockStatus(st, f);
+      if (fgate && fgate.locked) continue;
       const lot = bestLotFor(st, f, cash - float);
       if (!lot) continue;
       A.buyLot(st, lot.id);

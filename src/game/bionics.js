@@ -36,8 +36,13 @@ export const TIERS = {
     organs: true, needsStock: true,
   },
   bionic: {
-    id: 'bionic', name: 'Bionic', efficiency: 1.18, costMult: 4.2, risk: 0.16,
-    blurb: 'Better than the one you were born with. The only reason anybody does this on purpose rather than because they had to.',
+    id: 'bionic', name: 'Bionic', efficiency: 1.2, costMult: 4.2, risk: 0.16,
+    // A range rather than a number, rolled once when it is fitted and kept.
+    // Two bionic legs are not the same bionic leg, and a slight improvement
+    // that is slightly different each time reads as a real thing rather than
+    // as a constant somebody typed.
+    range: [1.15, 1.25],
+    blurb: 'Better than the one you were born with, by a bit. How much of a bit is down to what came off the bench that week.',
     organs: true,
   },
 };
@@ -93,15 +98,40 @@ export function installedOn(body) {
   return (body && body.installed) || {};
 }
 
+/**
+ * A fitting is stored as {tier, efficiency} so a rolled range can be kept.
+ * Older saves stored the tier id as a bare string; both are read here.
+ */
+function fittingAt(body, id) {
+  const raw = installedOn(body)[id];
+  if (!raw) return null;
+  if (typeof raw === 'string') return { tier: raw, efficiency: (TIERS[raw] || {}).efficiency || 0 };
+  return raw;
+}
+
 export function installedTier(body, id) {
-  const tierId = installedOn(body)[id];
-  return tierId ? TIERS[tierId] : null;
+  const fit = fittingAt(body, id);
+  return fit ? TIERS[fit.tier] || null : null;
 }
 
 /** How well an installed replacement works, or 0 if there isn't one. */
 export function installedEfficiency(body, id) {
-  const tier = installedTier(body, id);
-  return tier ? tier.efficiency : 0;
+  const fit = fittingAt(body, id);
+  return fit ? fit.efficiency || 0 : 0;
+}
+
+/** What this particular one came out at, for a readout. */
+export function installedFitting(body, id) {
+  return fittingAt(body, id);
+}
+
+/** Roll what a given tier actually achieves this time. */
+export function rollEfficiency(tierId, rand = Math.random) {
+  const tier = TIERS[tierId];
+  if (!tier) return 0;
+  if (!tier.range) return tier.efficiency;
+  const [lo, hi] = tier.range;
+  return Math.round((lo + (hi - lo) * rand()) * 1000) / 1000;
 }
 
 /**

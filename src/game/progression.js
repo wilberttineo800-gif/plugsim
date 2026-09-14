@@ -30,9 +30,17 @@ export function unlockStatus(state, typeId) {
   const haveProps = propertyCount(state);
   const haveCash = netWorth(state);
 
-  const met = haveProps >= needProps && haveCash >= needCash;
+  // Money is the gate; property count is not.
+  //
+  // A property requirement is a number to grind rather than a thing to earn:
+  // it told the player to go and buy six of anything before the seventh could
+  // be the one they wanted, and it deadlocked outright if nothing affordable
+  // happened to be available at their current count. Cash is accumulated by
+  // playing well, and properties accumulate as a consequence of spending it —
+  // which is the right way round. The counts are kept in the data because they
+  // still read as a useful hint about what stage a thing belongs to.
+  const met = haveCash >= needCash;
   const missing = [];
-  if (haveProps < needProps) missing.push(`${needProps - haveProps} more propert${needProps - haveProps === 1 ? 'y' : 'ies'}`);
   if (haveCash < needCash) missing.push(`$${Math.round(needCash - haveCash).toLocaleString('en-US')} more banked`);
 
   return {

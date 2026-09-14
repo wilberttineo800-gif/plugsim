@@ -496,10 +496,22 @@ game.setLookModel = (modelId) => {
   game.ui.render();
 };
 
-game.getTreated = () => {
-  const r = A.getTreated(game.state);
+game.getTreated = (route = 'street', hush = false) => {
+  const r = A.getTreated(game.state, route, { hush });
   if (!r.ok) { toast(r.error, 'bad'); return; }
-  toast(`Patched up — ${money(r.cost)}.`, 'good');
+  toast(
+    r.failed
+      ? `It did not take${r.impairment ? ` — ${r.impairment.name.toLowerCase()}` : ''}.`
+      : `Seen to — ${money(r.cost + (r.hush || 0))}.`,
+    r.failed ? 'bad' : 'good');
+  if (r.reported) toast('They rang it in.', 'bad');
+  game.ui.render();
+};
+
+game.buyLife = () => {
+  const r = A.buyLife(game.state);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`Arrangements made. ${money(r.cost)}.`, 'info');
   game.ui.render();
 };
 

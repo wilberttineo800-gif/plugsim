@@ -30,12 +30,16 @@ import {
 import {
   takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS,
   removePart as removePartFrom, missingCount as missingCountOf,
+  newBody, causeOfDeath, HEALTH,
 } from './health.js';
 import { PARTS, countOf, survivesWithout, partValue } from './anatomy.js';
 import {
   TIERS, FITMENTS, FITMENT_IDS, tiersFor, fitmentCost, fitmentState,
-  installedTier,
+  installedTier, rollEfficiency,
 } from './bionics.js';
+import { getStat } from './stats.js';
+import { armouryDistrictId } from './armoury.js';
+import { addImpairment, impairmentFor, impairmentsOf } from './impairments.js';
 import {
   STREET_DOC, docOf, hasDoc, hireDoc, releaseDoc, riskOf,
 } from './streetdoc.js';
@@ -690,10 +694,13 @@ export function sellProductTo(state, buildingId, playerId, productId, amount) {
     return { ok: false, error: `${buyer.name} can't take any more of that right now.` };
   }
 
+  // Somebody who is obviously hurt is somebody who is obviously in a hurry,
+  // and the other side prices accordingly.
+  const shape = getStat(state, 'deal');
   // A bulk handoff by weight: they take the lot in one go and carry the risk of
   // moving it on, so they do not pay corner money for it.
   const unit = offerForProduct(buyer, productId,
-    streetPrice(d, productId) * WHOLESALE_FACTOR);
+    streetPrice(d, productId) * WHOLESALE_FACTOR) * shape;
   const gross = move * unit;
   b.packs[productId] -= move;
   state.cash.dirty += gross;
@@ -1047,7 +1054,11 @@ export function muscleIn(state, districtId) {
   // Your standing on the block is what tips a fight your way — and so does
   // what you are carrying, which is the point of keeping any of it.
   const edge = armouryEdge(state);
-  const odds = clamp01(0.28 + d.rep * 0.5 - (d.rivalControl - 0.3) * 0.45 + edge);
+  // Taking a block off somebody is a physical thing. On one leg, concussed, or
+  // with an arm that does not close, it is a worse idea than it already was —
+  // and this is where an injury stops being a number on a screen.
+  const fit = getStat(state, 'muscle');
+  const odds = clamp01((0.28 + d.rep * 0.5 - (d.rivalControl - 0.3) * 0.45 + edge) * fit);
   const won = Math.random() < odds;
 
   d.heat = Math.min(100, d.heat + RIVALS.muscleHeat);
@@ -1058,7 +1069,10 @@ export function muscleIn(state, districtId) {
     const guard = armourGuard(state);
     // And it is not only money. A move that goes wrong is people shooting at
     // you, and this is where the cabinet stops being a spreadsheet entry.
-    const hurt = takeFire(state, { rounds: 1 + Math.floor(Math.random() * 3), heat: d.heat });
+    // Somebody who cannot move is somebody who is still standing there.
+    const away = getStat(state, 'evade');
+    const rounds = 1 + Math.floor(Math.random() * 3) + (Math.random() > away ? 1 : 0);
+    const hurt = takeFire(state, { rounds, heat: d.heat });
     spendClean(state, Math.round(cost * RIVALS.muscleBackfireCost * (1 - guard)));
     d.rivalControl = clamp01(d.rivalControl + 0.06 * (1 - guard));
     logEvent(state, `Move on ${crew.name} in ${d.name} went bad. They held the block.`, 'bad');
@@ -1115,7 +1129,10 @@ export function washWithFixer(state, requested) {
   if (room <= 0) return { ok: false, error: 'The fixer’s done for today. Come back tomorrow.' };
   if (state.cash.dirty <= 0) return { ok: false, error: 'No street cash to wash.' };
 
-  const amount = Math.min(requested || room, room, state.cash.dirty);
+  // Washing money is appointments, paperwork and being somewhere at a
+  // particular time. Concussed and short of an arm, you get through less of it.
+  const capable = getStat(state, 'wash');
+  const amount = Math.min(requested || room, room * capable, state.cash.dirty);
   if (amount <= 0) return { ok: false, error: 'Nothing to wash.' };
 
   const clean = amount * (1 - FIXER.cut);
@@ -1447,28 +1464,138 @@ export function reportFire(state, hurt) {
 }
 
 /**
- * Get patched up.
+ * Where you can be seen to, and what each of them costs you.
  *
- * Priced off how bad it is, which is what makes leaving it a real temptation
- * when money is tight — and leaving it is exactly what turns a hole into
- * sepsis. It buys the bleeding stopping, the metal coming out, and
- * antibiotics; it does not undo an infection that has already walled itself
- * off or got into bone.
+ * The whole point of having three is that none of them is simply better. Doing
+ * it yourself is cheap and often does not work. A street doctor asks nothing
+ * and sometimes gets it wrong in a way that does not come back. A hospital
+ * will actually fix you, and a hospital that sees a gunshot wound picks up the
+ * phone — which is the one cost you cannot pay off with more money, only with
+ * a great deal of it.
  */
-export function getTreated(state) {
+export const TREATMENT = {
+  self: {
+    id: 'self', name: 'Do it yourself',
+    blurb: 'Boiled water, a needle and whatever is in the cupboard. Sometimes that is enough.',
+    costMult: 0.18, fail: 0.38, impairOnFail: 0.3, heat: 0, needsDoc: false, reports: false,
+  },
+  street: {
+    id: 'street', name: 'Street doctor',
+    blurb: 'Somebody who asks nothing and has done this before. How often it works depends entirely on who you hired.',
+    costMult: 1, fail: null, impairOnFail: 0.45, heat: 0, needsDoc: true, reports: false,
+  },
+  hospital: {
+    id: 'hospital', name: 'Hospital',
+    blurb: 'It will work. They are also required to report a gunshot wound, and they do.',
+    costMult: 3.4, fail: 0.04, impairOnFail: 0.1, heat: 20, needsDoc: false, reports: true,
+  },
+};
+
+export const TREATMENT_IDS = Object.keys(TREATMENT);
+
+/** Wounds a hospital is obliged to report. A graze is a graze; a hole is not. */
+export function reportableWounds(body) {
+  return openWounds(body).filter(
+    (w) => !w.treated && ['penetrating', 'perforating', 'avulsive', 'fracture'].includes(w.type)
+  );
+}
+
+/** What it costs to persuade somebody not to pick up the phone. */
+export function hushCost(state) {
+  const ch = characterOf(state);
+  const n = reportableWounds(ch.body).length;
+  if (!n) return 0;
+  const worst = Math.max(0, ...(state.districts || []).map((d) => d.heat || 0));
+  return Math.round(180000 * n * (1 + worst / 60));
+}
+
+/** How likely a given route is to go wrong for you, right now. */
+export function treatmentRisk(state, routeId) {
+  const route = TREATMENT[routeId];
+  if (!route) return 1;
+  if (route.fail != null) return route.fail;
+  const doc = docOf(state);
+  if (!doc) return 1;
+  // A street doctor's failure rate IS the doctor. It is the whole reason to
+  // care which one answered the phone.
+  return clamp(0.42 - doc.skill * 0.34, 0.05, 0.45);
+}
+
+export function treatmentPrice(state, routeId) {
+  const route = TREATMENT[routeId];
+  const ch = characterOf(state);
+  if (!route) return 0;
+  return Math.round(treatmentCost(ch.body) * route.costMult);
+}
+
+/**
+ * Get seen to.
+ *
+ * A failure does not simply waste the money: the wound stays open AND there is
+ * a real chance of something permanent, because a repair done badly is worse
+ * than one not attempted. That is what makes the cheap route a gamble rather
+ * than a discount.
+ */
+export function getTreated(state, routeId = 'street', { hush = false } = {}) {
+  const route = TREATMENT[routeId];
+  if (!route) return { ok: false, error: 'No such option.' };
   const ch = characterOf(state);
   const open = openWounds(ch.body).filter((w) => !w.treated);
   if (!open.length) return { ok: false, error: 'Nothing that needs seeing to.' };
-  const cost = treatmentCost(ch.body);
-  if (!canAfford(state, cost)) {
-    return { ok: false, error: `A clinic that asks nothing wants $${cost.toLocaleString()}.` };
+  if (route.needsDoc && !hasDoc(state)) {
+    return { ok: false, error: 'You do not have anybody on a retainer.' };
   }
-  spendClean(state, cost);
-  const n = treat(ch.body, { atHour: Math.floor((state.minutes || 0) / 60) });
-  logEvent(state,
-    `Somebody who doesn't keep records saw to ${n} ${n === 1 ? 'wound' : 'wounds'}. $${cost.toLocaleString()}.`,
-    'good');
-  return { ok: true, treated: n, cost };
+
+  const cost = treatmentPrice(state, routeId);
+  const hushFee = route.reports && hush ? hushCost(state) : 0;
+  if (!canAfford(state, cost + hushFee)) {
+    return {
+      ok: false,
+      error: `That is $${(cost + hushFee).toLocaleString()}${hushFee ? ' with the quiet money' : ''}.`,
+    };
+  }
+  spendClean(state, cost + hushFee);
+
+  const risk = treatmentRisk(state, routeId);
+  const failed = Math.random() < risk;
+  let impairment = null;
+
+  if (failed) {
+    // The worst wound is the one they were working on when it went wrong.
+    const worst = open.slice().sort((a, b) => b.severity - a.severity)[0];
+    if (Math.random() < route.impairOnFail) {
+      impairment = addImpairment(ch.body, impairmentFor(worst ? worst.part : 'thorax'));
+    }
+    logEvent(state,
+      `${route.name}: it did not take. $${cost.toLocaleString()} gone`
+      + (impairment ? `, and you are left with ${impairment.name.toLowerCase()}.` : '.'),
+      'bad');
+  } else {
+    treat(ch.body, { atHour: Math.floor((state.minutes || 0) / 60) });
+    logEvent(state, `${route.name}: seen to. $${cost.toLocaleString()}.`, 'good');
+  }
+
+  // The phone call happens whether or not the surgery worked.
+  let reported = false;
+  if (route.reports) {
+    const n = reportableWounds(ch.body).length || open.filter(
+      (w) => ['penetrating', 'perforating', 'avulsive', 'fracture'].includes(w.type)).length;
+    if (n > 0 && !hush) {
+      reported = true;
+      const d = districtById(state, armouryDistrictId(state)) || (state.districts || [])[0];
+      if (d) d.heat = Math.min(100, d.heat + route.heat);
+      logEvent(state,
+        'They asked how it happened, wrote down what you said, and rang it in. '
+        + 'Somebody will come and ask you the same question again.',
+        'bad');
+    } else if (n > 0 && hush) {
+      logEvent(state,
+        `Nobody rang anybody. $${hushFee.toLocaleString()}, and it is not a discount you get twice.`,
+        'warn');
+    }
+  }
+
+  return { ok: true, failed, impairment, cost, hush: hushFee, reported, route };
 }
 
 /** Put a kept piece on, or take it off with a null id. */
@@ -1803,13 +1930,82 @@ export function fitPart(state, fitmentId, tierId) {
 
   if (usedStock) state.organs = (state.organs || []).filter((p) => p !== usedStock);
   ch.body.installed = ch.body.installed || {};
-  ch.body.installed[fitmentId] = tierId;
+  const got = rollEfficiency(tierId);
+  ch.body.installed[fitmentId] = { tier: tierId, efficiency: got };
   // Putting something back does not un-take it; it stands in for it.
   logEvent(state,
     `${tier.name} ${f.name.toLowerCase()} fitted. `
-    + (tier.efficiency > 1
-      ? 'Better than the one you were born with.'
-      : `Works at about ${Math.round(tier.efficiency * 100)}% of the original.`),
-    tier.efficiency > 1 ? 'good' : 'info');
-  return { ok: true, failed: false, tier, cost };
+    + (got > 1
+      ? `About ${Math.round((got - 1) * 100)}% better than the one you were born with.`
+      : `Works at about ${Math.round(got * 100)}% of the original.`),
+    got > 1 ? 'good' : 'info');
+  return { ok: true, failed: false, tier, cost, efficiency: got };
+}
+
+// --- Lives ------------------------------------------------------------------
+//
+// One free. After that you pay, and what you pay doubles each time, so the
+// second is a bad week and the fourth is the end of the run whether or not you
+// can afford it.
+
+export function livesLeft(state) {
+  const n = state.lives;
+  return typeof n === 'number' ? n : HEALTH.freeLives;
+}
+
+export function nextLifeCost(state) {
+  return Math.round(HEALTH.lifeCost * Math.pow(HEALTH.lifeCostGrowth, state.livesBought || 0));
+}
+
+/** Buy another. Nobody explains how it works and the price says not to ask. */
+export function buyLife(state) {
+  const cost = nextLifeCost(state);
+  if (!canAfford(state, cost)) {
+    return { ok: false, error: `That costs $${cost.toLocaleString()}, and it is not negotiable.` };
+  }
+  spendClean(state, cost);
+  state.lives = livesLeft(state) + 1;
+  state.livesBought = (state.livesBought || 0) + 1;
+  logEvent(state, `Arrangements made. $${cost.toLocaleString()}. Nobody said for what.`, 'info');
+  return { ok: true, cost, lives: state.lives };
+}
+
+/**
+ * What happens when you stop.
+ *
+ * A life spent brings you back on a table with half your blood and something
+ * permanently wrong that was not wrong before — you do not come back the way
+ * you went in. With nothing left to spend, the run is over.
+ */
+export function resolveDeath(state) {
+  const ch = characterOf(state);
+  const how = ch.body ? causeOfDeath(ch.body) : 'died';
+  if (livesLeft(state) <= 0) {
+    state.gameOver = { at: state.minutes || 0, how };
+    logEvent(state, `You ${how}. That was the last one.`, 'bad');
+    return { revived: false, how };
+  }
+  state.lives = livesLeft(state) - 1;
+
+  const worstRegion = (ch.body.wounds || [])
+    .slice()
+    .sort((a, b) => b.severity - a.severity)[0];
+  const mark = impairmentFor(worstRegion ? worstRegion.part : 'thorax');
+
+  const kept = { ...(ch.body.impairments || {}) };
+  const installed = { ...(ch.body.installed || {}) };
+  const missing = { ...(ch.body.missing || {}) };
+  ch.body = newBody();
+  ch.body.impairments = kept;
+  ch.body.installed = installed;
+  ch.body.missing = missing;
+  ch.body.blood = HEALTH.reviveBlood;
+  const imp = addImpairment(ch.body, mark);
+
+  logEvent(state,
+    `You ${how}. Somebody brought you back and it cost you something: `
+    + `${imp ? imp.name.toLowerCase() : 'permanent damage'}. `
+    + `${livesLeft(state)} left.`,
+    'bad');
+  return { revived: true, how, impairment: imp, left: livesLeft(state) };
 }

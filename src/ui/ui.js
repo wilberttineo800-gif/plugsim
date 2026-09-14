@@ -50,7 +50,10 @@ import {
 import { PARTS, PART_KINDS, wholeBodyValue } from '../game/anatomy.js';
 import {
   hasClinic, casualtiesOf, docOf, fitmentsFor, STREET_DOC,
+  TREATMENT, TREATMENT_IDS, treatmentPrice, treatmentRisk, reportableWounds,
+  hushCost, livesLeft, nextLifeCost,
 } from '../game/actions.js';
+import { activePenalties } from '../game/stats.js';
 import {
   CAPTIVES, captivesOf, holdingCapacity, takeableFrom, symptomsOf,
 } from '../game/captives.js';
@@ -448,6 +451,9 @@ export class GameUI {
       case 'hire-doc': g.hireStreetDoc(); break;
       case 'drop-doc': g.letDocGo(); break;
       case 'fit-part': g.fitPart(id, type); break;
+      case 'treat': g.getTreated(type); break;
+      case 'treat-hush': g.getTreated('hospital', true); break;
+      case 'buy-life': g.buyLife(); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -1025,6 +1031,8 @@ export class GameUI {
     const open = openWounds(body);
     const cost = treatmentCost(body);
     const untreated = open.filter((w) => !w.treated);
+    const reportable = reportableWounds(body);
+    const penalties = activePenalties(s);
 
     const marks = (partId) => {
       const here = open.filter((w) => w.part === partId);
@@ -1099,9 +1107,24 @@ export class GameUI {
     // Anything actually removed, and what being short of it is like.
     const short = symptomsFor(body.missing);
 
+    const lives = livesLeft(s);
     return `<div class="sect">
       <div class="sect__title"><span>X-ray</span>
         <span class="${condition(body).tone}">${esc(condition(body).label)}</span></div>
+      <div class="card__meta" style="margin:0 0 10px">
+        <span class="${lives > 0 ? '' : 'bad'}">${lives > 0
+          ? `${lives} life${lives === 1 ? '' : 's'} left`
+          : 'no lives left — the next one is the last one'}</span>
+        <span>next costs ${moneyShort(nextLifeCost(s))}</span>
+      </div>
+      ${lives < 1 ? `<div class="btnrow" style="margin:0 0 10px">
+        <button class="ghostbtn" data-action="buy-life">
+          Make arrangements · ${moneyShort(nextLifeCost(s))}</button>
+      </div>` : ''}
+      ${penalties.length ? `<div class="rows" style="margin:0 0 10px">${penalties.map((pn) => `
+        <div class="row"><span>${esc(pn.stat.name)}</span>
+        <span class="${pn.down > 0 ? (pn.down > 25 ? 'bad' : 'warn') : 'good'}">${
+          pn.down > 0 ? `\u2212${pn.down}%` : `+${-pn.down}%`}</span></div>`).join('')}</div>` : ''}
       <div class="showcase">
         <div class="showcase__art">${film}</div>
         <div class="showcase__meta">
@@ -1110,14 +1133,41 @@ export class GameUI {
             it is a foreign body, and a foreign body is what turns a hole into an
             abscess.
           </p>
-          ${untreated.length ? `<div class="btnrow">
-            <button class="ghostbtn" data-action="get-treated">
-              Get seen to · ${moneyShort(cost)}</button>
-          </div>
-          <p class="card__blurb" style="margin:8px 0 0">
+          ${untreated.length ? `
+          <p class="card__blurb" style="margin:0 0 8px">
             Past about half a day in the open a wound starts to contaminate, and
             past a day it is sepsis, amputation, or both.
-          </p>` : '<div class="card__meta"><span class="good">Nothing outstanding.</span></div>'}
+          </p>
+          ${TREATMENT_IDS.map((rid) => {
+            const route = TREATMENT[rid];
+            const price = treatmentPrice(s, rid);
+            const risk = treatmentRisk(s, rid);
+            const blocked = route.needsDoc && !docOf(s);
+            return `<button class="card ${blocked ? 'is-locked' : ''}"
+              data-action="treat" data-type="${rid}" ${blocked ? 'disabled' : ''}>
+              <div class="card__head">
+                <span class="card__name">${esc(route.name)}</span>
+                <span class="card__cost money">${moneyShort(price)}</span>
+              </div>
+              <div class="card__blurb">${esc(route.blurb)}</div>
+              <div class="card__meta">
+                <span class="${risk > 0.3 ? 'bad' : risk > 0.12 ? 'warn' : 'good'}">${
+                  Math.round(risk * 100)}% it goes wrong</span>
+                ${route.reports ? '<span class="bad">they ring it in</span>' : ''}
+                ${blocked ? '<span class="warn">nobody on a retainer</span>' : ''}
+              </div>
+            </button>`;
+          }).join('')}
+          ${reportable.length ? `<div class="btnrow">
+            <button class="ghostbtn" data-action="treat-hush">
+              Hospital, quietly · ${moneyShort(treatmentPrice(s, 'hospital') + hushCost(s))}</button>
+          </div>
+          <p class="card__blurb" style="margin:8px 0 0">
+            ${reportable.length} of them are the kind a hospital is obliged to
+            report. The quiet money is ${moneyShort(hushCost(s))} on top, and it
+            is not a discount you get twice.
+          </p>` : ''}`
+          : '<div class="card__meta"><span class="good">Nothing outstanding.</span></div>'}
         </div>
       </div>
     </div>

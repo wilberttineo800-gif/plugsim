@@ -68,6 +68,9 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     captives: [],        // people you went and got
     discovered: [],      // things somebody put to you, which is not the same as unlocked
     streetDoc: null,     // somebody who will operate on you, on a retainer
+    lives: 1,            // one free. after that you pay, and it doubles
+    livesBought: 0,
+    gameOver: null,
     organCounter: 0,
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
@@ -548,6 +551,9 @@ export function loadGame() {
     if (!Array.isArray(data.captives)) data.captives = [];
     if (!Array.isArray(data.discovered)) data.discovered = [];
     if (data.streetDoc === undefined) data.streetDoc = null;
+    if (typeof data.lives !== 'number') data.lives = 1;
+    if (typeof data.livesBought !== 'number') data.livesBought = 0;
+    if (data.gameOver === undefined) data.gameOver = null;
     if (typeof data.organCounter !== 'number') data.organCounter = 0;
     idCounter = data.idCounter || 1;
     delete data.idCounter;

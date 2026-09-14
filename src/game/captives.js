@@ -124,10 +124,27 @@ export function takeableFrom(captive) {
  * into taking something out goes through the same two calls so a scalpel and a
  * shotgun cannot disagree about whether somebody is dead.
  */
-export function takeFrom(state, captiveId, partId, { atHour = 0 } = {}) {
+export function takeFrom(state, captiveId, partId, { atHour = 0, confirmed = false } = {}) {
   const captive = captivesOf(state).find((c) => c.id === captiveId);
   if (!captive) return { ok: false, error: 'Nobody by that name.' };
   if (captive.dead) return { ok: false, error: 'They are already dead. Take the lot.' };
+
+  // A part with no spare is not refused — it is asked about. Nothing here
+  // should happen because somebody's thumb landed in the wrong place, but the
+  // choice itself belongs to the player.
+  const part = PARTS[partId];
+  if (part && !confirmed) {
+    const already = missingCount(captive.body, partId);
+    if (!survivesWithout(part, already)) {
+      return {
+        ok: false,
+        needsConfirm: true,
+        part,
+        warning: `That is the last ${part.name.toLowerCase()} they have. `
+          + 'Taking it will almost certainly kill them. Proceed?',
+      };
+    }
+  }
 
   const res = removePart(captive.body, partId);
   if (!res.ok) return res;
@@ -148,6 +165,51 @@ export function takeFrom(state, captiveId, partId, { atHour = 0 } = {}) {
     captive.body.deadAt = atHour;
   }
   return { ok: true, part: res.part, piece, died, survives: res.survives };
+}
+
+/**
+ * Take everything, in order, until there is nothing left worth taking.
+ *
+ * Works on somebody alive as readily as on a corpse — it simply stops being
+ * somebody alive part of the way through. Ordered so that the things they
+ * could survive losing come out first: a heart taken early ends the procedure
+ * and everything after it comes off a body rather than a person, which is
+ * worth less. That ordering is the only surgical judgement in here.
+ */
+export function gutCompletely(state, captiveId, { atHour = 0 } = {}) {
+  const captive = captivesOf(state).find((c) => c.id === captiveId);
+  if (!captive) return { ok: false, error: 'Nobody by that name.' };
+
+  const order = takeableFrom(captive).sort((a, b) => {
+    if (a.survives !== b.survives) return a.survives ? -1 : 1;
+    const worth = (r) => (r.part.transplant ? r.part.transplant.price[1] : r.part.tissue[1]);
+    return worth(b) - worth(a);
+  });
+
+  const taken = [];
+  const startedAlive = !captive.dead;
+  for (const row of order) {
+    for (let i = 0; i < row.left; i++) {
+      // Not routed through `takeFrom`: that refuses to operate on somebody who
+      // is already dead, and part of the way through this they will be. Once
+      // they stop being a patient they become a body, and the rest still comes
+      // out — worth less, because it came out of a body.
+      const res = removePart(captive.body, row.part.id);
+      if (!res.ok) break;
+      const alive = isAlive(captive.body);
+      taken.push({
+        organ: row.part.id,
+        takenAt: atHour,
+        quality: clamp01((alive ? 0.62 : 0.4) + Math.random() * 0.24),
+      });
+      if (!alive && !captive.dead) {
+        captive.dead = true;
+        captive.diedAt = atHour;
+        captive.body.deadAt = atHour;
+      }
+    }
+  }
+  return { ok: true, taken, died: captive.dead, startedAlive };
 }
 
 /** What is wrong with somebody, in words. */

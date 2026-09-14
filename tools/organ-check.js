@@ -221,8 +221,13 @@ if (c) {
   ok(takeableFrom(c).find((r) => r.part.id === 'kidney').left === 1, 'one kidney left');
   ok(takeableFrom(c).find((r) => r.part.id === 'heart').survives === false,
     'and the heart is offered with the truth attached');
-  const killed = takeFrom(hold, c.id, 'heart', { atHour: 1 });
-  ok(killed.died, 'taking it kills them');
+  // Nothing that cannot be undone happens on one tap.
+  const asked = takeFrom(hold, c.id, 'heart', { atHour: 1 });
+  ok(!asked.ok && asked.needsConfirm, 'asking for the heart asks back rather than doing it');
+  ok(/kill/i.test(asked.warning), 'and says what it will do: ' + JSON.stringify(asked.warning.slice(0, 48)));
+  ok(!hold.captives.find((x) => x.id === c.id).dead, 'and they are still alive having been asked');
+  const killed = takeFrom(hold, c.id, 'heart', { atHour: 1, confirmed: true });
+  ok(killed.ok && killed.died, 'confirmed, it kills them');
   ok(!takeFrom(hold, c.id, 'kidney', { atHour: 2 }).ok, 'and you cannot operate on a corpse one piece at a time');
 }
 
@@ -322,5 +327,26 @@ ok(virgin.log.length === 1, 'announced by exactly one line in the log');
 ok(!/organ|harvest|kidney/i.test(virgin.log[0].text),
   'which does not say what it is: ' + JSON.stringify(virgin.log[0].text.slice(0, 60)));
 ok(offerTheOtherThing(virgin) === false, 'and it is only ever put to you once');
+
+// Taking the lot works on somebody alive, and carries on through the moment
+// they stop being somebody alive.
+import { gutCompletely } from '../src/game/captives.js';
+const gutState = {
+  districts: [{ id: 'd1', name: 'A block', heat: 5, rep: 0.4 }],
+  buildings: [{ id: 'b', type: 'morgue', active: true }],
+  minutes: 0, captives: [], organs: [],
+};
+let gutRand = seeded(17);
+let victim = null;
+for (let i = 0; i < 12 && !victim; i++) victim = snatch(gutState, 'd1', { rand: gutRand }).got;
+if (victim) {
+  const gut = gutCompletely(gutState, victim.id, { atHour: 0 });
+  ok(gut.startedAlive, 'the procedure starts on somebody alive');
+  ok(gut.taken.length > 30, `and takes everything (${gut.taken.length} pieces)`);
+  ok(gut.died, 'they do not survive it');
+  const fresh = gut.taken.filter((p) => p.quality > 0.6).length;
+  ok(fresh > 0 && fresh < gut.taken.length,
+    `what came out before they died is in better condition (${fresh} of ${gut.taken.length})`);
+}
 
 print(fail ? `organs+captives+self: ${fail} FAILED in total` : `organs+captives+self: all ${pass} checks passed in total`);

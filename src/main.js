@@ -424,12 +424,24 @@ game.snatchSomebody = (districtId) => {
   game.ui.render();
 };
 
-game.takePart = (captiveId, partId) => {
-  const r = A.takePart(game.state, captiveId, partId);
-  if (!r.ok) { toast(r.error, 'bad'); return; }
+game.takePart = (captiveId, partId, confirmed = false) => {
+  const r = A.takePart(game.state, captiveId, partId, confirmed);
+  // A request for confirmation is not a failure — hand it back so the panel
+  // can ask in place rather than toasting an error at somebody.
+  if (r.needsConfirm) { toast(r.warning, 'warn'); return r; }
+  if (!r.ok) { toast(r.error, 'bad'); return r; }
   toast(r.died ? 'That was the one there was no spare of.' : `${r.part.name} out. They are still breathing.`,
     r.died ? 'bad' : 'warn');
   game.ui.render();
+  return r;
+};
+
+game.gutCaptive = (id) => {
+  const r = A.gutCaptive(game.state, id);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${r.taken.length} off the table.`, 'bad');
+  game.ui.render();
+  return r;
 };
 
 game.stripBody = (id) => {

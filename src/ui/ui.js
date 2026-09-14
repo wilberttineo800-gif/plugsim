@@ -130,6 +130,9 @@ export class GameUI {
     // Which disclosures the player has open. Panels are rebuilt on a timer, so
     // without this any list they expanded would snap shut under them.
     this.openDisclosures = new Set();
+    // Two-stage confirmations for the things that cannot be undone.
+    this.pendingKill = null;
+    this.pendingGut = null;
 
     this.buildOverlayOptions();
     this.wire();
@@ -420,7 +423,24 @@ export class GameUI {
       case 'harvest': g.harvestCasualty(id); break;
       case 'sell-organs': g.sellOrgans(); break;
       case 'snatch': g.snatchSomebody(id); break;
-      case 'take-part': g.takePart(id, type); break;
+      case 'take-part': {
+        // Nothing here should happen because a thumb landed in the wrong
+        // place. A part they have no spare of asks once, in place, and only
+        // goes through on a second deliberate tap.
+        const key = `${id}:${type}`;
+        if (this.pendingKill === key) {
+          this.pendingKill = null;
+          g.takePart(id, type, true);
+        } else {
+          const r = g.takePart(id, type, false);
+          if (r && r.needsConfirm) { this.pendingKill = key; this.render(); }
+        }
+        break;
+      }
+      case 'gut':
+        if (this.pendingGut === id) { this.pendingGut = null; g.gutCaptive(id); }
+        else { this.pendingGut = id; this.render(); }
+        break;
       case 'strip-body': g.stripBody(id); break;
       case 'release-captive': g.releaseCaptive(id); break;
       case 'sell-self': g.sellOwnPart(type); break;
@@ -1153,14 +1173,20 @@ export class GameUI {
                   options.length} they'd survive</span></summary>
               <div class="upgrades__body">
                 ${options.map((o) => `
-                  <button class="card ${o.survives ? '' : 'is-locked'}"
+                  <button class="card ${o.survives ? '' : 'card--danger'}"
                     data-action="take-part" data-id="${c.id}" data-type="${o.part.id}">
                     <div class="card__head">
-                      <span class="card__name">${esc(o.part.name)}${o.left > 1 ? ` (${o.left} left)` : ''}</span>
+                      <span class="card__name">${
+                        this.pendingKill === `${c.id}:${o.part.id}`
+                          ? 'Are you sure? Tap again'
+                          : esc(o.part.name) + (o.left > 1 ? ` (${o.left} left)` : '')}</span>
                       <span class="card__cost ${o.survives ? 'warn' : 'bad'}">${
-                        o.survives ? 'survivable' : 'kills them'}</span>
+                        o.survives ? 'survivable' : 'may kill them'}</span>
                     </div>
-                    <div class="card__blurb">${esc(o.symptom || '')}</div>
+                    <div class="card__blurb">${
+                      this.pendingKill === `${c.id}:${o.part.id}`
+                        ? `That is the last ${esc(o.part.name.toLowerCase())} they have. Proceed?`
+                        : esc(o.symptom || '')}</div>
                     <div class="card__meta">
                       ${o.part.transplant
                         ? `<span class="money">${moneyShort(o.part.transplant.price[1])}</span>
@@ -1171,6 +1197,10 @@ export class GameUI {
               </div>
             </details>
             <div class="btnrow">
+              <button class="ghostbtn ${this.pendingGut === c.id ? 'is-danger' : ''}"
+                data-action="gut" data-id="${c.id}">${this.pendingGut === c.id
+                  ? 'Everything, and they are still alive. Tap again'
+                  : 'Take everything'}</button>
               <button class="ghostbtn" data-action="release-captive" data-id="${c.id}">Let them go</button>
             </div>`}
       </div>`;

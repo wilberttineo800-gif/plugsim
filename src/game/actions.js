@@ -25,7 +25,7 @@ import { lineKindOf } from './lines.js';
 import { ORGAN_TRADE, harvest, stockOf, organValue } from './organs.js';
 import {
   CAPTIVES, captivesOf, holdingCapacity, snatch as doSnatch, takeFrom,
-  takeableFrom, symptomsOf, release as doRelease,
+  takeableFrom, symptomsOf, release as doRelease, gutCompletely,
 } from './captives.js';
 import {
   takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS,
@@ -1601,11 +1601,17 @@ export function snatchSomebody(state, districtId) {
   return res;
 }
 
-/** Take one specific thing off somebody you are holding. */
-export function takePart(state, captiveId, partId) {
+/**
+ * Take one specific thing off somebody you are holding.
+ *
+ * `confirmed` is how the caller says the player has been told what it will do
+ * and said go anyway. Without it, anything they have no spare of comes back as
+ * a question rather than a refusal or a corpse.
+ */
+export function takePart(state, captiveId, partId, confirmed = false) {
   if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to do that.' };
   const atHour = Math.floor((state.minutes || 0) / 60);
-  const res = takeFrom(state, captiveId, partId, { atHour });
+  const res = takeFrom(state, captiveId, partId, { atHour, confirmed });
   if (!res.ok) return res;
   const c = captivesOf(state).find((x) => x.id === captiveId);
   if (res.died) {
@@ -1717,4 +1723,26 @@ export function sellOwnPart(state, partId) {
     `Sold a ${part.name.toLowerCase()} for $${net.toLocaleString()}. ${part.symptom || ''}`,
     'bad');
   return { ok: true, part, net, symptom: part.symptom };
+}
+
+/** Take the lot, whether or not they are still breathing when you start. */
+export function gutCaptive(state, captiveId) {
+  if (!hasClinic(state)) return { ok: false, error: 'You have nowhere to do that.' };
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const before = (state.captives || []).find((c) => c.id === captiveId);
+  const wasAlive = !!before && !before.dead;
+  const res = gutCompletely(state, captiveId, { atHour });
+  if (!res.ok) return res;
+  state.organs = stockOf(state).concat(res.taken);
+  state.captives = (state.captives || []).filter((c) => c.id !== captiveId);
+
+  const d = before ? districtById(state, before.districtId) : null;
+  if (d) {
+    d.rep = clamp01(d.rep - ORGAN_TRADE.repHit);
+    d.heat = Math.min(100, d.heat + ORGAN_TRADE.heatPerBody);
+  }
+  logEvent(state,
+    `${res.taken.length} off the table. ${wasAlive ? 'They were alive when it started.' : ''}`,
+    'bad');
+  return res;
 }

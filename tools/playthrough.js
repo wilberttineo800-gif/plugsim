@@ -43,12 +43,23 @@ function openWorld() {
   return createState({ origin, cityName: 'Hartford', countryCode: 'us', districts, crews, lots });
 }
 
-/** Biggest affordable lot for a type — size now drives output, so size is the play. */
+/**
+ * Biggest affordable lot for a type — size drives output, so size is the play.
+ *
+ * `requiresKind` is not optional. A depot only goes on a car park, and this
+ * helper used to hard-code "anything but a car park" — so every attempt to add
+ * haulage bought an ordinary lot, failed to build the depot on it, and tried
+ * again the next day. Over a thousand days that is 121 wasted purchases and
+ * exactly one depot, which is the whole reason the run looked like it stalled
+ * on money when it was actually stalled on bays.
+ */
 function bestLotFor(st, type, budget) {
   const def = BUILDINGS[type];
   if (!def) return null;
+  const need = def.requiresKind || null;
   return (st.lots || [])
-    .filter((l) => !l.owned && l.kind !== 'parking'
+    .filter((l) => !l.owned
+      && (need ? l.kind === need : l.kind !== 'parking')
       && l.areaM2 >= def.minAreaM2
       && (!def.maxAreaM2 || l.areaM2 <= def.maxAreaM2)
       && l.price + def.cost <= budget)
@@ -175,8 +186,31 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   const served = (r) => (st.couriers || []).some(
     (c) => c.routeId === r.id || (c.routeIds || []).includes(r.id));
   const unserved = (st.routes || []).filter((r) => !served(r));
-  if (unserved.length && cash > 300000) {
-    const veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
+  if (unserved.length && cash > 300000
+      && (st.couriers || []).length <= (st.routes || []).length) {
+    let veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
+    // A full depot is not a dead end, it is a shopping list — the game says so
+    // in the error. The bot used to ignore it, and because expansion is gated
+    // on every route being served, one unserved route deadlocked the entire
+    // run: no bay, so no vehicle, so never "healthy", so never another depot.
+    // Every playthrough number measured after depots got bay limits was an
+    // artefact of that, not a balance finding.
+    // Buying the depot has to leave enough behind to buy the vehicle it was
+    // for. The first fix did not check, so the bot spent everything on a car
+    // park every single day, never had enough left for the van, and bought 634
+    // car parks over a thousand days while its clean balance sat at $400k.
+    // A fix that swaps one deadlock for a worse one is not a fix.
+    const needsBay = veh && !veh.vehicle && /bay/i.test(veh.error || '');
+    if (needsBay && cash > 3000000) {
+      const park = bestLotFor(st, 'depot', cash * 0.35);
+      if (park) {
+        A.buyLot(st, park.id);
+        const built = A.developLot(st, park.id, 'depot');
+        if (built && built.building) {
+          veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
+        }
+      }
+    }
     if (veh && veh.vehicle) {
       const hire = A.hireDriver(st);
       if (hire && hire.driver) A.assignDriver(st, veh.vehicle.id, hire.driver.id);
@@ -259,6 +293,13 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
       const held = Object.values(b.packs || {}).reduce((s, n) => s + n, 0)
                  + Object.values(b.raw || {}).reduce((s, n) => s + n, 0);
       if (held < bdef.capacity * 0.4) continue;
+      // Only add haulage when every vehicle you have is already committed.
+      // Without this the block opens a lane and buys a van EVERY day a
+      // building is above 40% — which it always is, because production
+      // outruns haulage. It never showed up before because the full-depot
+      // deadlock stopped the purchase; fixing that unmasked a runaway that
+      // ended with 266 vans serving 12 buildings.
+      if ((st.couriers || []).length > (st.routes || []).length) continue;
       const already = new Set((st.routes || [])
         .filter((r) => r.fromId === b.id).map((r) => r.toId));
       const next = [...st.districts]

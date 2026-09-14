@@ -4,7 +4,9 @@ import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { BUILDINGS } from '../src/game/constants.js';
 import { createState, saveGame, loadGame } from '../src/game/state.js';
 import * as A from '../src/game/actions.js';
-import { ARMOURY, armouryOf, armouryEdge, armouryHeatPerDay, armouryRoom } from '../src/game/armoury.js';
+import {
+  ARMOURY, armouryOf, armouryEdge, armourGuard, armouryHeatPerDay, armouryRoom,
+} from '../src/game/armoury.js';
 
 // saveGame/loadGame go through browser storage; stand one up so the round trip
 // under test is the real one rather than a hand-rolled copy of it.
@@ -114,5 +116,46 @@ const migrated = loadGame();
 ok(migrated && Array.isArray(migrated.armoury) && migrated.armoury.length === 0,
   'a save written before the cabinet loads clean');
 ok(armouryEdge(migrated) === 0 && armouryHeatPerDay(migrated) === 0, 'and costs nothing');
+
+// --- Armour in the cabinet ---------------------------------------------------
+// You can keep a vest as readily as a gun, and what it does is deliberately a
+// different thing: iron shifts whether you win a fight, armour shifts what
+// losing one costs. Keeping one of each therefore beats keeping two of either.
+
+state.armoury = [];
+const vests = openSite('vest_shop');
+A.setProductionLine(state, vests.id, 'ceramic');
+A.setModel(state, vests.id, 'carbide');
+vests.packs.plate = 20;
+
+const kept = A.keepFirearm(state, vests.id);
+ok(kept.ok, 'a vest can be kept off an armour line');
+ok(kept.piece.kind === 'plate', 'and it records what kind of thing it is');
+ok(kept.piece.name === 'Carbide IV', 'named after the pattern: ' + kept.piece.name);
+ok(vests.packs.plate === 19, 'it leaves the line stock');
+ok(!kept.piece.serialised, 'a back-room armour line makes nothing certified');
+
+ok(armouryEdge(state) === 0, 'a vest does not help you win a fight');
+ok(armourGuard(state) > 0, 'it helps you survive losing one: ' + armourGuard(state).toFixed(3));
+ok(armourGuard(state) <= ARMOURY.maxGuard + 1e-9, 'and is capped');
+
+// A vest in a cupboard is not a thing anybody can charge you for.
+const ironOnly = { armoury: [{ id: 'i1', kind: 'iron', classId: 'handgun', modelId: 'kestrel' }] };
+const vestOnly = { armoury: [{ id: 'v1', kind: 'plate', classId: 'ceramic', modelId: 'carbide' }] };
+ok(armouryHeatPerDay(vestOnly) < armouryHeatPerDay(ironOnly),
+  'armour draws far less attention than iron does');
+
+// The cap is shared: six things, whatever mix.
+for (let i = 0; i < 20; i++) A.keepFirearm(state, vests.id);
+ok(armouryOf(state).length === ARMOURY.cap, 'the cap counts iron and armour together');
+
+// Selling one back prices it off armour, not off iron.
+const vestPrice = A.releaseFirearm(state, armouryOf(state)[0].id);
+ok(vestPrice.ok && vestPrice.price > 0, 'a vest can be let go for ' + vestPrice.price);
+
+// And an old piece written before any of this still works.
+const legacy = { armoury: [{ id: 'l1', classId: 'handgun', modelId: 'kestrel' }] };
+ok(armouryEdge(legacy) > 0, 'a piece saved before kinds existed still counts as iron');
+ok(armourGuard(legacy) === 0, 'and is not mistaken for armour');
 
 print(fail ? `armoury: ${fail} FAILED, ${pass} passed` : `armoury: all ${pass} checks passed`);

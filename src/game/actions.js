@@ -21,8 +21,9 @@ import {
   LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
   builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
+import { lineKindOf } from './lines.js';
 import {
-  armouryEdge, keepFromLine as takeFromLine, releasePiece as letPieceGo,
+  armouryEdge, armourGuard, keepFromLine as takeFromLine, releasePiece as letPieceGo,
   canKeep,
 } from './armoury.js';
 import { isHeld, claimBlocker, turfUpgradeById, districtName } from './turf.js';
@@ -415,20 +416,22 @@ export function setProductionLine(state, buildingId, lineId) {
   const b = buildingById(state, buildingId);
   if (!b) return { ok: false, error: 'No such workshop.' };
   const def = BUILDINGS[b.type];
-  if (def.product !== 'iron') return { ok: false, error: 'That is not a firearms shop.' };
-  const cls = FIREARM_CLASSES[lineId];
+  const kind = lineKindOf(b);
+  if (!kind) return { ok: false, error: 'That is not a line you tool.' };
+  const cls = kind.classes[lineId];
   if (!cls) return { ok: false, error: 'Unknown category.' };
   if (b.line === lineId) return { ok: false, error: 'Already tooled for that.' };
 
-  // NFA is a paperwork problem before it's an engineering one — but only if
-  // you're pretending to be legitimate. A back room does what it likes.
+  // NFA — and a ballistic shield — are a paperwork problem before they are an
+  // engineering one, but only if you are pretending to be legitimate. A back
+  // room does what it likes.
   if (cls.requiresLicence && def.needsLicence && !hasLicence(state, cls.requiresLicence)) {
     return { ok: false, error: `${cls.name} need a ${LICENCES[cls.requiresLicence].short} to make lawfully.` };
   }
 
   b.line = lineId;
   // A pattern belongs to a category; changing the category drops it.
-  if (b.model && (MODELS[b.model] || {}).category !== lineId) b.model = null;
+  if (b.model && (kind.models[b.model] || {}).category !== lineId) b.model = null;
   // Retooling costs you the cycle you were in.
   b.cycleProgress = 0;
   logEvent(state, `${b.name} retooled for ${cls.name.toLowerCase()}.`, 'info');
@@ -677,12 +680,12 @@ export function renameBuilding(state, buildingId, name) {
 export function setModel(state, buildingId, modelId) {
   const b = buildingById(state, buildingId);
   if (!b) return { ok: false, error: 'No such workshop.' };
-  const def = BUILDINGS[b.type];
-  if (def.product !== 'iron') return { ok: false, error: 'That is not a firearms shop.' };
-  const m = MODELS[modelId];
+  const kind = lineKindOf(b);
+  if (!kind) return { ok: false, error: 'That is not a line you tool.' };
+  const m = kind.models[modelId];
   if (!m) return { ok: false, error: 'Unknown pattern.' };
-  if (m.category !== classOf(b).id) {
-    return { ok: false, error: `${m.name} is a ${FIREARM_CLASSES[m.category].name.toLowerCase()} pattern — retool the line first.` };
+  if (m.category !== kind.classOf(b).id) {
+    return { ok: false, error: `${m.name} is a ${kind.classes[m.category].name.toLowerCase()} pattern — retool the line first.` };
   }
   if (b.model === modelId) return { ok: false, error: 'Already set up for that.' };
 
@@ -1003,10 +1006,16 @@ export function muscleIn(state, districtId) {
   d.heat = Math.min(100, d.heat + RIVALS.muscleHeat);
 
   if (!won) {
-    spendClean(state, Math.round(cost * RIVALS.muscleBackfireCost));
-    d.rivalControl = clamp01(d.rivalControl + 0.06);
+    // What you were wearing is what decides how badly a bad move goes. Armour
+    // does not stop you losing the block; it stops losing it costing as much.
+    const guard = armourGuard(state);
+    spendClean(state, Math.round(cost * RIVALS.muscleBackfireCost * (1 - guard)));
+    d.rivalControl = clamp01(d.rivalControl + 0.06 * (1 - guard));
     logEvent(state, `Move on ${crew.name} in ${d.name} went bad. They held the block.`, 'bad');
-    return { ok: true, won: false, cost: Math.round(cost * RIVALS.muscleBackfireCost) };
+    return {
+      ok: true, won: false, guard,
+      cost: Math.round(cost * RIVALS.muscleBackfireCost * (1 - guard)),
+    };
   }
 
   spendClean(state, cost);

@@ -15,12 +15,16 @@ import { HELPER, currentStep, progress as onboardingProgress } from '../game/onb
 import { pendingTip } from '../game/guide.js';
 import { devToolsOn } from '../game/dev.js';
 import {
-  LICENCES, LICENCE_IDS, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
+  LICENCES, LICENCE_IDS, licencesFor, FIREARM_CLASSES, FIREARM_CLASS_IDS, canApply, licenceRecord,
   hasLicence, classOf, MODELS, modelsFor, modelOf, incompatibleParts, builtInParts,
 } from '../game/firearms.js';
 import {
+  ARMOUR_CLASSES, ARMOUR_CLASS_IDS, ARMOUR_MODELS,
+  armourClassOf, armourModelOf, armourModelsFor,
+} from '../game/armour.js';
+import {
   armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
-  pieceValue, canKeep, lineUnit, isFirearmLine,
+  pieceValue, canKeep, lineUnit, isKeepableLine, armourGuard,
 } from '../game/armoury.js';
 import { turfUpgrades, turfUpkeep, turfEffects, isHeld, claimBlocker, districtName } from '../game/turf.js';
 import { rhythmNote, rhythmFactor, darkness, cityClock, DAY_NAMES } from '../game/rhythm.js';
@@ -31,6 +35,7 @@ import {
 } from '../game/research.js';
 import {
   gunArt, gunWithAttachments, attachmentArt, productArt, modelArt, modelWithAttachments,
+  armourArt, armourClassArt,
   vehicleArt,
 } from './art.js';
 import {
@@ -852,23 +857,28 @@ export class GameUI {
   armouryBlock() {
     const s = this.game.state;
     const kept = armouryOf(s);
-    const lines = (s.buildings || []).filter((b) => isFirearmLine(b));
+    const lines = (s.buildings || []).filter((b) => isKeepableLine(b));
     if (!kept.length && !lines.length) return '';
 
     const edge = armouryEdge(s);
+    const guard = armourGuard(s);
     const heat = armouryHeatPerDay(s);
 
     const cards = kept.map((piece) => {
       const worth = pieceValue(s, piece);
-      const cls = FIREARM_CLASSES[piece.classId];
+      const cls = (piece.kind === 'plate' ? ARMOUR_CLASSES : FIREARM_CLASSES)[piece.classId];
       return `<div class="card card--art">
-        <div class="card__art">${piece.modelId
-          ? modelArt(piece.modelId, { size: 116 })
-          : gunArt(piece.classId, { size: 110, color: 'var(--text-dim)' })}</div>
+        <div class="card__art">${piece.kind === 'plate'
+          ? armourArt(piece.modelId, { size: 92 })
+          : piece.modelId
+            ? modelArt(piece.modelId, { size: 116 })
+            : gunArt(piece.classId, { size: 110, color: 'var(--text-dim)' })}</div>
         <div class="card__head">
           <span class="card__name">${esc(piece.name)}</span>
           <span class="card__cost ${piece.serialised ? 'good' : 'warn'}">${
-            piece.serialised ? 'serialised' : 'no number'}</span>
+            piece.serialised
+              ? (piece.kind === 'plate' ? 'certified' : 'serialised')
+              : (piece.kind === 'plate' ? 'untested' : 'no number')}</span>
         </div>
         <div class="card__meta">
           <span>${esc(cls ? cls.name.replace(/s$/, '') : 'Firearm')}</span>
@@ -885,7 +895,9 @@ export class GameUI {
     const takeable = lines.map((b) => {
       const gate = canKeep(s, b);
       const unit = lineUnit(s, b);
-      const model = unit.modelId ? MODELS[unit.modelId] : null;
+      const model = unit.modelId
+        ? (unit.kind === 'plate' ? ARMOUR_MODELS : MODELS)[unit.modelId]
+        : null;
       return `<button class="card ${gate.ok ? '' : 'is-locked'}"
         data-action="keep-firearm" data-id="${b.id}" ${gate.ok ? '' : 'disabled'}>
         <div class="card__head">
@@ -893,7 +905,9 @@ export class GameUI {
           <span class="card__cost">${moneyShort(unit.value)} forgone</span>
         </div>
         <div class="card__blurb">${esc(model ? model.name : 'No pattern set')}${
-          unit.serialised ? ' — serialised, in the book.' : ' — no number on it.'}</div>
+          unit.kind === 'plate'
+            ? (unit.serialised ? ' — tested and listed.' : ' — untested, nobody\u2019s word but yours.')
+            : (unit.serialised ? ' — serialised, in the book.' : ' — no number on it.')}</div>
         ${gate.ok ? '' : `<div class="card__meta"><span class="warn">${esc(gate.error)}</span></div>`}
       </button>`;
     }).join('');
@@ -902,13 +916,15 @@ export class GameUI {
       <div class="sect__title"><span>Cabinet</span>
         <span>${kept.length}/${armouryCap()}</span></div>
       <p class="card__blurb" style="margin:0 0 10px">
-        A unit you keep is a unit you don\u2019t sell, and you can hold
-        ${armouryCap()}. What you\u2019re carrying tips a move on a block your way,
-        and it costs you attention every day on the block you work from \u2014
-        more for the ones with the number ground off.
+        Anything you keep is something you don\u2019t sell, and you can hold
+        ${armouryCap()}. Iron tips a move on a block your way; armour doesn\u2019t
+        help you win one, it makes losing cost less. Both cost you a little
+        attention every day on the block you work from \u2014 more for the ones
+        with no paper behind them.
       </p>
       <div class="card__meta" style="margin:0 0 10px">
         <span class="${edge > 0 ? 'good' : ''}">+${Math.round(edge * 100)}% odds muscling in</span>
+        <span class="${guard > 0 ? 'good' : ''}">−${Math.round(guard * 100)}% when it goes wrong</span>
         <span class="${heat > 0 ? 'bad' : ''}">+${heat.toFixed(2)} heat/day</span>
       </div>
       ${kept.length ? cards : '<div class="empty">Nothing kept back yet.</div>'}
@@ -917,15 +933,35 @@ export class GameUI {
   }
 
   /**
-   * Firearms paperwork. Two ways to sell iron — over a counter with a licence,
-   * or on the street for a lot more and a lot more risk — and this is where the
-   * legal route gets bought.
+   * Paperwork, in two sections.
+   *
+   * Both halves of the trade have a legal route and a street route, but they
+   * are not the same kind of gate and shouldn't read as one list: iron needs a
+   * PERMIT from the government before you may touch it, while armour needs a
+   * lab to CERTIFY that the thing you made does what you say it does. Armour
+   * is also cheaper and quicker to get straight on, which is the whole reason
+   * it is the business you can be in first — so it is worth showing that the
+   * two ladders are different lengths.
    */
   licenceBlock() {
+    return this.paperworkSection('firearms', 'Firearms licensing',
+        `Iron sells two ways. Over a counter it's clean money at legal prices, and
+         nobody comes through the door. Unserialised on the street it's worth far
+         more, and it's the hottest thing you can move.`)
+      + this.paperworkSection('armour', 'Armour certification',
+        `Nobody needs a permit to sew a vest. What a buyer wants is proof, and
+         proof means an independent lab shooting your product until it passes.
+         Listed product sells over a counter; unlisted product sells to people
+         who don't ask, for less.`);
+  }
+
+  paperworkSection(domain, title, intro) {
     const s = this.game.state;
+    const ids = licencesFor(domain);
+    if (!ids.length) return '';
     const worstHeat = Math.round(Math.max(0, ...s.districts.map((d) => d.heat || 0)));
 
-    const rows = LICENCE_IDS.map((id) => {
+    const rows = ids.map((id) => {
       const def = LICENCES[id];
       const rec = licenceRecord(s, id);
       const gate = canApply(s, id);
@@ -977,12 +1013,8 @@ export class GameUI {
     }).join('');
 
     return `<div class="sect">
-      <div class="sect__title"><span>Firearms licensing</span><span>heat ${worstHeat}</span></div>
-      <p class="card__blurb" style="margin:0 0 10px">
-        Iron sells two ways. Over a counter it's clean money at legal prices, and
-        nobody comes through the door. Unserialised on the street it's worth far
-        more, and it's the hottest thing you can move.
-      </p>
+      <div class="sect__title"><span>${esc(title)}</span><span>heat ${worstHeat}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">${esc(intro.replace(/\s+/g, ' ').trim())}</p>
       ${rows}
     </div>`;
   }
@@ -1232,7 +1264,8 @@ export class GameUI {
       .map((u) => `<div class="row"><span>${u.perPound} × ${esc(u.name)}</span>`
         + `<span>${money(unit / u.perPound)} each</span></div>`)
       .join('');
-    return `<details class="upgrades" style="margin-top:8px">
+    return `<details class="upgrades" style="margin-top:8px" data-disc="ladder-${pid}"
+      ${this.discOpen(`ladder-${pid}`, false) ? 'open' : ''}>
       <summary>How a pound of ${esc(PRODUCTS[pid].name.toLowerCase())} breaks down`
       + ` · ${money(unit)}/lb served</summary>
       <div class="rows">${cells}</div>
@@ -1292,8 +1325,14 @@ export class GameUI {
       .filter((o) => !o.locked)
       .map((o) => o.def.cost)
       .sort((a, b) => a - b)[0];
-    const open = openByDefault && items.length <= 5 ? ' open' : '';
-    return `<details class="upgrades" style="margin-top:8px"${open}>
+    // Every disclosure needs a `data-disc` key or the toggle listener ignores
+    // it, nothing is remembered, and the next render — which happens on every
+    // tick — resets it to the hard-coded default. That is exactly why the
+    // Legitimate business group could never be opened (its default was closed)
+    // and the small illegal groups could never be closed (theirs was open).
+    const key = `bg-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+    const open = this.discOpen(key, openByDefault && items.length <= 5) ? ' open' : '';
+    return `<details class="upgrades" style="margin-top:8px" data-disc="${key}"${open}>
       <summary>${esc(label)}
         <span style="color:var(--text-faint)">· ${items.length}</span>
         ${usable === 0
@@ -2465,7 +2504,8 @@ export class GameUI {
       </div>`;
     }).join('');
 
-    return `<details class="upgrades" style="margin-top:10px">
+    return `<details class="upgrades" style="margin-top:10px" data-disc="couldrun"
+      ${this.discOpen('couldrun', false) ? 'open' : ''}>
       <summary>What you could run here
         <span style="color:var(--text-faint)">· ${opts.length} options</span></summary>
       <div class="rows">${rows}</div>
@@ -2758,6 +2798,7 @@ export class GameUI {
           value="${esc(buildingLabel(b))}" maxlength="32" placeholder="${esc(typeLabel(b))}">
       </div>
       ${this.firearmLineBlock(b)}
+      ${this.armourLineBlock(b)}
       ${this.upgradeBlock(b)}
       <div class="btnrow">
         ${b.kind !== 'front' ? `<button class="primarybtn" data-action="route-from" data-id="${b.id}" data-tab="routes">Ship from here</button>` : ''}
@@ -2883,6 +2924,111 @@ export class GameUI {
           ${open.length ? open.map(row).join('') : '<div class="empty">Nothing left worth doing.</div>'}
           ${done.length ? `<div class="sect__title" style="margin-top:10px"><span>Done</span></div>
             <div class="chips">${done.map((u) => `<span class="chip chip--good">${esc(u.name)}</span>`).join('')}</div>` : ''}
+        </div>
+      </details>`;
+  }
+
+  /**
+   * What an armour shop is making, and what else it could make.
+   *
+   * Deliberately a sibling of the firearms panel rather than a generalisation
+   * of it: armour takes no bolt-on parts, so half of that panel would be dead
+   * weight here, and the two read better as two plain things than as one
+   * clever thing with branches through it.
+   */
+  armourLineBlock(b) {
+    const s = this.game.state;
+    const def = BUILDINGS[b.type];
+    if (def.product !== 'plate') return '';
+
+    const current = armourClassOf(b);
+    const certified = !!def.needsLicence;
+    const chosen = armourModelOf(b);
+    const patterns = armourModelsFor(current.id);
+
+    const showcase = `
+      <div class="showcase">
+        <div class="showcase__art">${chosen
+          ? armourArt(chosen.id, { size: 132 })
+          : armourClassArt(patterns, { size: 126 })}</div>
+        <div class="showcase__meta">
+          <div class="showcase__name">${esc(chosen ? chosen.name : current.name)}</div>
+          <div class="showcase__stats"><span>${esc(current.name)}</span></div>
+          <div class="showcase__stats">
+            <span class="${current.heatMult <= 0.4 ? 'good' : ''}">${
+              current.heatMult.toFixed(2)}× heat</span>
+            <span class="money">${moneyShort(
+              PRODUCTS.plate.basePrice * current.valueMult * (chosen ? chosen.valueMult : 1)
+            )} each</span>
+          </div>
+          ${chosen ? `<p class="card__blurb" style="margin:6px 0 0">${esc(chosen.blurb)}</p>` : ''}
+        </div>
+      </div>`;
+
+    const rows = ARMOUR_CLASS_IDS.map((id) => {
+      const cls = ARMOUR_CLASSES[id];
+      const live = cls.id === current.id;
+      // A certified plant can't make what it isn't approved for. A back room can.
+      const blocked = live
+        || (certified && cls.requiresLicence && !hasLicence(s, cls.requiresLicence));
+      const why = cls.requiresLicence && certified && !hasLicence(s, cls.requiresLicence)
+        ? `Needs ${LICENCES[cls.requiresLicence].short}` : null;
+      return `<button class="card card--art ${live ? '' : blocked ? 'is-locked' : ''}"
+        data-action="set-line" data-id="${b.id}" data-type="${id}" ${blocked ? 'disabled' : ''}>
+        <div class="card__art">${armourClassArt(armourModelsFor(id), { size: 66 })}</div>
+        <div class="card__head">
+          <span class="card__name">${live ? '▸ ' : ''}${esc(cls.name)}</span>
+          <span class="card__cost" style="color:var(--text-dim)">${cls.valueMult.toFixed(2)}× value</span>
+        </div>
+        <div class="card__blurb">${esc(cls.blurb)}</div>
+        <div class="card__meta">
+          <span class="${cls.yieldMult >= 1 ? 'good' : 'warn'}">${cls.yieldMult.toFixed(2)}× output</span>
+          <span class="${cls.heatMult <= 1 ? 'good' : 'bad'}">${cls.heatMult.toFixed(2)}× heat</span>
+          ${why ? `<span class="warn">${esc(why)}</span>` : ''}
+        </div>
+      </button>`;
+    }).join('');
+
+    const patternPicker = patterns.length ? `
+      <details class="upgrades" data-disc="amodel-${b.id}"
+        ${this.discOpen(`amodel-${b.id}`, !chosen) ? 'open' : ''}>
+        <summary><span>Pattern</span>
+          <span class="upgrades__count">${esc(chosen ? chosen.name : 'not set')}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">
+            Which ${esc(current.name.toLowerCase().replace(/s$/, ''))} this line actually
+            builds. More material per unit means fewer of them and more for each.
+          </p>
+          ${patterns.map((m) => {
+            const live = chosen && chosen.id === m.id;
+            return `<button class="card card--art"
+              data-action="set-model" data-id="${b.id}" data-type="${m.id}" ${live ? 'disabled' : ''}>
+              <div class="card__art">${armourArt(m.id, { size: 96 })}</div>
+              <div class="card__head">
+                <span class="card__name">${live ? '▸ ' : ''}${esc(m.name)}</span>
+                <span class="card__cost" style="color:var(--text-dim)">${
+                  moneyShort(PRODUCTS.plate.basePrice * current.valueMult * m.valueMult)} each</span>
+              </div>
+              <div class="card__blurb">${esc(m.blurb)}</div>
+              <div class="card__meta">
+                <span class="${m.yieldMult >= 1 ? 'good' : 'warn'}">${m.yieldMult.toFixed(2)}× output</span>
+                <span style="color:var(--text-faint)">${m.valueMult.toFixed(2)}× a plain one</span>
+              </div>
+            </button>`;
+          }).join('')}
+        </div>
+      </details>` : '';
+
+    return showcase + patternPicker + `
+      <details class="upgrades" data-disc="aline-${b.id}"
+        ${this.discOpen(`aline-${b.id}`, false) ? 'open' : ''}>
+        <summary><span>Making</span>
+          <span class="upgrades__count">${esc(current.name)}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">
+            Retooling costs you the cycle you're part-way through.
+          </p>
+          ${rows}
         </div>
       </details>`;
   }

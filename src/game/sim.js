@@ -23,6 +23,7 @@ import { pathLengthKm, pointAlongPath, haversineKm } from './geo.js';
 import { checkUnlocks } from './progression.js';
 import { LICENCES, classOf, hasLicence, legalPriceFactor, modelEffects } from './firearms.js';
 import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
+import { lineEffects, lineKindOf } from './lines.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -266,30 +267,28 @@ function stepProduction(state, dt) {
     if (b.cycleProgress >= DONE) {
       b.cycleProgress = 0;
       b.cycleStarted = false;
-      // A firearms shop makes whatever it's tooled for, and a shotgun is not a
-      // suppressor: simpler things come off the line faster.
-      const lineMult = def.product === 'iron' ? classOf(b).yieldMult : 1;
+      // A tooled shop makes whatever it's set up for, and a shotgun is not a
+      // suppressor any more than a stab vest is a Level IV plate: simpler
+      // things come off the line faster and cheaper. `lineEffects` folds the
+      // category and the chosen pattern together and returns neutral values
+      // for a line nobody tools, so there's nothing to special-case here.
+      const line = lineEffects(b);
       // Anything you've developed applies to every site that makes that product,
       // plus whatever one-off is fitted to this particular building — and, for
       // a firearms line, whatever is bolted to what it builds.
       const item = itemEffectsFor(state, b);
-      const att = def.product === 'iron'
+      const att = (lineKindOf(b) || {}).takesAttachments
         ? attachmentEffects(state, b)
         : { qualityAdd: 0, valueMult: 1, heatMult: 1, yieldMult: 1 };
-      // The specific pattern a shop is set up for, on top of its category.
-      const model = def.product === 'iron' ? modelEffects(b) : { valueMult: 1, yieldMult: 1 };
       const yieldAmount = def.slots * def.rawPerSlot * fx.yieldMult * sizeScale(b)
-        * lineMult * researchYield(state, def.product) * item.yieldMult * att.yieldMult
-        * model.yieldMult;
-      // A rifle line turns out fewer, better units than a shotgun line; that
-      // shows up as quality, which is what the market actually prices.
-      const lineQuality = def.product === 'iron' ? (classOf(b).valueMult - 1) * 0.12 : 0;
-      // What's fitted shows up as quality and as what the unit fetches.
+        * line.yieldMult * researchYield(state, def.product) * item.yieldMult
+        * att.yieldMult;
+      // A dearer line turns out fewer, better units; that shows up as quality,
+      // which is what the market actually prices.
       const quality = clamp01(
-        def.baseQuality + fx.qualityAdd + lineQuality
+        def.baseQuality + fx.qualityAdd + line.qualityAdd
         + researchQuality(state, def.product) + item.qualityAdd
         + att.qualityAdd + (att.valueMult - 1) * 0.35
-        + (model.valueMult - 1) * 0.3
       );
       const room = Math.max(0, cap - b.raw[def.product]);
       const added = Math.min(yieldAmount, room);
@@ -1186,8 +1185,13 @@ function stepHeat(state, dt) {
     if (!d) continue;
     // A building's own footprint, amplified by how heavily policed the block is.
     const policeFactor = 0.6 + d.policing * 0.9;
-    const lineHeat = def.product === 'iron'
-      ? classOf(b).heatMult * attachmentEffects(state, b).heatMult : 1;
+    // What a line is tooled for moves how loud it is: a stab vest draws a
+    // quarter of the attention a concealable one does, and a belt-fed draws
+    // more than twice what a handgun does.
+    const kind = lineKindOf(b);
+    const lineHeat = kind
+      ? lineEffects(b).heatMult * (kind.takesAttachments ? attachmentEffects(state, b).heatMult : 1)
+      : 1;
     d.heat = clamp(
       d.heat + def.heatPerDay * effectsFor(b).heatMult * lineHeat * policeFactor * (dt / 24),
       0, HEAT.max);

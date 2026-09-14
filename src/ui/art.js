@@ -11,6 +11,9 @@ import {
   GUN_DETAIL, DETAIL_DEFS, detailTransform, mountInField,
   ATTACH_DETAIL, attachTransform,
 } from './gunart-detail.js';
+import {
+  ARMOUR_DETAIL, ARMOUR_DEFS, armourTransform, ARMOUR_FIELD,
+} from './armourart.js';
 
 const GUN_VIEWBOX = '0 0 64 32';
 
@@ -27,14 +30,16 @@ const GUN_VIEWBOX = '0 0 64 32';
 let defsSprited = false;
 function sharedDefs() {
   if (defsSprited) return '';
-  if (typeof document === 'undefined' || !document.body) return `<defs>${DETAIL_DEFS}</defs>`;
+  if (typeof document === 'undefined' || !document.body) {
+    return `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}</defs>`;
+  }
   const NS = 'http://www.w3.org/2000/svg';
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('aria-hidden', 'true');
   svg.setAttribute('width', '0');
   svg.setAttribute('height', '0');
   svg.style.position = 'absolute';
-  svg.innerHTML = `<defs>${DETAIL_DEFS}</defs>`;
+  svg.innerHTML = `<defs>${DETAIL_DEFS}${ARMOUR_DEFS}</defs>`;
   document.body.appendChild(svg);
   defsSprited = true;
   return '';
@@ -951,3 +956,32 @@ export function vehicleArt(typeId, { size = 64, color = 'currentColor', classNam
     width="${size}" height="${Math.round(size / 2)}" aria-hidden="true"
     ><path d="${art.path.replace(/\s+/g, ' ').trim()}"${paint}/></svg>`;
 }
+
+
+// --- Body armour ------------------------------------------------------------
+//
+// Armour lives in a square field rather than the guns' 2:1 one — a vest, a
+// plate and a helmet are all roughly as tall as they are wide, and squashing
+// them into a letterbox is what would make a Level IV plate read as a brick.
+
+/** One armour pattern, drawn. */
+export function armourArt(id, { size = 120, className = '' } = {}) {
+  const d = ARMOUR_DETAIL[id];
+  if (!d) return '';
+  return `<svg class="art art--armour ${className}" viewBox="0 0 ${ARMOUR_FIELD} ${ARMOUR_FIELD}"
+    width="${size}" height="${size}" aria-hidden="true"
+    >${sharedDefs()}<g transform="${armourTransform(d)}">${d.body}</g></svg>`;
+}
+
+/**
+ * Something representative of a whole category, for a line that has not been
+ * given a pattern yet. The first pattern in the class stands in — a shop with
+ * no pattern picked is still building SOMETHING, and an empty box there reads
+ * as broken art rather than as an unmade choice.
+ */
+export function armourClassArt(patterns, opts = {}) {
+  const first = (patterns || [])[0];
+  return first ? armourArt(first.id, opts) : '';
+}
+
+export const ARMOUR_ART_IDS = Object.keys(ARMOUR_DETAIL);

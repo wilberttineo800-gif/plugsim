@@ -99,22 +99,62 @@ const cases = [
     return ui.armouryBlock();
   }],
   ['tabMarket with a cabinet', () => ui.tabMarket()],
+  // Both armour lines: a back room with no certification, and a certified
+  // plant, which gate their categories differently.
+  ['armourLineBlock (back room)', () => {
+    const shop = openSite('vest_shop');
+    A.setProductionLine(state, shop.id, 'ceramic');
+    A.setModel(state, shop.id, 'carbide');
+    return ui.armourLineBlock(shop);
+  }],
+  ['armourLineBlock (certified)', () => {
+    const plant = openSite('plate_plant');
+    return ui.armourLineBlock(plant);
+  }],
+  ['buildingPanel armour line', () => ui.buildingPanel(
+    state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],
   ['buildingPanel firearms line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'iron'))],
 ];
 
+// Every <details> must carry a data-disc key.
+//
+// The toggle listener ignores a disclosure without one, so nothing about it is
+// remembered — and because the rail re-renders every tick, the element snaps
+// straight back to whatever the markup hard-codes. In practice that means a
+// disclosure defaulting to closed can never be opened and one defaulting to
+// open can never be closed, which is exactly how the building-category groups
+// shipped. Checking the rendered HTML catches it wherever it is introduced.
+function auditDisclosures(html, where) {
+  const found = html.match(/<details\b[^>]*>/g) || [];
+  return found
+    .filter((tag) => !/data-disc=/.test(tag))
+    .map(() => where);
+}
+
 let failed = 0;
+const keyless = [];
 for (const [name, fn] of cases) {
   try {
     const html = fn();
     if (typeof html !== 'string' || !html.length) throw new Error('empty output');
     if (html.includes('undefined')) { print(`  ⚠ ${name}: output contains "undefined"`); failed++; continue; }
     if (html.includes('NaN')) { print(`  ⚠ ${name}: output contains "NaN"`); failed++; continue; }
+    keyless.push(...auditDisclosures(html, name));
     print(`  ok  ${name.padEnd(28)} ${String(html.length).padStart(5)} chars`);
   } catch (e) {
     print(`  FAIL ${name}: ${e}`);
     failed++;
   }
+}
+print('');
+if (keyless.length) {
+  const where = [...new Set(keyless)];
+  print(`  ⚠ ${keyless.length} <details> with no data-disc, in: ${where.join(', ')}`);
+  print('    Without a key the toggle is never recorded and the next render undoes it.');
+  failed += keyless.length;
+} else {
+  print('  ok  every disclosure has a data-disc key');
 }
 print('');
 print(failed ? `${failed} PANEL(S) BROKEN` : 'all panels render clean');

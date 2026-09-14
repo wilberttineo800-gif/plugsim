@@ -23,7 +23,10 @@ import { citiesOf } from './cities.js';
 
 const buildings = (s) => s.buildings || [];
 const has = (s, fn) => buildings(s).some(fn);
-const ofKind = (s, kind) => has(s, (b) => (BUILDINGS[b.type] || {}).kind === kind);
+const ofKind = (s, kind, product = null) => has(s, (b) => {
+  const def = BUILDINGS[b.type] || {};
+  return def.kind === kind && (!product || def.product === product);
+});
 const countOwned = (s) => (s.lots || []).filter((l) => l.owned).length;
 
 /**
@@ -67,6 +70,17 @@ export const TIPS = [
     says: "You're sat on street money you can't spend. Property and fit-outs "
       + "want clean. Buy something honest — the fixer'll wash a bit but he takes "
       + "a fat cut for it.",
+    go: 'build',
+  },
+  {
+    id: 'armour',
+    title: 'The quiet half of it',
+    when: (s) => countOwned(s) >= 4 && s.cash.clean > 2500000
+      && !ofKind(s, 'production', 'plate'),
+    says: "There's a trade in vests and plates and nobody needs paper to be in "
+      + "it. Fraction of the heat, steadier money, and it soaks up floorspace "
+      + "you're not using. It's the thing to be doing while something else cools "
+      + "off.",
     go: 'build',
   },
   {

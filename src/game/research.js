@@ -1,7 +1,7 @@
 // Research, and the things it turns out.
 //
 // Two ideas from the design note, and they belong together. A research facility
-// develops new product — strains you bred yourself, weapons nobody else builds.
+// develops new products — strains you bred yourself, weapons nobody else builds.
 // And every so often the work throws off something one-off: an item that only
 // exists because you made it, worth more the rarer it is and the higher your
 // standing when it came out.

@@ -164,6 +164,26 @@ export const PRODUCTS = {
     regionBoost: { us: 2.4, br: 1.7, za: 1.6, mx: 1.6, ph: 1.4 },
     regionPenalty: 0.35, // everywhere else: a thin, dangerous trade
   },
+  plate: {
+    id: 'plate',
+    name: 'Body Armour',
+    short: 'PLATE',
+    color: '#8a9b7e',
+    rawName: 'Ballistic Panel',
+    packName: 'Finished Sets',
+    packsPerRaw: 2,
+    // A plain concealable vest runs about $350 real; iron's base sits at the
+    // same remove from what a plain handgun costs, so the two scales line up.
+    basePrice: 1100,
+    // The quiet half of the trade. Armour is legal to own almost everywhere,
+    // which is exactly what makes it the business you run while iron cools off.
+    heatPerPackSold: 0.12,
+    demandBase: [0.1, 0.8],
+    // Wanted where people already feel they need it.
+    regionBoost: { us: 1.8, br: 1.9, za: 1.8, mx: 1.7, co: 1.6, ph: 1.4 },
+    // Still sells elsewhere, unlike iron — it just isn't a gold mine.
+    regionPenalty: 0.5,
+  },
   // --- More to make ---------------------------------------------------------
   // Priced per pound on the same researched basis as the originals, and spread
   // deliberately from cheap-and-heavy to tiny-and-valuable, because that spread
@@ -545,6 +565,30 @@ export const BUILDINGS = {
     heatPerDay: 0.9,
     capacity: 220,
   },
+  proving_range: {
+    id: 'proving_range',
+    kind: 'processing',
+    name: 'Proving Range',
+    blurb: 'Where a panel becomes a vest: V50 shot on samples from every batch, backface deformation measured in clay, the rest assembled, labelled and boxed. Nothing ships without going through one.',
+    icon: 'vest',
+    handles: ['plate'],
+    // Reachable early, like the rest of the armour chain. Armour is the
+    // business you can be in before anyone is looking at you.
+    unlock: { properties: 5, cash: 6500000 },
+    cost: 198000,
+    minAreaM2: 160,
+    maxAreaM2: 1700,
+    referenceAreaM2: 460,
+    areaExponent: 0.7,
+    upkeepPerDay: 2380,
+    rawPerHour: 2.6,
+    costPerRaw: 18,
+    qualityBonus: 0.16,
+    // Shooting into a tank indoors is quieter than a proof house, and a good
+    // deal quieter than anything else you could be doing with the floorspace.
+    heatPerDay: 0.45,
+    capacity: 260,
+  },
   bottling: {
     id: 'bottling',
     kind: 'processing',
@@ -731,6 +775,85 @@ export const BUILDINGS = {
     baseQuality: 0.6,
     heatPerDay: 2.6,
     capacity: 60,
+  },
+  vest_shop: {
+    id: 'vest_shop',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Sewing Room'], [1.1, 'Vest Shop'], [Infinity, 'Armour Works']],
+    kind: 'production',
+    name: 'Vest Shop',
+    blurb: 'Aramid, a cutting table and industrial machines. Nobody needs paper to sew a vest, which is why this is the quiet money.',
+    icon: 'vest',
+    product: 'plate',
+    // Deliberately reachable long before iron is: armour is the business you
+    // can be in early, and the one that doesn't bring anyone to the door.
+    unlock: { properties: 4, cash: 3000000 },
+    cost: 6240,
+    minAreaM2: 140,
+    maxAreaM2: 1800,
+    referenceAreaM2: 460,
+    areaExponent: 0.68,
+    upkeepPerDay: 128,
+    slots: 4,
+    cycleHours: 10,
+    rawPerSlot: 1.2,
+    supplyCostPerSlot: 1870,
+    baseQuality: 0.58,
+    heatPerDay: 0.55,
+    capacity: 140,
+  },
+  plate_plant: {
+    id: 'plate_plant',
+    // What it gets called depends on how big the place actually is —
+    // a warehouse grow should not read as a closet.
+    sizeNames: [[0.6, 'Press Room'], [1.1, 'Plate Plant'], [Infinity, 'Composites Plant']],
+    kind: 'production',
+    name: 'Plate Plant',
+    blurb: 'Hot presses, an autoclave and a test range out the back. Certified product, tested and listed, sold to people who check.',
+    icon: 'vest',
+    product: 'plate',
+    unlock: { properties: 7, cash: 14000000 },
+    cost: 14820,
+    minAreaM2: 320,
+    maxAreaM2: 2600,
+    referenceAreaM2: 640,
+    areaExponent: 0.64,
+    upkeepPerDay: 412,
+    slots: 3,
+    cycleHours: 18,
+    rawPerSlot: 0.95,
+    supplyCostPerSlot: 5410,
+    // Testing every batch is the whole point, and it shows in what comes out.
+    baseQuality: 0.84,
+    heatPerDay: 0.2,
+    capacity: 110,
+    needsLicence: 'nij07',
+  },
+  tactical_store: {
+    id: 'tactical_store',
+    kind: 'front',
+    name: 'Tactical Store',
+    blurb: 'Vests, plates, boots and torches, over a counter, to anybody who walks in. Sells finished sets at list price straight into clean money.',
+    icon: 'shop',
+    unlock: { properties: 5, cash: 6000000 },
+    cost: 8430,
+    minAreaM2: 110,
+    maxAreaM2: 700,
+    referenceAreaM2: 280,
+    areaExponent: 0.8,
+    upkeepPerDay: 118,
+    // Boots, torches, patches and range gear — a tactical shop is a real shop
+    // before it is anything else.
+    revenuePerDay: 1180,
+    wealthSensitivity: 0.7,
+    cut: 0.12,
+    launderPerDay: 190000,
+    heatPerDay: 0.06,
+    capacity: 180,
+    needsLicence: 'nij07',
+    // The legal counter for armour, the way a gun store is for iron.
+    sellsLegally: 'plate',
   },
   lab: {
     id: 'lab',
@@ -1036,7 +1159,7 @@ export const BUILDINGS = {
     id: 'research_lab',
     kind: 'research',
     name: 'R&D Facility',
-    blurb: 'Benches, glassware and people who read. Develops new product properly, and every so often the work throws off something nobody else has.',
+    blurb: 'Benches, glassware and people who read. Develops new products properly — strains, processes and patterns — and every so often the work throws off a one-off nobody else has.',
     icon: 'flask',
     unlock: { properties: 11, cash: 42000000 },
     cost: 1200000,

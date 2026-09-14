@@ -23,9 +23,8 @@
 
 import { PRODUCTS } from './constants.js';
 import { BUILDINGS } from './constants.js';
-import {
-  FIREARM_CLASSES, MODELS, classOf, modelOf, modelsFor, legalPriceFactor,
-} from './firearms.js';
+import { legalPriceFactor } from './firearms.js';
+import { lineKindOf, lineKindFor } from './lines.js';
 import { streetPrice } from './economy.js';
 import { clamp, clamp01 } from './rng.js';
 
@@ -35,8 +34,21 @@ export const ARMOURY = {
   /** Daily attention per piece, on the block you are based on. */
   heatPerDayLicensed: 0.05,
   heatPerDayStreet: 0.16,
+  // Armour is legal to own almost everywhere. A certified vest in a cupboard
+  // is not a thing anybody can charge you for, and an uncertified one barely.
+  heatPerDayArmour: 0.01,
+  heatPerDayArmourStreet: 0.04,
   /** The most any collection can shift a fight, however big it gets. */
   maxEdge: 0.17,
+  /**
+   * The most armour can take off a move that goes wrong.
+   *
+   * A vest does not help you WIN a fight — it helps you survive losing one, so
+   * it cuts what a backfire costs rather than shifting the odds. That split is
+   * the reason keeping both is worth more than keeping six of either.
+   */
+  maxGuard: 0.4,
+  guardScale: 5,
   /** Each further piece is worth this much of the one before it. */
   edgeFalloff: 0.55,
   /** How much armed weight it takes to get most of the way to the ceiling. */
@@ -57,10 +69,36 @@ export function armouryRoom(state) {
   return Math.max(0, ARMOURY.cap - armouryOf(state).length);
 }
 
-/** Is this building a line you could take a finished unit off? */
+/**
+ * Is this a line you could take a finished unit off?
+ *
+ * Any tooled line: a machine shop turns out something you might keep, and so
+ * does a vest shop. What you keep behaves differently — see `armouryEdge` and
+ * `armourGuard` — but taking it is the same act.
+ */
+export function isKeepableLine(building) {
+  return !!lineKindOf(building);
+}
+
+/** Kept for the callers that only care about iron. */
 export function isFirearmLine(building) {
   const def = building && BUILDINGS[building.type];
   return !!def && def.product === 'iron';
+}
+
+/** What product a kept piece came off. Old pieces predate the field. */
+function kindOfPiece(piece) {
+  return (piece && piece.kind) || 'iron';
+}
+
+function classesFor(piece) {
+  const kind = lineKindFor(kindOfPiece(piece));
+  return kind ? kind.classes : {};
+}
+
+function modelsOf(piece) {
+  const kind = lineKindFor(kindOfPiece(piece));
+  return kind ? kind.models : {};
 }
 
 /**
@@ -72,26 +110,26 @@ export function isFirearmLine(building) {
  */
 export function lineUnit(state, building) {
   const def = BUILDINGS[building.type];
-  const cls = classOf(building);
+  const kind = lineKindOf(building);
+  if (!kind) return null;
+  const cls = kind.classOf(building);
   // A shop with no pattern picked is still building SOMETHING, so a piece taken
   // off it records the class's first pattern rather than nothing. Without this
   // a kept unit has no model, which means no drawing and a name that just
   // repeats its category back at you.
-  const model = modelOf(building) || modelsFor(cls.id)[0] || null;
-  const quality = (building.packQuality && building.packQuality.iron) || 0.6;
+  const model = kind.modelOf(building) || kind.modelsFor(cls.id)[0] || null;
+  const quality = (building.packQuality && building.packQuality[kind.product]) || 0.6;
+  // Serialised for iron, certified for armour — either way it means the thing
+  // has paper behind it and sells over a counter rather than out of a boot.
   const serialised = !!def.needsLicence;
-  return {
+  const piece = {
+    kind: kind.product,
     classId: cls.id,
     modelId: model ? model.id : null,
     quality,
     serialised,
-    value: unitValue(state, {
-      classId: cls.id,
-      modelId: model ? model.id : null,
-      quality,
-      serialised,
-    }, building),
   };
+  return { ...piece, value: unitValue(state, piece, building) };
 }
 
 /**
@@ -104,9 +142,11 @@ export function lineUnit(state, building) {
 export function unitValue(state, piece, building = null) {
   const districts = (state && state.districts) || [];
   const d = districts[0];
-  const base = d ? streetPrice(d, 'iron') : PRODUCTS.iron.basePrice;
-  const cls = FIREARM_CLASSES[piece.classId] || FIREARM_CLASSES.handgun;
-  const model = piece.modelId ? MODELS[piece.modelId] : null;
+  const product = kindOfPiece(piece);
+  const base = d ? streetPrice(d, product) : PRODUCTS[product].basePrice;
+  const classes = classesFor(piece);
+  const cls = classes[piece.classId] || Object.values(classes)[0];
+  const model = piece.modelId ? modelsOf(piece)[piece.modelId] : null;
   const legal = piece.serialised && building ? legalPriceFactor(building) : 1;
   return Math.round(
     base
@@ -123,10 +163,10 @@ export function pieceValue(state, piece) {
 }
 
 function pieceName(piece) {
-  const model = piece.modelId ? MODELS[piece.modelId] : null;
+  const model = piece.modelId ? modelsOf(piece)[piece.modelId] : null;
   if (model) return model.name;
-  const cls = FIREARM_CLASSES[piece.classId];
-  return cls ? cls.name.replace(/s$/, '') : 'Firearm';
+  const cls = classesFor(piece)[piece.classId];
+  return cls ? cls.name.replace(/s$/, '') : 'Kit';
 }
 
 function nextPieceId(state) {
@@ -137,8 +177,8 @@ function nextPieceId(state) {
 /** Whether a unit could be taken off this line right now, and why not. */
 export function canKeep(state, building) {
   if (!building) return { ok: false, error: 'No such premises.' };
-  if (!isFirearmLine(building)) {
-    return { ok: false, error: 'Only a firearms line turns out something you could keep.' };
+  if (!isKeepableLine(building)) {
+    return { ok: false, error: 'Only a line you tool turns out something you could keep.' };
   }
   if (armouryRoom(state) <= 0) {
     return {
@@ -146,7 +186,8 @@ export function canKeep(state, building) {
       error: `You can keep ${ARMOURY.cap} to hand. Let one go first.`,
     };
   }
-  const have = (building.packs && building.packs.iron) || 0;
+  const kind = lineKindOf(building);
+  const have = (building.packs && building.packs[kind.product]) || 0;
   if (have < 1) {
     return { ok: false, error: 'Nothing finished on that line yet.' };
   }
@@ -164,10 +205,12 @@ export function keepFromLine(state, building) {
   if (!gate.ok) return gate;
 
   const unit = lineUnit(state, building);
-  building.packs.iron -= 1;
+  const kind = lineKindOf(building);
+  building.packs[kind.product] -= 1;
 
   const piece = {
     id: nextPieceId(state),
+    kind: kind.product,
     classId: unit.classId,
     modelId: unit.modelId,
     quality: unit.quality,
@@ -206,7 +249,9 @@ export function releasePiece(state, pieceId) {
  * is what stops the answer being "keep six of the dearest thing you build".
  */
 export function armouryEdge(state) {
-  const list = armouryOf(state);
+  // Only what you are carrying tips a fight. A vest in a cupboard does not
+  // make anybody back down — see `armourGuard` for what it does do.
+  const list = armouryOf(state).filter((p) => kindOfPiece(p) === 'iron');
   if (!list.length) return 0;
 
   // What a piece is worth in a fight tracks what it is. The raw spread between
@@ -215,8 +260,9 @@ export function armouryEdge(state) {
   // root first — a belt-fed is worth several pistols, not a hundred of them.
   const weights = list
     .map((p) => {
-      const cls = FIREARM_CLASSES[p.classId] || FIREARM_CLASSES.handgun;
-      const model = p.modelId ? MODELS[p.modelId] : null;
+      const classes = classesFor(p);
+      const cls = classes[p.classId] || Object.values(classes)[0];
+      const model = p.modelId ? modelsOf(p)[p.modelId] : null;
       return Math.sqrt(cls.valueMult * (model ? model.valueMult : 1));
     })
     .sort((a, b) => b - a);
@@ -237,9 +283,38 @@ export function armouryEdge(state) {
 
 /** What keeping them costs in attention, per day, on the block you work from. */
 export function armouryHeatPerDay(state) {
-  return armouryOf(state).reduce(
-    (n, p) => n + (p.serialised ? ARMOURY.heatPerDayLicensed : ARMOURY.heatPerDayStreet),
-    0
+  return armouryOf(state).reduce((n, p) => {
+    if (kindOfPiece(p) === 'plate') {
+      return n + (p.serialised ? ARMOURY.heatPerDayArmour : ARMOURY.heatPerDayArmourStreet);
+    }
+    return n + (p.serialised ? ARMOURY.heatPerDayLicensed : ARMOURY.heatPerDayStreet);
+  }, 0);
+}
+
+/**
+ * How much of a bad move the armour absorbs, 0 to `maxGuard`.
+ *
+ * Deliberately not the same mechanic as the guns. Iron shifts whether you win;
+ * armour shifts what losing costs you. Keeping one of each is therefore worth
+ * more than keeping two of either, which is the decision the cap exists to
+ * make interesting.
+ */
+export function armourGuard(state) {
+  const list = armouryOf(state).filter((p) => kindOfPiece(p) === 'plate');
+  if (!list.length) return 0;
+  const weights = list
+    .map((p) => {
+      const classes = classesFor(p);
+      const cls = classes[p.classId] || Object.values(classes)[0];
+      const model = p.modelId ? modelsOf(p)[p.modelId] : null;
+      return Math.sqrt(cls.valueMult * (model ? model.valueMult : 1));
+    })
+    .sort((a, b) => b - a);
+  let sum = 0;
+  weights.forEach((w, i) => { sum += w * Math.pow(ARMOURY.edgeFalloff, i); });
+  return clamp(
+    ARMOURY.maxGuard * (1 - Math.exp(-sum / ARMOURY.guardScale)),
+    0, ARMOURY.maxGuard
   );
 }
 

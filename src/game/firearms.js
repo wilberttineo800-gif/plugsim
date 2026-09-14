@@ -9,8 +9,16 @@
 // it's worth less to the people who want it untraceable.
 
 /**
- * What you can be licensed to do. Applications take time to come back, cost
- * real money up front, and lapse if you don't renew them.
+ * Paperwork.
+ *
+ * Everything the state has to say yes to before you can do a thing lawfully,
+ * whether that is a permit or a test certificate. It lives in one table because
+ * it is one system — apply, wait, pay to renew, lose it if you let it lapse —
+ * and `domain` is only there so the UI can put firearms paperwork and armour
+ * paperwork under their own headings.
+ *
+ * Applications take time to come back, cost real money up front, and lapse if
+ * you don't renew them.
  */
 export const LICENCES = {
   ffl01: {
@@ -49,9 +57,48 @@ export const LICENCES = {
     maxHeatToApply: 28,
     requires: ['ffl07'],
   },
+
+  // --- Armour -----------------------------------------------------------
+  // Body armour needs no federal permit to make or sell. What it needs is
+  // TESTING: a plate is either on the NIJ compliant products list or it is a
+  // lump of ceramic somebody is willing to take your word about. So this is a
+  // certification rather than a permit — cheaper and quicker than an FFL,
+  // which is the whole reason armour is the business you can be in early.
+  nij07: {
+    id: 'nij07',
+    domain: 'armour',
+    name: 'NIJ 0101.07 — Compliance Listing',
+    short: 'NIJ 07',
+    blurb:
+      'Your product, shot at by an independent lab until it either passes or does not. Listed product sells over a counter at list price; unlisted product sells to people who do not ask.',
+    cost: 1100000,
+    renewalPerYear: 4200,
+    processingDays: 21,
+    // A lab cares about the product. It still will not test for somebody the
+    // police are actively looking at.
+    maxHeatToApply: 55,
+  },
+  leSupply: {
+    id: 'leSupply',
+    domain: 'armour',
+    name: 'Law-Enforcement Supply Contract',
+    short: 'LE Supply',
+    blurb:
+      'On the approved-vendor list. Shields and barricade gear have almost no other buyer, and a department pays list and pays on time — after it has read everything about you.',
+    cost: 2900000,
+    renewalPerYear: 11000,
+    processingDays: 35,
+    maxHeatToApply: 32,
+    requires: ['nij07'],
+  },
 };
 
 export const LICENCE_IDS = Object.keys(LICENCES);
+
+/** Paperwork for one side of the trade. `domain` defaults to firearms. */
+export function licencesFor(domain) {
+  return LICENCE_IDS.filter((id) => (LICENCES[id].domain || 'firearms') === domain);
+}
 
 /**
  * What a shop is tooled up to build. Real categories, with the trade-offs that

@@ -410,6 +410,16 @@ game.equipGear = (slotId, pieceId) => {
   game.ui.render();
 };
 
+game.setLook = (key, value) => {
+  A.setLook(game.state, key, value);
+  game.ui.render();
+};
+
+game.setLookModel = (modelId) => {
+  A.setLookModel(game.state, modelId);
+  game.ui.render();
+};
+
 game.getTreated = () => {
   const r = A.getTreated(game.state);
   if (!r.ok) { toast(r.error, 'bad'); return; }

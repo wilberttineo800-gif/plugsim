@@ -158,3 +158,51 @@ ok(SLOT_IDS.filter((id) => st.character.equipped[id] === 'p').length === 0,
 ok(equip(st, 'primary', 'p').ok === false, 'plates cannot be carried as a primary');
 
 print(fail ? `health: ${fail} FAILED, ${pass} passed` : `health: all ${pass} checks passed`);
+
+// --- Appearance -------------------------------------------------------------
+// Twenty presets over seven independent traits. The point of doing it that way
+// rather than twenty sprites is that nobody the game generates is a duplicate,
+// and that everything about yours can be changed afterwards.
+import {
+  MODELS as LOOK_MODELS, MODEL_IDS, TRAITS, randomAppearance, normaliseAppearance,
+  appearanceFrom, BUILDS, SKINS, HAIR, CLOTHING,
+} from '../src/game/appearance.js';
+import { appearanceOf, setTrait, setModel as setLookPreset } from '../src/game/character.js';
+
+ok(LOOK_MODELS.length === 20, 'twenty character models');
+ok(new Set(MODEL_IDS).size === 20, 'all distinct');
+ok(TRAITS.length === 7, 'seven traits to change');
+for (const m of LOOK_MODELS) {
+  const a = appearanceFrom(m.id);
+  ok(BUILDS[a.build] && SKINS[a.skin] && HAIR[a.hair] && CLOTHING[a.clothing],
+    `${m.name} is built out of traits that exist`);
+}
+
+const people = new Set();
+for (let i = 0; i < 200; i++) people.add(JSON.stringify(randomAppearance(i)));
+ok(people.size > 190, `200 generated people give ${people.size} distinct looks`);
+ok(JSON.stringify(randomAppearance(42)) === JSON.stringify(randomAppearance(42)),
+  'and the same seed is always the same person, so nobody changes face on reload');
+
+// Somebody the game made has a face without any of it being saved.
+const driver = { id: 'c7', name: 'A driver' };
+ok(!!appearanceOf(driver).skin, 'a generated person has an appearance');
+ok(JSON.stringify(appearanceOf(driver)) === JSON.stringify(appearanceOf({ id: 'c7' })),
+  'derived from their id, so it survives a reload without being stored');
+ok(JSON.stringify(appearanceOf({ id: 'c7' })) !== JSON.stringify(appearanceOf({ id: 'c8' })),
+  'and two people are not the same person');
+
+// Nonsense in a hand-edited or ancient save does not crash the drawing.
+const junk = normaliseAppearance({ build: 'nope', skin: null, hair: 42, clothing: 'x' });
+ok(BUILDS[junk.build] && SKINS[junk.skin] && HAIR[junk.hair] && CLOTHING[junk.clothing],
+  'a broken appearance is repaired rather than rendered');
+
+const me = { seed: 3 };
+setLookPreset(me, 'm11');
+ok(me.character.appearance.model === 'm11', 'you can start again from a preset');
+setTrait(me, 'hair', 'afro');
+ok(me.character.appearance.hair === 'afro', 'and change one thing about it');
+setTrait(me, 'hair', 'not-a-hairstyle');
+ok(me.character.appearance.hair === 'afro', 'and a bad value is refused rather than kept');
+
+print(fail ? `appearance: ${fail} FAILED in total` : `appearance: all ${pass} checks passed in total`);

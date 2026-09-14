@@ -32,8 +32,9 @@ import {
   armedWith, pieceLabel,
 } from '../game/character.js';
 import {
-  BODY_ART, BODY_DEFS, SKELETON, FIGURE_W, FIGURE_H, figure, partTransform,
+  BODY_ART, BODY_DEFS, SKELETON, FIGURE_W, FIGURE_H, figure, figureFor, partTransform,
 } from './bodyart.js';
+import { MODELS as LOOK_MODELS, TRAITS, BUILDS } from '../game/appearance.js';
 import {
   armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
   pieceValue, canKeep, lineUnit, isKeepableLine, armourGuard,
@@ -397,6 +398,8 @@ export class GameUI {
       case 'equip': g.equipGear(type, id); break;
       case 'unequip': g.equipGear(type, null); break;
       case 'get-treated': g.getTreated(); break;
+      case 'set-look': g.setLook(type, id); break;
+      case 'set-model-look': g.setLookModel(id); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -732,23 +735,23 @@ export class GameUI {
     for (const id of SLOT_IDS) worn[id] = equippedIn(s, id);
 
     // The figure, with whatever is on it drawn over the parts it covers.
+    const build = BUILDS[(ch.appearance || {}).build] || BUILDS.regular;
     const overlay = (partId) => {
       const p = cover[partId] || 0;
       if (p <= 0) return '';
       const part = BODY_ART[partId];
-      const tr = partTransform(part);
+      const tr = partTransform(part, build);
       return `<g${tr ? ` transform="${tr}"` : ''}>
         <path d="${part.path}" fill="#8a9b7e" opacity="${(0.18 + p * 0.34).toFixed(2)}"/>
         <path d="${part.path}" fill="none" stroke="#a8b79b" stroke-width="3" opacity=".55"/>
       </g>`;
     };
+    const lostParts = {};
+    for (const id of BODY_PART_IDS) if (body.parts[id].lost) lostParts[id] = true;
     const fig = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
-      width="190" height="${Math.round(190 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
+      width="172" height="${Math.round(172 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
       ${sharedBodyDefs()}
-      ${figure({
-        fillFor: (id) => (body.parts[id].lost ? '#1a1e24' : 'url(#bfSkin)'),
-        extra: overlay,
-      })}
+      ${figureFor(ch.appearance, { overlay, lostParts })}
     </svg>`;
 
     const slots = SLOT_IDS.map((id) => {
@@ -796,6 +799,42 @@ export class GameUI {
       </div>`;
     }).join('');
 
+    const look = ch.appearance;
+    const traitRows = TRAITS.map((tr) => `
+      <div class="row" style="align-items:flex-start">
+        <span style="min-width:86px">${esc(tr.name)}</span>
+        <span class="chips" style="justify-content:flex-end">${tr.ids.map((id) => {
+          const v = tr.table[id];
+          const live = look[tr.key] === id;
+          const sw = tr.swatch ? tr.swatch(v) : null;
+          return `<button class="chip ${live ? 'chip--good' : ''}"
+            data-action="set-look" data-type="${tr.key}" data-id="${id}"
+            title="${esc(v.name)}">${sw
+              ? `<i style="display:inline-block;width:12px;height:12px;border-radius:3px;
+                   background:${esc(sw)};vertical-align:-2px"></i> `
+              : ''}${esc(v.name)}</button>`;
+        }).join('')}</span>
+      </div>`).join('');
+
+    const models = `<div class="chips">${LOOK_MODELS.map((m) => `
+      <button class="chip ${look.model === m.id ? 'chip--good' : ''}"
+        data-action="set-model-look" data-id="${m.id}">${esc(m.name)}</button>`).join('')}</div>`;
+
+    const customise = `
+      <details class="upgrades" data-disc="look"
+        ${this.discOpen('look', false) ? 'open' : ''}>
+        <summary><span>How you look</span>
+          <span class="upgrades__count">${esc((LOOK_MODELS.find((m) => m.id === look.model) || {}).name || '')}</span></summary>
+        <div class="upgrades__body">
+          <p class="card__blurb" style="margin:0 0 8px">
+            You were given one of twenty when you started. It is a starting
+            point — change any of it.
+          </p>
+          ${models}
+          <div class="rows" style="margin-top:8px">${traitRows}</div>
+        </div>
+      </details>`;
+
     return `<div class="sect">
       <div class="sect__title"><span>${esc(ch.name || 'You')}</span>
         <span class="${cond.tone}">${esc(cond.label)}</span></div>
@@ -819,6 +858,7 @@ export class GameUI {
         made covers them.
       </p>
       <div class="rows">${coverRows}</div>
+      ${customise}
     </div>
     <div class="sect">
       <div class="sect__title"><span>Carried</span>
@@ -870,6 +910,7 @@ export class GameUI {
       ${figure({
         fillFor: (id) => (body.parts[id].lost ? '#04080c' : 'url(#bfFilm)'),
         stroke: '#1b2836',
+        build: BUILDS[(ch.appearance || {}).build] || BUILDS.regular,
       })}
       ${SKELETON}
       ${BODY_PART_IDS.map(marks).join('')}

@@ -10,6 +10,9 @@
 // the right call.
 
 import { newBody, BODY_PARTS, BODY_PART_IDS } from './health.js';
+import {
+  randomAppearance, normaliseAppearance, appearanceFrom, TRAITS,
+} from './appearance.js';
 import { armouryOf } from './armoury.js';
 import { ARMOUR_CLASSES, protectionAt } from './armour.js';
 import { FIREARM_CLASSES, threatOf } from './firearms.js';
@@ -58,16 +61,68 @@ export const SLOTS = {
 
 export const SLOT_IDS = Object.keys(SLOTS);
 
-export function newCharacter(name = 'You') {
-  return { name, body: newBody(), equipped: {}, treatedTo: 0 };
+export function newCharacter(name = 'You', seed = Date.now()) {
+  return {
+    name,
+    body: newBody(),
+    equipped: {},
+    // Everybody starts as somebody, picked for them. It is a starting point,
+    // not a sentence — every trait on it can be changed.
+    appearance: randomAppearance(seed),
+  };
 }
 
 /** The player's own character, created on demand for a save that predates it. */
 export function characterOf(state) {
-  if (!state.character) state.character = newCharacter(state.playerName || 'You');
+  if (!state.character) {
+    state.character = newCharacter(state.playerName || 'You', (state.seed || 1) * 7919);
+  }
   if (!state.character.body) state.character.body = newBody();
   if (!state.character.equipped) state.character.equipped = {};
+  state.character.appearance = normaliseAppearance(state.character.appearance);
   return state.character;
+}
+
+/**
+ * Change one thing about how you look.
+ *
+ * Validated here rather than left to `normaliseAppearance`, which repairs a
+ * bad field by falling back to the PRESET — so a rejected change would
+ * silently reset that trait to the model default instead of leaving it alone.
+ */
+export function setTrait(state, key, value) {
+  const trait = TRAITS.find((t) => t.key === key);
+  if (!trait) return { ok: false, error: 'No such thing to change.' };
+  if (!trait.table[value]) return { ok: false, error: 'No such option.' };
+  const ch = characterOf(state);
+  ch.appearance = normaliseAppearance({ ...ch.appearance, [key]: value });
+  return { ok: true, appearance: ch.appearance };
+}
+
+/** Start again from one of the twenty. */
+export function setModel(state, modelId) {
+  const ch = characterOf(state);
+  ch.appearance = normaliseAppearance(appearanceFrom(modelId));
+  return { ok: true, appearance: ch.appearance };
+}
+
+/**
+ * How somebody the game generated looks.
+ *
+ * Derived from their own id rather than stored, so every driver and every
+ * rival operation has a face without any of it having to be saved — and looks
+ * the same every time the save is opened.
+ */
+export function appearanceOf(entity) {
+  if (!entity) return appearanceFrom('m01');
+  if (entity.appearance) return normaliseAppearance(entity.appearance);
+  const id = String(entity.id || entity.name || 'x');
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return randomAppearance(h >>> 0);
 }
 
 /** The cabinet piece in a slot, or null. */

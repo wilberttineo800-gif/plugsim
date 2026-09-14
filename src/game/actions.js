@@ -23,7 +23,9 @@ import {
 } from './firearms.js';
 import { lineKindOf } from './lines.js';
 import { takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS } from './health.js';
-import { characterOf, protectionOf, armedWith, equip } from './character.js';
+import {
+  characterOf, protectionOf, armedWith, equip, setTrait, setModel as setLookPreset,
+} from './character.js';
 import {
   armouryEdge, armourGuard, keepFromLine as takeFromLine, releasePiece as letPieceGo,
   canKeep,
@@ -1409,4 +1411,14 @@ export function getTreated(state) {
 /** Put a kept piece on, or take it off with a null id. */
 export function equipGear(state, slotId, pieceId) {
   return equip(state, slotId, pieceId || null);
+}
+
+/** Change one thing about how you look. */
+export function setLook(state, key, value) {
+  return setTrait(state, key, value);
+}
+
+/** Start again from one of the twenty. */
+export function setLookModel(state, modelId) {
+  return setLookPreset(state, modelId);
 }

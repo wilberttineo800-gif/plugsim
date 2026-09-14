@@ -193,6 +193,11 @@ export function fitsBuilding(def, lot) {
  */
 export function operationOptions(lot, state = null) {
   return BUILDING_IDS.filter((id) => {
+    // Some things are not on the menu. A locked building is a goal — it shows
+    // greyed with what it wants — but a HIDDEN one is not there at all until
+    // somebody has put it to you, because the whole point of it is that you
+    // were not looking for it.
+    if (BUILDINGS[id].hidden && !isDiscovered(state, id)) return false;
     // A car park takes a depot and nothing else; premises take everything but.
     const need = BUILDINGS[id].requiresKind || null;
     if (need ? lot.kind !== need : lot.kind === 'parking') return false;
@@ -212,6 +217,28 @@ export function operationOptions(lot, state = null) {
       capScale: areaCapacityScale(lot, def.referenceAreaM2),
     };
   });
+}
+
+/** Things that have been put to you, which is not the same as things unlocked. */
+export function isDiscovered(state, id) {
+  return !!state && (state.discovered || []).includes(id);
+}
+
+/**
+ * Somebody puts it to you.
+ *
+ * Deliberately not a tip, not an unlock notification and not a tab that
+ * appears. One oblique line in the log that most players will scroll past,
+ * and after it two buildings quietly exist that did not before.
+ */
+export function offerTheOtherThing(state) {
+  if (isDiscovered(state, 'back_clinic')) return false;
+  state.discovered = (state.discovered || []).concat(['back_clinic', 'morgue']);
+  logEvent(state,
+    'Somebody took you aside afterwards. Wanted to know whether you ever have '
+    + 'anything that needs moving quietly, and whether you had somewhere cold.',
+    'info');
+  return true;
 }
 
 /** Fit out a building you own so it starts doing something. */
@@ -1036,6 +1063,12 @@ export function muscleIn(state, districtId) {
   }
 
   spendClean(state, cost);
+  // Somebody notices what taking a block by force leaves behind, and puts
+  // something to you. Only after you have done it enough to be worth asking.
+  state.stats.blocksTaken = (state.stats.blocksTaken || 0) + 1;
+  if (state.stats.blocksTaken >= 3 && (state.lots || []).filter((l) => l.owned).length >= 6) {
+    offerTheOtherThing(state);
+  }
   // Taking a block by force leaves people on it. Whether that is anything but
   // a line in the log depends entirely on whether you have built somewhere to
   // take them, which is a decision made long before this moment.

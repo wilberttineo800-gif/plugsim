@@ -284,4 +284,43 @@ ok(capacities(me.character.body).breathing === 1, 'a kidney does not affect brea
 sellOwnPart(me, 'lung');
 ok(capacities(me.character.body).breathing < 1, 'but a lung does, permanently');
 
+// --- Hidden, not advertised -------------------------------------------------
+//
+// None of this is a goal shown greyed out with a target attached. It is not in
+// the build list, not in the guide, and not a tab that appears. Somebody has to
+// put it to you, and until they do it does not exist as far as the game is
+// concerned.
+import { operationOptions, isDiscovered, offerTheOtherThing, hasClinic as clinicOf } from '../src/game/actions.js';
+
+const virgin = {
+  discovered: [], lots: [], stats: {}, log: [],
+  cash: { clean: 1e9, dirty: 0 }, buildings: [], districts: [], organs: [], captives: [],
+};
+const plot = { id: 'L1', owned: true, kind: 'building', areaM2: 400, districtId: 'd1' };
+virgin.lots.push(plot);
+
+const menu = operationOptions(plot, virgin).map((o) => o.id);
+ok(!menu.includes('back_clinic'), 'the clinic is not on the build menu');
+ok(!menu.includes('morgue'), 'nor the funeral home');
+ok(menu.length > 40, `while everything else is (${menu.length} options)`);
+ok(!isDiscovered(virgin, 'back_clinic'), 'and nothing has been put to you');
+ok(!clinicOf(virgin), 'so there is nowhere to do any of it');
+
+// Not surfaced by the guide either — the whole point is stumbling on it.
+import { TIPS } from '../src/game/guide.js';
+// Word boundaries matter here: "nobody" and "somebody" contain "body", and
+// without \b this flags four perfectly innocent tips.
+const leaks = TIPS.filter((tip) =>
+  /\b(organ|organs|harvest|harvesting|kidney|morgue|cadaver|corpse|corpses)\b/i
+    .test(`${tip.says} ${tip.title}`));
+ok(leaks.length === 0, 'and the guide never mentions it: ' + (leaks.map((t) => t.id).join(', ') || 'never'));
+
+offerTheOtherThing(virgin);
+const menu2 = operationOptions(plot, virgin).map((o) => o.id);
+ok(menu2.includes('back_clinic') && menu2.includes('morgue'), 'once somebody asks, both exist');
+ok(virgin.log.length === 1, 'announced by exactly one line in the log');
+ok(!/organ|harvest|kidney/i.test(virgin.log[0].text),
+  'which does not say what it is: ' + JSON.stringify(virgin.log[0].text.slice(0, 60)));
+ok(offerTheOtherThing(virgin) === false, 'and it is only ever put to you once');
+
 print(fail ? `organs+captives+self: ${fail} FAILED in total` : `organs+captives+self: all ${pass} checks passed in total`);

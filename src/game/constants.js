@@ -567,6 +567,9 @@ export const BUILDINGS = {
   },
   back_clinic: {
     id: 'back_clinic',
+    // Not in the build list, not in the guide, not a goal shown greyed out
+    // with a target attached. Somebody has to put it to you first.
+    hidden: true,
     // Its own kind on purpose. `production` means "turns raw into packs of a
     // PRODUCT", and every panel that reads one expects `def.product` to exist
     // — a clinic turns out something that is not a product at all, and marking
@@ -593,6 +596,9 @@ export const BUILDINGS = {
   },
   morgue: {
     id: 'morgue',
+    // Not in the build list, not in the guide, not a goal shown greyed out
+    // with a target attached. Somebody has to put it to you first.
+    hidden: true,
     kind: 'clinic',
     name: 'Funeral Home',
     blurb: 'Chapel of rest at the front, cold room at the back, and a licence on the wall. Bodies arriving here are the least remarkable thing on the street — which is the entire point of owning one.',

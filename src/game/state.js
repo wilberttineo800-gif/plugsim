@@ -66,6 +66,7 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     organs: [],          // on ice, and losing value by the hour
     casualties: [],      // left on blocks you took by force
     captives: [],        // people you went and got
+    discovered: [],      // things somebody put to you, which is not the same as unlocked
     organCounter: 0,
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
@@ -544,6 +545,7 @@ export function loadGame() {
     if (!Array.isArray(data.organs)) data.organs = [];
     if (!Array.isArray(data.casualties)) data.casualties = [];
     if (!Array.isArray(data.captives)) data.captives = [];
+    if (!Array.isArray(data.discovered)) data.discovered = [];
     if (typeof data.organCounter !== 'number') data.organCounter = 0;
     idCounter = data.idCounter || 1;
     delete data.idCounter;

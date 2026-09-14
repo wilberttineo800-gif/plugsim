@@ -1773,3 +1773,22 @@ print('=== 27. a save that predates a product still loads ===');
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
+
+// Every building that claims to make a product has to name one.
+//
+// The back clinic shipped as `kind: 'production'` with no `product`, and the
+// building panel crashed on `PRODUCTS[def.product].rawName` the moment one was
+// selected. Nothing else caught it, because nothing else reads that field.
+{
+  const bad = Object.values(BUILDINGS).filter(
+    (d) => d.kind === 'production' && !PRODUCTS[d.product]
+  );
+  check('every production building names a product it actually makes',
+    bad.length === 0, bad.map((d) => d.id).join(', ') || 'all of them do');
+
+  const badProcess = Object.values(BUILDINGS).filter(
+    (d) => d.kind === 'processing' && !(d.handles || []).every((p) => PRODUCTS[p])
+  );
+  check('and every processing building handles products that exist',
+    badProcess.length === 0, badProcess.map((d) => d.id).join(', ') || 'all of them do');
+}

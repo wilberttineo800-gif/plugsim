@@ -565,6 +565,29 @@ export const BUILDINGS = {
     heatPerDay: 0.9,
     capacity: 220,
   },
+  back_clinic: {
+    id: 'back_clinic',
+    // Its own kind on purpose. `production` means "turns raw into packs of a
+    // PRODUCT", and every panel that reads one expects `def.product` to exist
+    // — a clinic turns out something that is not a product at all, and marking
+    // it production crashed the building panel on `p.rawName`.
+    kind: 'clinic',
+    name: 'Back Clinic',
+    blurb: 'A cold room, a table, and somebody who was struck off. Nothing legitimate happens here and everybody on the block works out what it is.',
+    icon: 'flask',
+    // Deliberately the last thing that opens up. It is not a business you fall
+    // into — you have to go a long way out of your way to be in it.
+    unlock: { properties: 14, cash: 60000000 },
+    cost: 640000,
+    minAreaM2: 90,
+    maxAreaM2: 800,
+    referenceAreaM2: 240,
+    areaExponent: 0.7,
+    upkeepPerDay: 8400,
+    // The hottest thing in the game by a wide margin, and it never cools.
+    heatPerDay: 6.5,
+    capacity: 0,
+  },
   proving_range: {
     id: 'proving_range',
     kind: 'processing',

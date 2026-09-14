@@ -410,6 +410,20 @@ game.equipGear = (slotId, pieceId) => {
   game.ui.render();
 };
 
+game.harvestCasualty = (id) => {
+  const r = A.harvestCasualty(game.state, id);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(`${r.taken.length} on ice.`, 'info');
+  game.ui.render();
+};
+
+game.sellOrgans = () => {
+  const r = A.sellOrgans(game.state);
+  if (!r.ok) { toast(r.error, 'bad'); return; }
+  toast(r.sold ? `${r.sold} moved for ${money(r.net)}.` : 'All of it had gone off.', r.sold ? 'good' : 'bad');
+  game.ui.render();
+};
+
 game.setLook = (key, value) => {
   A.setLook(game.state, key, value);
   game.ui.render();

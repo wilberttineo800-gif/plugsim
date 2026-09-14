@@ -10,7 +10,7 @@ import {
   lotById, areaScale, areaCapacityScale, lotResale, marketValue, rentPerDay, lotPnL,
 } from './lots.js';
 import { fetchRoute } from './geo.js';
-import { clamp01 } from './rng.js';
+import { clamp, clamp01 } from './rng.js';
 import { streetPrice } from './economy.js';
 import { citiesOf, homeCity, cityOfBuilding, foundingCost, quoteShipment } from './cities.js';
 import { generateDistricts } from './districts.js';
@@ -22,6 +22,9 @@ import {
   builtInParts, modelOf, incompatibleParts,
 } from './firearms.js';
 import { lineKindOf } from './lines.js';
+import {
+  ORGANS, ORGAN_TRADE, harvest, organValue, stockOf, viability,
+} from './organs.js';
 import { takeHit, treat, treatmentCost, openWounds, condition, BODY_PARTS } from './health.js';
 import {
   characterOf, protectionOf, armedWith, equip, setTrait, setModel as setLookPreset,
@@ -1027,6 +1030,20 @@ export function muscleIn(state, districtId) {
   }
 
   spendClean(state, cost);
+  // Taking a block by force leaves people on it. Whether that is anything but
+  // a line in the log depends entirely on whether you have built somewhere to
+  // take them, which is a decision made long before this moment.
+  if (hasClinic(state)) {
+    const atHour = Math.floor((state.minutes || 0) / 60);
+    const n = 1 + Math.floor(Math.random() * 2);
+    state.casualties = (state.casualties || []).concat(
+      Array.from({ length: n }, (_, i) => ({
+        id: `cas${(state.organCounter = (state.organCounter || 0) + 1)}`,
+        districtId: d.id,
+        atHour,
+      }))
+    );
+  }
   const [lo, hi] = RIVALS.muscleKnockdown;
   const knock = lo + Math.random() * (hi - lo);
   d.rivalControl = clamp01(d.rivalControl - knock);
@@ -1421,4 +1438,97 @@ export function setLook(state, key, value) {
 /** Start again from one of the twenty. */
 export function setLookModel(state, modelId) {
   return setLookPreset(state, modelId);
+}
+
+// --- The black market in parts ----------------------------------------------
+//
+// Opting in is building the clinic; there is no switch, and it is the last
+// thing that unlocks. Everything here is priced off reported trafficking
+// figures, and the number the model is really built around is the one those
+// reports bury: the person it came out of is worth a thousand or two and the
+// middlemen take the rest. You are the middlemen.
+
+/** Have you built somewhere for this? That IS the opt-in. */
+export function hasClinic(state) {
+  return (state.buildings || []).some((b) => b.type === 'back_clinic' && b.active);
+}
+
+/** Bodies left on blocks you took, that have not already been dealt with. */
+export function casualtiesOf(state) {
+  return state.casualties || [];
+}
+
+/**
+ * Take what is usable.
+ *
+ * The block finds out. Reputation there does not dip, it collapses, and the
+ * heat is worse than anything else in the game — which is the point: this is
+ * a great deal of money for a cost you cannot pay off.
+ */
+export function harvestCasualty(state, casualtyId) {
+  if (!hasClinic(state)) {
+    return { ok: false, error: 'You have nowhere to do that.' };
+  }
+  const list = casualtiesOf(state);
+  const idx = list.findIndex((c) => c.id === casualtyId);
+  if (idx < 0) return { ok: false, error: 'Nothing there.' };
+  const cas = list[idx];
+  const atHour = Math.floor((state.minutes || 0) / 60);
+
+  // How well it comes out depends on the room: a bigger place is a better
+  // table, better cold storage and somebody who has done it before. Derived
+  // from the floorplate here rather than importing the simulation's own
+  // `sizeScale`, which would pull actions and sim into a cycle.
+  const clinic = (state.buildings || []).find((b) => b.type === 'back_clinic' && b.active);
+  const def = clinic ? BUILDINGS[clinic.type] : null;
+  const room = clinic && def
+    ? clamp((clinic.areaM2 || def.referenceAreaM2) / def.referenceAreaM2, 0.4, 2.2)
+    : 1;
+  const skill = clamp01(0.36 + room * 0.22);
+  const taken = harvest(null, { atHour, skill });
+  state.organs = stockOf(state).concat(taken);
+  state.casualties = list.slice(0, idx).concat(list.slice(idx + 1));
+
+  const d = districtById(state, cas.districtId);
+  if (d) {
+    d.rep = clamp01(d.rep - ORGAN_TRADE.repHit);
+    d.heat = Math.min(100, d.heat + ORGAN_TRADE.heatPerBody);
+  }
+  logEvent(state,
+    `${taken.length} usable off the table. ${d ? d.name : 'The block'} will hear about it.`,
+    'bad');
+  return { ok: true, taken };
+}
+
+/**
+ * Move what is on ice.
+ *
+ * Anything past its cold time is worth nothing and goes out with the rest.
+ * The broker takes his cut off the top, and what is left is street money —
+ * there is no version of this that pays clean.
+ */
+export function sellOrgans(state) {
+  const atHour = Math.floor((state.minutes || 0) / 60);
+  const stock = stockOf(state);
+  if (!stock.length) return { ok: false, error: 'Nothing on ice.' };
+
+  let gross = 0, sold = 0, spoiled = 0;
+  for (const p of stock) {
+    const v = organValue(p, atHour, p.quality);
+    if (v <= 0) { spoiled++; continue; }
+    gross += v;
+    sold++;
+  }
+  state.organs = [];
+  if (!sold) {
+    logEvent(state, `${spoiled} went off before anybody would take them.`, 'bad');
+    return { ok: true, sold: 0, spoiled, net: 0 };
+  }
+  const net = Math.round(gross * (1 - ORGAN_TRADE.brokerCut));
+  state.cash.dirty += net;
+  logEvent(state,
+    `${sold} moved through a broker for $${net.toLocaleString()}`
+    + (spoiled ? `, ${spoiled} spoiled.` : '.'),
+    'info');
+  return { ok: true, sold, spoiled, net, gross };
 }

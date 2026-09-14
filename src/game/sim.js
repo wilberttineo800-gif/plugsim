@@ -26,6 +26,7 @@ import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { lineEffects, lineKindOf } from './lines.js';
 import { stepBody, infectionStage, BODY_PARTS } from './health.js';
 import { characterOf } from './character.js';
+import { cullSpoiled } from './organs.js';
 import { turfEffects, turfUpkeep, districtName } from './turf.js';
 import { raise, stepIncidents } from './incidents.js';
 import { stepPlayers, snapshotPlayers, stepDiscovery } from './players.js';
@@ -1203,6 +1204,16 @@ function stepHeat(state, dt) {
   // infection coming in, tissue closing. A wound is not an event, it is a
   // process, and this is where the process runs.
   stepCharacter(state, dt);
+
+  // Anything on ice is losing value by the hour, and past its cold time it is
+  // simply refuse. Clearing it here rather than at the point of sale means the
+  // clock is real whether or not the player is looking at it.
+  if ((state.organs || []).length) {
+    const gone = cullSpoiled(state, Math.floor((state.minutes || 0) / 60));
+    if (gone.length) {
+      logEvent(state, `${gone.length} went off on the ice.`, 'warn');
+    }
+  }
 
   // What you keep for yourself costs attention too, on the block you work
   // from — iron in a drawer is iron somebody can find, and one with the number

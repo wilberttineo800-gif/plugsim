@@ -63,6 +63,9 @@ export function createState({ origin, cityName, countryCode = null, districts, c
     armoury: [],         // what you kept off your own lines rather than sold
     armouryCounter: 0,
     character: null,     // you: a body, and what is on it
+    organs: [],          // on ice, and losing value by the hour
+    casualties: [],      // left on blocks you took by force
+    organCounter: 0,
     incidents: [],       // things happening, on the map
     players: [],         // other operations, AI for now
     aiDisabled: false,
@@ -537,6 +540,9 @@ export function loadGame() {
     if (!Array.isArray(data.armoury)) data.armoury = [];
     if (typeof data.armouryCounter !== 'number') data.armouryCounter = data.armoury.length;
     if (!data.character || !data.character.body) data.character = null;
+    if (!Array.isArray(data.organs)) data.organs = [];
+    if (!Array.isArray(data.casualties)) data.casualties = [];
+    if (typeof data.organCounter !== 'number') data.organCounter = 0;
     idCounter = data.idCounter || 1;
     delete data.idCounter;
     data.selection = null;

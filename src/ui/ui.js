@@ -36,6 +36,10 @@ import {
 } from './bodyart.js';
 import { MODELS as LOOK_MODELS, TRAITS, BUILDS } from '../game/appearance.js';
 import {
+  ORGANS, ORGAN_TRADE, stockOf, stockValue, viability, organValue,
+} from '../game/organs.js';
+import { hasClinic, casualtiesOf } from '../game/actions.js';
+import {
   armouryOf, armouryCap, armouryEdge, armouryHeatPerDay,
   pieceValue, canKeep, lineUnit, isKeepableLine, armourGuard,
 } from '../game/armoury.js';
@@ -400,6 +404,8 @@ export class GameUI {
       case 'get-treated': g.getTreated(); break;
       case 'set-look': g.setLook(type, id); break;
       case 'set-model-look': g.setLookModel(id); break;
+      case 'harvest': g.harvestCasualty(id); break;
+      case 'sell-organs': g.sellOrgans(); break;
       case 'toggle-ai': g.toggleAI(); break;
       case 'sell-to': {
         const [pid, product] = String(type).split(':');
@@ -982,6 +988,87 @@ export class GameUI {
     </div>`;
   }
 
+
+  /**
+   * The black market in parts.
+   *
+   * Shown only once you have built somewhere to do it, because building the
+   * clinic IS the opting in — it is the last thing that unlocks and it costs
+   * more than anything else in the game to run. The panel leads with the cold
+   * clock rather than the money, since the clock is the actual mechanic: the
+   * most valuable thing you can take is the one you are least likely to move
+   * in time.
+   */
+  organBlock() {
+    const s = this.game.state;
+    if (!hasClinic(s) && !stockOf(s).length && !casualtiesOf(s).length) return '';
+    const atHour = Math.floor((s.minutes || 0) / 60);
+    const stock = stockOf(s);
+    const waiting = casualtiesOf(s);
+    const net = stockValue(s, atHour);
+
+    const byOrgan = {};
+    for (const p of stock) {
+      const v = viability(p.organ, atHour - p.takenAt);
+      const row = byOrgan[p.organ] || (byOrgan[p.organ] = { n: 0, worst: 1, value: 0 });
+      row.n++;
+      row.worst = Math.min(row.worst, v);
+      row.value += organValue(p, atHour, p.quality);
+    }
+
+    const rows = Object.keys(byOrgan).map((id) => {
+      const def = ORGANS[id];
+      const r = byOrgan[id];
+      const pct = Math.round(r.worst * 100);
+      return `<div class="card">
+        <div class="card__head">
+          <span class="card__name">${esc(def.name)}${r.n > 1 ? ` ×${r.n}` : ''}</span>
+          <span class="card__cost ${pct > 60 ? 'good' : pct > 20 ? 'warn' : 'bad'}">${pct}% good</span>
+        </div>
+        <div class="card__blurb">${esc(def.blurb)}</div>
+        <div class="card__meta">
+          <span>${def.viabilityHours}h cold time</span>
+          <span class="money">${moneyShort(r.value)}</span>
+        </div>
+      </div>`;
+    }).join('');
+
+    const bodies = waiting.map((c) => {
+      const d = districtById(s, c.districtId);
+      const hours = atHour - c.atHour;
+      return `<button class="card" data-action="harvest" data-id="${c.id}">
+        <div class="card__head">
+          <span class="card__name">Left on ${esc(d ? d.name : 'a block')}</span>
+          <span class="card__cost warn">${hours}h</span>
+        </div>
+        <div class="card__meta">
+          <span class="bad">−${Math.round(ORGAN_TRADE.repHit * 100)} standing there</span>
+          <span class="bad">+${ORGAN_TRADE.heatPerBody} heat</span>
+        </div>
+      </button>`;
+    }).join('');
+
+    return `<div class="sect">
+      <div class="sect__title"><span>On ice</span>
+        <span class="${net > 0 ? 'money' : ''}">${net > 0 ? moneyShort(net) : 'nothing'}</span></div>
+      <p class="card__blurb" style="margin:0 0 10px">
+        A heart is good for five hours out of a body, a liver eleven, a kidney a
+        day and a half, corneas a fortnight. The most valuable thing here is the
+        one you are least likely to get anywhere in time. A broker takes
+        ${Math.round(ORGAN_TRADE.brokerCut * 100)}% and what is left is street money.
+      </p>
+      ${rows || '<div class="empty">Nothing on ice.</div>'}
+      ${stock.length ? `<div class="btnrow">
+        <button class="ghostbtn" data-action="sell-organs">Move the lot · ${moneyShort(net)}</button>
+      </div>` : ''}
+      ${bodies ? `<div class="sect__title" style="margin-top:12px">
+        <span>Left on blocks you took</span><span>${waiting.length}</span></div>
+      <p class="card__blurb" style="margin:0 0 8px">
+        People find out. Standing on that block does not dip, it collapses.
+      </p>${bodies}` : ''}
+    </div>`;
+  }
+
   // --- Build tab ------------------------------------------------------------
 
   tabBuild() {
@@ -1136,7 +1223,7 @@ export class GameUI {
         pays more.
       </p>
       ${cards}
-    </div>` + this.licenceBlock() + this.armouryBlock();
+    </div>` + this.licenceBlock() + this.armouryBlock() + this.organBlock();
   }
 
   /**

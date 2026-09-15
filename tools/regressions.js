@@ -34,7 +34,7 @@ import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
-import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS, MARKET, HEAT } from '../src/game/constants.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS, MARKET, HEAT, ARREARS } from '../src/game/constants.js';
 import { fitsBuilding, operationOptions } from '../src/game/actions.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
@@ -1877,6 +1877,13 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
 
+// A day, in the units stepSim actually takes.
+//
+// It takes HOURS. `stepSim(st, 24 * 60)` looks like a day and is sixty of
+// them, which is how the first version of the tests below ran a "bad week"
+// that was really most of a year and wondered why everybody had quit.
+const DAY = 24;
+
 // Heat has to be able to happen.
 //
 // It could not. A measured thousand-day run — 31 properties, 28 lines, product
@@ -1921,7 +1928,7 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
   put(big, 'cut_house', 4);
   // Let the blocks warm up to whatever they settle at, which is the number
   // that used to be the whole story.
-  for (let d = 0; d < 120; d++) stepSim(big, 24 * 60);
+  for (let d = 0; d < 120; d++) stepSim(big, DAY);
   const known = notorietyOf(big);
   check('sixteen hot lines make you somebody', known > 5, known.toFixed(1) + ' notoriety');
   check('and more of them makes you more so than two closets',
@@ -1967,6 +1974,169 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
   put(absurd, 'rock_house', 14);
   check('and it never runs off the end of the scale',
     notorietyOf(absurd) <= HEAT.max, notorietyOf(absurd).toFixed(1));
+}
+
+print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
+
+// There has to be a way out, or it is not a treadmill, it is a wall.
+//
+// Tenure means the city remembers how long you have been at it, and it climbs
+// whatever you do. That only makes a game you can play forever if buying a
+// legitimate face is a real answer to it — otherwise every run ends the same
+// way on the same day and the only strategy is to start again.
+{
+  const world = () => {
+    const ds = generateDistricts({ lat: 42.33, lng: -83.04 }, []);
+    const cs = generateCrews(ds, { lat: 42.33, lng: -83.04 });
+    applyInitialControl(ds, cs);
+    const st = createState({
+      origin: { lat: 42.33, lng: -83.04 }, cityName: 'D',
+      districts: ds, crews: cs, lots: syntheticLots(ds),
+    });
+    st.cash.clean = 900000000;
+    st.adminUnlockAll = true;
+    return st;
+  };
+  const put = (st, type, n = 1) => {
+    for (let i = 0; i < n; i++) {
+      const lot = cheapestLotFor(st, BUILDINGS[type]);
+      if (!lot) return;
+      A.buyLot(st, lot.id);
+      A.developLot(st, lot.id, type);
+    }
+  };
+
+  // Ten years in, running a serious operation, with nothing to explain it.
+  const veteran = world();
+  put(veteran, 'meth_cook', 5);
+  put(veteran, 'rock_house', 5);
+  const fresh = notorietyOf(veteran);
+  veteran.stats.illicitDays = 3650;
+  const exposed = notorietyOf(veteran);
+  check('the same operation is better known after ten years than on day one',
+    exposed > fresh * 1.8, `${fresh.toFixed(1)} -> ${exposed.toFixed(1)}`);
+
+  // The same operation, with a legitimate face on it.
+  put(veteran, 'laundromat', 5);
+  put(veteran, 'carwash', 4);
+  const covered = notorietyOf(veteran);
+  check('and enough legitimate business is a real answer to it',
+    covered < exposed * 0.6, `${exposed.toFixed(1)} -> ${covered.toFixed(1)}`);
+
+  // Tenure is days SPENT, not days elapsed: cooling off has to be possible.
+  const dormant = world();
+  put(dormant, 'meth_cook', 5);
+  for (const b of dormant.buildings) b.active = false;
+  const before = dormant.stats.illicitDays || 0;
+  for (let d = 0; d < 200; d++) stepSim(dormant, DAY);
+  check('a shut-down operation does not get more famous just by waiting',
+    (dormant.stats.illicitDays || 0) === before,
+    `${before} -> ${dormant.stats.illicitDays || 0} days`);
+
+  // And running does count them.
+  const busy = world();
+  put(busy, 'meth_cook', 3);
+  for (let d = 0; d < 60; d++) stepSim(busy, DAY);
+  check('and a running one does', (busy.stats.illicitDays || 0) >= 55,
+    (busy.stats.illicitDays || 0) + ' days on the clock');
+
+  // The years must never be dangerous ON THEIR OWN. As a flat addition they
+  // were: a closet grower of forty years came out as notorious as an empire of
+  // forty years, so longevity itself was punished and no careful player could
+  // ever last — which is the opposite of a game that goes forever. Tenure
+  // multiplies what you run, so running almost nothing stays almost nothing.
+  const ancient = world();
+  put(ancient, 'closet_grow', 1);
+  ancient.stats.illicitDays = 365 * 40;
+  check('but forty years of a closet grow is still nobody',
+    notorietyOf(ancient) < HEAT.stopHeatFloor, notorietyOf(ancient).toFixed(1));
+
+  // And a run that plays well has to be able to keep going indefinitely. If
+  // the years outrun every answer to them, every run has the same expiry date
+  // and the game is finishable after all — just from the wrong end.
+  const careful = world();
+  put(careful, 'meth_cook', 4);
+  put(careful, 'laundromat', 5);
+  put(careful, 'carwash', 3);
+  careful.stats.illicitDays = 365 * 40;
+  check('and forty years covered by real business is survivable',
+    notorietyOf(careful) < HEAT.raidHeatFloor, notorietyOf(careful).toFixed(1));
+}
+
+print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
+
+// Being broke has to cost something.
+//
+// It cost nothing. `state.unpaid` was written every day the money ran out and
+// read by nothing anywhere, so a 9.6-year run finished at MINUS $49,520,117 —
+// falling three and a half million every ninety days, forever, with 73
+// properties still standing and not one consequence. A game with no end needs
+// failure to mean something, or the decline half of every run is a number
+// going down in the corner.
+{
+  const broke = () => {
+    const ds = generateDistricts({ lat: 42.33, lng: -83.04 }, []);
+    const cs = generateCrews(ds, { lat: 42.33, lng: -83.04 });
+    applyInitialControl(ds, cs);
+    const st = createState({
+      origin: { lat: 42.33, lng: -83.04 }, cityName: 'D',
+      districts: ds, crews: cs, lots: syntheticLots(ds),
+    });
+    st.adminUnlockAll = true;
+    st.cash.clean = 40000000;
+    for (const type of ['grow_house', 'lab', 'stash', 'depot']) {
+      const lot = cheapestLotFor(st, BUILDINGS[type]);
+      if (lot) { A.buyLot(st, lot.id); A.developLot(st, lot.id, type); }
+    }
+    for (let i = 0; i < 3; i++) {
+      const v = A.buyVehicle(st, 'sedan');
+      const d = A.hireDriver(st);
+      if (v.vehicle && d.driver) A.assignDriver(st, v.vehicle.id, d.driver.id);
+    }
+    // And then the money is gone.
+    st.cash.clean = 0;
+    st.cash.dirty = 0;
+    return st;
+  };
+
+  const st = broke();
+  const drivers0 = (st.drivers || []).length;
+  const veh0 = (st.couriers || []).length;
+  check('an operation with no money starts out intact', drivers0 > 0 && veh0 > 0,
+    `${drivers0} drivers, ${veh0} vehicles`);
+
+  // A bad week is survivable — that gap is where recovery lives.
+  for (let d = 0; d < ARREARS.graceDays; d++) stepSim(st, DAY);
+  check('and a bad week costs nobody their job',
+    (st.drivers || []).length === drivers0, `${(st.drivers || []).length} of ${drivers0}`);
+
+  // A bad month is not.
+  for (let d = 0; d < 30; d++) stepSim(st, DAY);
+  check('but a bad month empties the payroll',
+    (st.drivers || []).length < drivers0,
+    `${drivers0} -> ${(st.drivers || []).length} drivers`);
+
+  for (let d = 0; d < 60; d++) stepSim(st, DAY);
+  check('and then the vehicles go back',
+    (st.couriers || []).length < veh0, `${veh0} -> ${(st.couriers || []).length} vehicles`);
+
+  // The debt has to stop running away. Something is sold, or it never ends.
+  const deep = broke();
+  for (let d = 0; d < 400; d++) stepSim(deep, DAY);
+  check('and the hole stops getting deeper', deep.cash.clean > -20000000,
+    '$' + Math.round(deep.cash.clean).toLocaleString());
+  check('because something gets sold to cover it',
+    (deep.lots || []).filter((l) => l.owned).length < 4
+      || (deep.buildings || []).some((b) => !b.active),
+    `${(deep.lots || []).filter((l) => l.owned).length} properties left`);
+
+  // Paying up has to clear it, or one bad week is a death sentence.
+  const rescued = broke();
+  for (let d = 0; d < ARREARS.graceDays + 2; d++) stepSim(rescued, DAY);
+  rescued.cash.clean = 50000000;
+  stepSim(rescued, DAY);
+  check('and finding the money puts it behind you', (rescued.arrears || 0) === 0,
+    'arrears ' + (rescued.arrears || 0));
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

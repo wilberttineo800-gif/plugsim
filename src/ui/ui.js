@@ -5,11 +5,11 @@
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
   PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
-  UNIT_LADDER, RETAIL_MARKUP, HEAT,
+  UNIT_LADDER, RETAIL_MARKUP, HEAT, ARREARS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
-import { sizeScale, sizeCapacity, rentBonusFor, notorietyOf } from '../game/sim.js';
+import { sizeScale, sizeCapacity, rentBonusFor, notorietyOf, tenureOf } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { pendingTip } from '../game/guide.js';
@@ -2059,12 +2059,19 @@ export class GameUI {
     const pressure = Math.min(HEAT.max, worst + known);
     const fronts = (s.buildings || []).filter(
       (b) => b.active && (BUILDINGS[b.type] || {}).kind === 'front').length;
+    const years = ((s.stats || {}).illicitDays || 0) / 365;
+    const arrears = s.arrears || 0;
+    const mult = tenureOf(s);
 
     const step = pressure >= HEAT.raidHeatFloor
       ? { tone: 'bad', says: 'Raids are on the table. Anything stored on your hottest block can go.' }
       : pressure >= HEAT.stopHeatFloor
         ? { tone: 'warn', says: 'Couriers are getting pulled over. A load stopped is a load seized.' }
         : { tone: 'good', says: 'Nothing standing out. This is the cheap end of the game.' };
+
+    // There is no finish line here, and the panel should say so — the shape of
+    // this game is that the city slowly learns your name and you keep buying
+    // reasons for it not to matter.
 
     return `<div class="sect">
       <div class="sect__title"><span>Attention</span>
@@ -2075,12 +2082,22 @@ export class GameUI {
       <div class="row"><span>Your hottest block</span><span>${Math.round(worst)}</span></div>
       <div class="row"><span>Known for what you run</span>
         <span class="${known > 0 ? 'warn' : ''}">+${Math.round(known)}</span></div>
+      <div class="row"><span>Years at it</span>
+        <span class="${years > 1 ? 'warn' : ''}">${years.toFixed(1)} — ${
+          mult > 1.05 ? `${mult.toFixed(1)}× what you'd be known for on day one`
+            : 'nobody remembers you yet'}</span></div>
       <div class="row"><span>Legitimate business</span>
         <span class="${fronts ? 'good' : 'warn'}">${fronts
           ? `${fronts} — each one quiets you down`
           : 'none — nothing explaining you'}</span></div>
       <div class="row"><span>Pulled over from</span><span>${HEAT.stopHeatFloor}</span></div>
       <div class="row"><span>Raided from</span><span>${HEAT.raidHeatFloor}</span></div>
+      ${arrears ? `<div class="row"><span class="bad">Behind on the bills</span>
+        <span class="bad" style="text-align:right">${arrears} day${arrears === 1 ? '' : 's'}${
+          arrears > ARREARS.graceDays
+            ? '<br><span style="color:var(--text-dim)">people are already walking</span>'
+            : `<br><span style="color:var(--text-dim)">${
+                ARREARS.graceDays - arrears + 1} before anybody walks</span>`}</span></div>` : ''}
     </div>`;
   }
 

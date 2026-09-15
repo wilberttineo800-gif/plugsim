@@ -16,6 +16,7 @@ import {
   IDLE_UPKEEP_SHARE,
   BACKLOG_PAUSE_AT,
   RETAIL_MARKUP,
+  ARREARS,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -39,7 +40,7 @@ import {
   attachmentEffects,
 } from './research.js';
 import { effectsFor, upkeepFor, vehicleStats } from './upgrades.js';
-import { rentPerDay } from './lots.js';
+import { rentPerDay, lotResale } from './lots.js';
 import {
   buildingById,
   districtById,
@@ -1285,16 +1286,36 @@ function stepHeat(state, dt) {
  * exist. Enough of them genuinely does quiet a large operation down.
  */
 export function notorietyOf(state) {
-  let footprint = 0;
+  let illicit = 0, cover = 0;
   for (const b of state.buildings || []) {
     if (!b.active) continue;
     const def = BUILDINGS[b.type] || {};
     const kind = lineKindOf(b);
     const lineHeat = kind ? lineEffects(b).heatMult : 1;
-    footprint += (def.heatPerDay || 0) * lineHeat * sizeScale(b);
+    const own = (def.heatPerDay || 0) * lineHeat * sizeScale(b);
+    if (own >= 0) illicit += own; else cover += -own * sizeScale(b);
   }
-  const over = footprint - HEAT.notorietyFloorFootprint;
-  return over <= 0 ? 0 : clamp(over * HEAT.notorietyScale, 0, HEAT.max);
+  const size = Math.max(0, illicit - HEAT.notorietyFloorFootprint) * HEAT.notorietyScale;
+  // Cover comes off the SIZE, before the years multiply it — a legitimate face
+  // does not just offset what you are known for today, it slows how fast the
+  // reputation compounds. That is what makes going quiet for a while worth
+  // doing rather than a rounding error.
+  const net = Math.max(0, size - cover * HEAT.notorietyCoverWeight);
+  return clamp(net * tenureOf(state), 0, HEAT.max);
+}
+
+/**
+ * How much the years multiply you by. Starts at 1 and climbs.
+ *
+ * Counted in days actually spent running something illegal, not in days since
+ * the save was made — a dormant operation does not get more famous, and a
+ * player who shut everything down to cool off should not be punished for the
+ * waiting. That counter is stepped in `settleDay`.
+ */
+export function tenureOf(state) {
+  const days = (state.stats && state.stats.illicitDays) || 0;
+  const years = Math.min(days / 365, HEAT.notorietyTenureYears);
+  return 1 + years * HEAT.notorietyPerYear;
 }
 
 /**
@@ -1495,6 +1516,12 @@ function settleDay(state) {
   dailyIncidents(state);
   stepFuneralTrade(state);
 
+  // A day on the clock, but only a day spent doing something worth remembering.
+  if ((state.buildings || []).some(
+    (b) => b.active && ((BUILDINGS[b.type] || {}).heatPerDay || 0) > 0)) {
+    state.stats.illicitDays = (state.stats.illicitDays || 0) + 1;
+  }
+
   let upkeep = 0;
   for (const b of state.buildings) {
     b.launderedToday = 0;
@@ -1522,14 +1549,64 @@ function settleDay(state) {
   // That's what digs a player back out, so nothing here halts production.
   if (!funded) {
     state.unpaid = true;
+    state.arrears = (state.arrears || 0) + 1;
     logEvent(
       state,
       `Short on the $${total.toLocaleString()} for upkeep and payroll. Sites will stall until product moves — sell a property if you're stuck.`,
       'bad'
     );
+    collectArrears(state);
   } else {
     state.unpaid = false;
+    state.arrears = 0;
     logEvent(state, `Day settled — $${total.toLocaleString()} out for upkeep and payroll.`, 'info');
+  }
+}
+
+/**
+ * What being broke actually costs you.
+ *
+ * In order of who leaves first, which is also cheapest first: drivers walk,
+ * then vehicles go back, then sites go dark, and only then does property get
+ * sold out from under you — at resale, which is a real loss and is also the
+ * thing that clears the debt. A week short is survivable. A month is not.
+ *
+ * Nothing here is instant and nothing here is unrecoverable on its own, so a
+ * player who is briefly underwater can trade their way out — which is what the
+ * warning has always told them to do.
+ */
+function collectArrears(state) {
+  if ((state.arrears || 0) <= ARREARS.graceDays) return;
+
+  if ((state.drivers || []).length) {
+    const gone = state.drivers.pop();
+    for (const c of state.couriers || []) if (c.driverId === gone.id) c.driverId = null;
+    logEvent(state, `${gone.name} hasn't been paid and isn't coming back.`, 'bad');
+    return;
+  }
+  if ((state.couriers || []).length) {
+    const veh = state.couriers.pop();
+    logEvent(state, `The ${COURIERS[veh.type].name.toLowerCase()} went back to whoever you owe.`, 'bad');
+    return;
+  }
+  const lit = (state.buildings || []).filter((b) => b.active);
+  if (lit.length > 1) {
+    const dark = lit[lit.length - 1];
+    dark.active = false;
+    logEvent(state, `${dark.name} is dark — nothing left to run it on.`, 'bad');
+    return;
+  }
+  // Last resort: something gets sold to whoever will take it.
+  if ((state.arrears || 0) > ARREARS.propertyAfterDays) {
+    const owned = (state.lots || []).filter((l) => l.owned && !l.buildingId);
+    const lot = owned.sort((a, b) => lotResale(b) - lotResale(a))[0];
+    if (lot) {
+      const got = lotResale(lot);
+      lot.owned = false;
+      lot.rented = false;
+      state.cash.clean += got;
+      logEvent(state, `${lot.name} went for $${Math.round(got).toLocaleString()} to cover what you owe.`, 'bad');
+    }
   }
 }
 

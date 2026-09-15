@@ -1,30 +1,39 @@
-// How long does it actually take to finish the game?
+// What does a long run actually look like?
 //
-// starter-check.js only proves the opening is solvent over 30 days. This plays
-// on from there — reinvesting the way a real player would — and measures the
-// days to every milestone up to the hardest thing in the game: the
-// Pharmaceutical Plant, which needs 20 properties AND $220,000,000 banked
-// before it will even appear, then $48,000,000 to build.
+// There is no finish line. This game is not completable and is not supposed to
+// be — you do not win it, you last in it — so this stopped asking "how many
+// days to finish" and started asking the question that matters instead: does
+// the operation keep having somewhere to go, and does the world keep pushing
+// back hard enough that going there is a decision.
+//
+// starter-check.js proves the opening is solvent over 30 days. This plays on
+// from there, reinvesting the way a real player would, and prints the shape of
+// the run: when each tier opens, how big it gets, how well known it becomes,
+// and what that costs. A run that grows forever with nothing happening to it
+// is as broken as one that dies on day ten.
 //
 // The bot is deliberately unclever. It buys the biggest production building it
-// can afford, keeps enough drivers to move what it makes, and never does
-// anything a first-time player couldn't work out. If THIS can finish, the game
-// is finishable; if it takes 900 days, that is the real number.
+// can afford, keeps enough drivers to move what it makes, buys a legitimate
+// face when the police start showing an interest, and never does anything a
+// first-time player couldn't work out.
 
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute } from '../src/game/state.js';
 import { stepSim, seedWorld, notorietyOf } from '../src/game/sim.js';
 import { syntheticLots } from './fixtures.js';
-import { BUILDINGS, START_CASH_CLEAN } from '../src/game/constants.js';
+import { BUILDINGS, START_CASH_CLEAN, HEAT } from '../src/game/constants.js';
 import { unlockStatus } from '../src/game/progression.js';
 import { haversineKm } from '../src/game/geo.js';
 import { DRIVERS, COURIERS } from '../src/game/constants.js';
 import * as A from '../src/game/actions.js';
 import { lotResale } from '../src/game/lots.js';
 
-const GOAL = 'pharma_plant';
-const MAX_DAYS = 1000; // four game years; past that it isn't a game any more
+// The last rung of the ladder. Reaching it is not winning — it is the point
+// past which the game stops handing you new things and you are on your own
+// with what you have built, which is most of the game's life.
+const LAST_RUNG = 'pharma_plant';
+const MAX_DAYS = 1000; // long enough for a run to have a shape
 
 function netWorth(st) {
   let n = st.cash.clean + st.cash.dirty;
@@ -141,9 +150,7 @@ A.addRouteToVehicle(st, v0.id, rb.id);
 print('A COMPLETE BEGINNER, PLAYING ON UNTIL THE GAME IS FINISHED');
 print('');
 print('Start: $' + START_CASH_CLEAN.toLocaleString() + ', Ray\'s opening path.');
-print('Goal:  ' + (BUILDINGS[GOAL] ? BUILDINGS[GOAL].name : GOAL) + ' — '
-      + (BUILDINGS[GOAL] ? BUILDINGS[GOAL].unlock.properties : '?') + ' properties + $'
-      + (BUILDINGS[GOAL] ? BUILDINGS[GOAL].unlock.cash.toLocaleString() : '?') + ' banked.');
+print('No finish line. Playing on to see what the run looks like.');
 print('');
 print('MILESTONES');
 mark(0, 'opened up: HQ, closet grow, depot, lab, one scooter — on $'
@@ -191,7 +198,7 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
       seenUnlocked.add(type);
       mark(day, 'unlocked ' + def.name + '  ($' + Math.round(cash).toLocaleString() + ', '
                 + props + ' properties)');
-      if (type === GOAL) { done = day; break; }
+      if (type === LAST_RUNG) { done = day; }
     }
   }
   if (done) break;
@@ -338,7 +345,13 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   // bodega $21,000/day — but they are the only way to turn a large street pile
   // into the clean money that property costs. So they are gated on the
   // operation actually being big enough to carry them.
-  if (st.cash.dirty > 20000000 && frontCount < 14 && cash > 1500000) {
+  // A player with the police turning up buys a reason to exist. The bot used
+  // to key this purely off street cash, and laundering keeps street cash at
+  // zero — so it built exactly one front in a thousand days and then sat there
+  // getting raided, which measured a player who never reacts to anything.
+  const known = notorietyOf(st);
+  const exposed = known > HEAT.stopHeatFloor * 0.7;
+  if ((st.cash.dirty > 20000000 || exposed) && frontCount < 14 && cash > 1500000) {
     for (const f of FRONTS) {
       const def = BUILDINGS[f];
       if (!def) continue;
@@ -433,19 +446,20 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
 
 print('');
 print('RESULT');
+print('  Survived ' + MAX_DAYS + ' days (' + (MAX_DAYS / 365).toFixed(1) + ' game years)'
+      + (st.gameOver ? ' — no: died on the way.' : ' and still going.'));
+print('  Ended on ' + owned(st) + ' properties, $' + Math.round(st.cash.clean).toLocaleString()
+      + ' clean, net worth $' + Math.round(netWorth(st)).toLocaleString() + '.');
+print('  Known for it: ' + notorietyOf(st).toFixed(0) + ' after '
+      + Math.round((st.stats.illicitDays || 0) / 365 * 10) / 10 + ' years of trading, '
+      + 'and ' + (st.stats.raids || 0) + ' raids weathered.');
+const rung = BUILDINGS[LAST_RUNG];
 if (done) {
-  print('  Finished the game on day ' + done + ' — about '
-        + (done / 365).toFixed(1) + ' game years.');
-} else {
-  print('  NOT finished inside ' + MAX_DAYS + ' days (' + (MAX_DAYS / 365).toFixed(1)
-        + ' game years).');
-  print('  Reached $' + Math.round(st.cash.clean).toLocaleString() + ' clean, '
-        + owned(st) + ' properties, net worth $' + Math.round(netWorth(st)).toLocaleString() + '.');
-  const g = BUILDINGS[GOAL];
-  if (g) print('  Still needs ' + g.unlock.properties + ' properties and $'
-               + g.unlock.cash.toLocaleString() + '.');
+  print('  The ladder ran out on day ' + done + '; everything after that was its own idea.');
+} else if (rung) {
+  print('  Never reached the last rung (' + rung.name + '), so the ladder was still');
+  print('  handing it things the whole way — which is the easy half of the game.');
 }
 print('');
-print('  At 300x speed a game day is 5 real minutes, so '
-      + (done || MAX_DAYS) + ' days is about '
-      + (((done || MAX_DAYS) * 5) / 60).toFixed(1) + ' real hours of play.');
+print('  At 300x speed a game day is 5 real minutes, so ' + MAX_DAYS
+      + ' days is about ' + ((MAX_DAYS * 5) / 60).toFixed(1) + ' real hours of play.');

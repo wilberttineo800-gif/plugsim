@@ -3455,6 +3455,29 @@ export const CRIME = {
   streetPremium: 0.12,   // rough blocks pay a little more on the street
 };
 
+// What happens when you cannot pay the bills.
+//
+// Nothing did. `state.unpaid` was set every day the money ran out and nothing
+// anywhere read it, so a 9.6-year run finished at MINUS $49,520,117 — falling
+// by three and a half million every ninety days, forever, with no consequence
+// at all. That is the same bug as heat never reaching its own floor: a flag
+// written and never acted on.
+//
+// A game with no end needs failure to mean something, or the decline half of a
+// run is just a number going down. So people stop working for you, then things
+// get taken, in that order — and the log already told the player what happens
+// next ("sell a property if you're stuck"), it simply never happened to them.
+export const ARREARS = {
+  // Days short before anybody walks. A bad week is survivable; a bad month is
+  // not, and that gap is where the interesting recovery decisions live.
+  graceDays: 6,
+  // Then one thing goes per day, cheapest first.
+  driversPerStep: 1,
+  // A property is the last resort and it clears real debt, because a forced
+  // sale is exactly what a player is told to do voluntarily.
+  propertyAfterDays: 20,
+};
+
 export const HEAT = {
   // Proportional, not flat: a quiet block sheds almost nothing while a hot one
   // cools fast. Flat decay silently deleted heat once it spread out.
@@ -3480,9 +3503,36 @@ export const HEAT = {
   // is decided. Spreading still lowers the local peak — it just no longer
   // makes you invisible. Fronts count against it, because a legitimate face is
   // exactly what it is for.
-  notorietyScale: 0.62,
+  notorietyScale: 1.35,
   // Nobody is notorious for a grow in a spare room.
   notorietyFloorFootprint: 4,
+
+  // --- Tenure ---------------------------------------------------------------
+  //
+  // There is no end to this game and there never was — no win state, no final
+  // building, nothing to finish. What there also was not, until now, is any
+  // reason for a run to have an ARC: the unlock ladder ran out, income
+  // plateaued, and a player who had survived ten years faced exactly what a
+  // player who had survived one did.
+  //
+  // So the city remembers. Every year spent running illegal lines adds to what
+  // is known about you whatever size you are operating at, which turns the
+  // whole game into a treadmill rather than a climb: grow, get known, buy
+  // cover, restructure, grow again. You do not finish. You last.
+  // Tenure MULTIPLIES what you are running rather than adding to it. As a flat
+  // addition it made a closet grower of forty years exactly as notorious as an
+  // empire of forty years, which punished longevity itself and meant no
+  // careful player could ever last — the opposite of the point. You are known
+  // for what you do, and for how long you have been doing it.
+  notorietyPerYear: 0.11,
+  // Twelve years in you are twice the name you were. Past that the years stop
+  // adding, because the interesting pressure by then is the size of the thing.
+  notorietyTenureYears: 12,
+  // What a legitimate face is worth against all of it. Fronts were already
+  // subtracting, but at the same weight as a line's own footprint they moved
+  // the number by almost nothing, so "go legitimate for a while" was never a
+  // real answer to anything.
+  notorietyCoverWeight: 2.6,
 
   // Chance per game-hour that a building in a hot district gets raided.
   raidChanceAtMaxHeat: 0.10,

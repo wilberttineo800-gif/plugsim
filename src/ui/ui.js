@@ -42,7 +42,10 @@ import {
 } from '../game/character.js';
 import {
   BODY_ART, BODY_DEFS, SKELETON, FIGURE_W, FIGURE_H, figure, figureFor, partTransform,
+  placeGear, slingPath, holsterPath, ARMOUR_VARIANT,
 } from './bodyart.js';
+import { ARMOUR_DETAIL } from './armourart.js';
+import { GUN_DETAIL } from './gunart-detail.js';
 import { MODELS as LOOK_MODELS, TRAITS, BUILDS } from '../game/appearance.js';
 import {
   ORGAN_TRADE, stockOf, stockValue, stockRows,
@@ -885,7 +888,10 @@ export class GameUI {
     const build = BUILDS[(ch.appearance || {}).build] || BUILDS.regular;
     const overlay = (partId) => {
       const p = cover[partId] || 0;
-      if (p <= 0) return '';
+      // Only tint what nothing is actually drawn over. A plate covers the
+      // chest and is now visible there; the abdomen it does not cover still
+      // needs to read as uncovered.
+      if (p <= 0 || partId === 'thorax' || partId === 'head') return '';
       const part = BODY_ART[partId];
       const tr = partTransform(part, build);
       return `<g${tr ? ` transform="${tr}"` : ''}>
@@ -895,10 +901,37 @@ export class GameUI {
     };
     const lostParts = {};
     for (const id of BODY_PART_IDS) if (body.parts[id].lost) lostParts[id] = true;
+
+    // The kit is already drawn; this puts it on. Armour goes on the body it
+    // covers, a long gun is slung across the front and a sidearm sits in a
+    // holster on the hip — so what you equipped is what you can see, rather
+    // than a coloured tint standing in for it.
+    const gearFor = (slotId) => {
+      const piece = worn[slotId];
+      if (!piece || !piece.modelId) return '';
+      if (SLOTS[slotId].armour) {
+        const d = ARMOUR_DETAIL[piece.modelId];
+        if (!d) return '';
+        const model = ARMOUR_MODELS[piece.modelId];
+        const variant = ARMOUR_VARIANT[model ? model.category : ''] || null;
+        return placeGear(slotId, d.body, { box: d.box, ppi: d.ppi, variant, build });
+      }
+      const g = GUN_DETAIL[piece.modelId];
+      if (!g) return '';
+      return placeGear(slotId, g.body, { box: g.box, ppi: g.ppi, build });
+    };
+
     const fig = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
       width="172" height="${Math.round(172 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
       ${sharedBodyDefs()}
       ${figureFor(ch.appearance, { overlay, lostParts })}
+      ${worn.sidearm ? holsterPath() : ''}
+      ${gearFor('torso')}
+      ${gearFor('head')}
+      ${worn.primary ? slingPath() : ''}
+      ${gearFor('primary')}
+      ${gearFor('sidearm')}
+      ${gearFor('offhand')}
     </svg>`;
 
     const slots = SLOT_IDS.map((id) => {
@@ -2101,7 +2134,13 @@ export class GameUI {
     // Only what actually belongs in a building this size is listed.
     const opts = operationOptions(lot, s);
     const illegal = opts.filter((o) => o.def.kind !== 'front');
-    const legal = opts.filter((o) => o.def.kind === 'front');
+    // Two completely different reasons to buy something legal, and lumping
+    // them together was actively misleading: a laundry is SUPPOSED to lose
+    // money, and a player who only ever saw those concluded there was no such
+    // thing as an honest business worth owning.
+    const earners = opts.filter((o) => o.def.kind === 'front' && o.def.earner);
+    const washers = opts.filter((o) => o.def.kind === 'front' && !o.def.earner);
+    const legal = earners.concat(washers);
 
     if (!opts.length) {
       return `<div class="empty">
@@ -2125,13 +2164,20 @@ export class GameUI {
         .join('')}` : '') +
       (legal.length ? `<div class="sect__title" style="margin-top:12px">
         <span>Legitimate business</span><span style="color:var(--good)">clean money</span>
-      </div>
-      <p class="card__blurb" style="margin:0 0 8px">
-        Earns clean money on its own — slower than the chain, but spendable the
-        moment it lands, never raided, and it cools the block down. Washes
-        street cash on the side.
+      </div>` : '') +
+      (earners.length ? `<p class="card__blurb" style="margin:0 0 8px">
+        <b>Trades</b> are bought to be businesses. Every one of them turns a
+        clean profit every day on its own, spendable the moment it lands, never
+        raided, and it cools the block down. Most wash little or nothing —
+        that isn't what they're for.
       </p>
-      ${this.buildGroup('Fronts', legal, card, false)}` : '')
+      ${this.buildGroup('Trades', earners, card, false)}` : '') +
+      (washers.length ? `<p class="card__blurb" style="margin:8px 0">
+        <b>Fronts</b> are bought to be books. They run at a loss on purpose —
+        the loss is what you pay for a set of accounts that can absorb street
+        cash, and they absorb far more of it than a trade ever will.
+      </p>
+      ${this.buildGroup('Fronts', washers, card, false)}` : '')
     );
   }
 

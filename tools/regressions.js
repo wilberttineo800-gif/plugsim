@@ -1792,3 +1792,51 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
   check('and every processing building handles products that exist',
     badProcess.length === 0, badProcess.map((d) => d.id).join(', ') || 'all of them do');
 }
+
+// Legal money has to have two shapes, and each has to behave like its shape.
+//
+// Every `front` in the game ran at a loss, because every one of them existed
+// to launder. A player with clean money and no appetite for another grow had
+// literally nothing honest to buy, which is not a balance problem — it is a
+// missing half of the game.
+{
+  const fronts = Object.values(BUILDINGS).filter((d) => d.kind === 'front');
+  const earners = fronts.filter((d) => d.earner);
+  check('there are legal businesses that make money', earners.length >= 8,
+    earners.length + ' trades');
+
+  const losers = earners.filter((d) => (d.revenuePerDay || 0) <= (d.upkeepPerDay || 0));
+  check('and every one of them actually turns a profit', losers.length === 0,
+    losers.map((d) => d.id).join(', ') || 'all ' + earners.length + ' do');
+
+  // A trade that washed as well as a front would make fronts pointless.
+  const overwashing = earners.filter((d) => (d.launderPerDay || 0) > 800000);
+  check('and none of them out-launders a proper front', overwashing.length === 0,
+    overwashing.map((d) => d.id).join(', ') || 'none do');
+}
+
+// The other way into the back half of the trade.
+//
+// Until now the ONLY way to find the clinic was taking blocks by force, so a
+// player who never fought could not reach it at all. Running an honest funeral
+// home is the second door, and it has to actually open.
+{
+  const st = { buildings: [{ id: 'b1', type: 'funeral_home', active: true }], stats: {}, log: [] };
+  check('the clinic is not on offer to begin with', !A.isDiscovered(st, 'back_clinic'));
+  let opened = 0;
+  for (let d = 0; d < A.FUNERAL_DISCOVERY_DAYS * 2; d++) {
+    if (A.stepFuneralTrade(st)) { opened = d + 1; break; }
+  }
+  check('running a funeral home opens it', opened === A.FUNERAL_DISCOVERY_DAYS,
+    opened ? 'on day ' + opened : 'never');
+  check('and both hidden buildings come with it',
+    A.isDiscovered(st, 'back_clinic') && A.isDiscovered(st, 'morgue'));
+
+  // A place you own but never switched on is not the trade.
+  const idle = { buildings: [{ id: 'b1', type: 'funeral_home', active: false }], stats: {}, log: [] };
+  for (let d = 0; d < A.FUNERAL_DISCOVERY_DAYS * 2; d++) A.stepFuneralTrade(idle);
+  check('a funeral home you never opened tells you nothing',
+    !A.isDiscovered(idle, 'back_clinic'));
+}
+
+print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

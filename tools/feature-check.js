@@ -518,7 +518,11 @@
       ok('nothing is clipped by its own frame', clipped.length === 0,
         clipped.join(', ') || (A.GUN_IDS.length + A.ATTACHMENT_IDS.length +
           Object.keys(A.PRODUCT_ART).length + 1) + ' drawings in frame');
-      ok('all four gun categories are drawn', A.GUN_IDS.length === 4, A.GUN_IDS.join(', '));
+      // Every class the game can actually build needs a category drawing, and
+      // the count is not a constant — this asserted 4 long after there were 8.
+      const undrawn = (A.FIREARM_CLASS_IDS || []).filter((c) => !A.GUN_IDS.includes(c));
+      ok('every gun category is drawn', undrawn.length === 0,
+        undrawn.join(', ') || A.GUN_IDS.length + ' drawn: ' + A.GUN_IDS.join(', '));
     }
   }
 

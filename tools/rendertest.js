@@ -140,6 +140,17 @@ const cases = [
     const ch = require_character();
     return ui.tabXray();
   }],
+  // The legal half of the build list. Trades and fronts are two different
+  // sections now, and an empty-handed player has to be able to see both.
+  ['lotDevelopBlock (legal business)', () => {
+    const lot = cheapestLotFor(state, BUILDINGS.funeral_home);
+    A.buyLot(state, lot.id);
+    const html = ui.lotDevelopBlock(lot);
+    if (!/Trades/.test(html)) throw new Error('no Trades group in the build list');
+    if (!/Fronts/.test(html)) throw new Error('no Fronts group in the build list');
+    if (!/Funeral/.test(html)) throw new Error('funeral home not offered');
+    return html;
+  }],
   ['buildingPanel armour line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],
   ['buildingPanel firearms line', () => ui.buildingPanel(

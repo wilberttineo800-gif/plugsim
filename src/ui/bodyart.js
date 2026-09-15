@@ -35,6 +35,11 @@ export const BODY_DEFS = `
     <stop offset=".6" stop-color="#c8443c" stop-opacity=".55"/>
     <stop offset="1" stop-color="#c8443c" stop-opacity="0"/>
   </radialGradient>
+  <!-- Kit is dropped-shadowed so it separates from whatever the figure is
+       wearing. Without it a pale vest over a pale coat merges into one blob. -->
+  <filter id="bfKit" x="-20%" y="-20%" width="145%" height="145%">
+    <feDropShadow dx="1.5" dy="2.5" stdDeviation="2.4" flood-color="#05070a" flood-opacity=".6"/>
+  </filter>
   <radialGradient id="bfSepsis">
     <stop offset="0" stop-color="#b388ff" stop-opacity=".9"/>
     <stop offset="1" stop-color="#7a4fd0" stop-opacity="0"/>
@@ -189,8 +194,13 @@ function hairShape(style, hex) {
       return `<path d="M100 6 c19 0 31 14 31 32 h-62 c0 -18 12 -32 31 -32 z" fill="${dark}"/>
         <path d="M69 28 h62 v8 h-62 z" fill="${dark}" opacity=".45"/>`;
     case 'afro':
-      return `<ellipse cx="100" cy="16" rx="42" ry="28" fill="${dark}"/>
-        <ellipse cx="100" cy="12" rx="34" ry="20" fill="#fff" opacity=".06"/>`;
+      // Drawn as a dome that MEETS the hairline, not an ellipse centred above
+      // the skull — as an ellipse it read as a beret balanced on the head.
+      return `<path d="M63 40 c-3 -24 15 -38 37 -38 s40 14 37 38
+          c-6 2 -12 3 -18 3 c1 -13 -7 -21 -19 -21 s-20 8 -19 21
+          c-6 0 -12 -1 -18 -3 z" fill="${dark}"/>
+        <path d="M100 2 c14 0 26 6 32 17 c-8 -7 -19 -11 -32 -11
+          s-24 4 -32 11 c6 -11 18 -17 32 -17 z" fill="#fff" opacity=".07"/>`;
     case 'locs':
       return `<path d="M100 2 c21 0 34 13 34 30 h-68 c0 -17 13 -30 34 -30 z" fill="${dark}"/>
         <g fill="${dark}">
@@ -408,4 +418,110 @@ export function figureFor(appearance, { overlay = () => '', lostParts = {} } = {
     ${facialShape(a.facial, hair.hex)}
     ${Object.keys(BODY_ART).map(overlay).join('')}
   </g>`;
+}
+
+// --- Gear on the body -------------------------------------------------------
+//
+// The kit is already drawn, front-on, and — this is the part that makes the
+// placement possible — every drawing states the px/in it was authored at. So
+// does the figure. That turns "how big is a plate carrier on this person" from
+// a taste question into arithmetic: scale = 6.3 / the drawing's own px/in, and
+// a 10x12" plate comes out 10x12" on a 70" body.
+//
+// The first attempt stretched each drawing to fill a fixed square instead, and
+// it showed: a bare plate came out the size of a door because a plate and a
+// vest are not the same object at the same size. Real dimensions or nothing.
+//
+// Anchoring is by the TOP, not the centre. A vest hangs off the shoulders and
+// a helmet sits on a skull; get the line it hangs from right and the drop
+// takes care of itself whatever the cut, which is why a short mail liner and a
+// long stab vest both land correctly from one number.
+
+/** The figure's own scale. A 70" adult over 441px of drawing. */
+export const FIGURE_PPI = 6.3;
+
+/**
+ * Where each piece of kit goes.
+ *
+ * `from` is a point in the DRAWING's own coordinates, `to` where that point
+ * lands on the figure. Slots that take more than one shape of thing are keyed
+ * `slot:variant`, because a carrier and a bare plate hang from different
+ * places even though they occupy the same slot.
+ */
+export const GEAR_PLACEMENT = {
+  // Vests and carriers are all authored around x=218 with the shoulder straps
+  // starting at y=20, whichever helper drew them — so one anchor serves the
+  // lot. y=80 is the figure's shoulder line, just under the neck.
+  // 0.92 because the figure's "thorax" is shoulder-to-shoulder, not chest —
+  // at true scale a 16" vest panel covers it edge to edge and reads as a slab.
+  'torso:vest': { from: [218, 20], to: [100, 80], spread: true, grow: 0.92 },
+  // A bare plate is not worn off the shoulders; it sits on the sternum, a
+  // couple of inches down. Authored 300 wide from x=0.
+  'torso:plate': { from: [150, 0], to: [100, 102] },
+  // The figure's skull is drawn wider and shorter than a real one, so a
+  // true-scale helmet would sit INSIDE the head outline. `grow` is that
+  // discrepancy and nothing else.
+  head: { from: [168, 18], to: [100, 1], grow: 1.06 },
+  // A shield is held out in front of the off side. Big ones are genuinely
+  // bigger than the figure, so there is a ceiling on how much of the person
+  // one is allowed to swallow.
+  offhand: { box: true, to: [50, 148], maxH: 250 },
+  // Slung MUZZLE-DOWN across the front — the drawings all face left, so the
+  // rotation has to be negative to drop the muzzle rather than raise it. Hung
+  // low and a little under scale on purpose: a real carbine is 46% of a man's
+  // height, and drawn at that across the chest it buries the vest underneath.
+  primary: { box: true, to: [96, 0], rotate: -36, pivot: [96, 262], grow: 0.82 },
+  // On the hip, in the holster, barrel down and canted the way a holster cants.
+  sidearm: { box: true, to: [157, 0], rotate: -72, pivot: [157, 255], grow: 0.82 },
+};
+
+/**
+ * One piece of kit, placed on the body.
+ *
+ * `body` is the drawing in its OWN coordinates — not pre-fitted to a field —
+ * together with the `box` and `ppi` it was authored with. Everything else
+ * follows from those three.
+ */
+export function placeGear(slot, body, { box, ppi, variant = null, build = null } = {}) {
+  const at = GEAR_PLACEMENT[variant ? `${slot}:${variant}` : slot] || GEAR_PLACEMENT[slot];
+  if (!at || !body || !box || !ppi) return '';
+
+  let scale = (FIGURE_PPI / ppi) * (at.grow || 1);
+  // Nothing may be taller than the ceiling, if the slot sets one.
+  if (at.maxH && box[3] * scale > at.maxH) scale = at.maxH / box[3];
+
+  // Widening the shoulders widens what is strapped to them.
+  const spread = at.spread && build ? build.shoulder : 1;
+
+  // The anchor: an explicit point in the drawing, or the top-centre of its box.
+  const [ax, ay] = at.box ? [box[0] + box[2] / 2, box[1]] : at.from;
+  const [tx, ty] = at.to;
+
+  // A slung gun turns about a point on the body rather than about itself.
+  const [px, py] = at.pivot || [tx, ty];
+  const spin = at.rotate ? `translate(${px} ${py}) rotate(${at.rotate}) translate(${-px} ${-py})` : '';
+  const y = at.pivot ? py - (box[3] * scale) / 2 - ay * scale : ty - ay * scale;
+
+  return `<g filter="url(#bfKit)"><g transform="${spin}
+    translate(${(tx - ax * scale * spread).toFixed(2)} ${y.toFixed(2)})
+    scale(${(scale * spread).toFixed(5)} ${scale.toFixed(5)})">${body}</g></g>`;
+}
+
+/** Which placement variant a piece of armour wants, from its class. */
+export const ARMOUR_VARIANT = {
+  stab: 'vest', carrier: 'vest', covert: 'vest', soft: 'vest',
+  rifle: 'plate', ceramic: 'plate', helmet: null, shield: null,
+};
+
+/** A sling, so a long gun is being carried rather than floating. */
+export function slingPath() {
+  return `<path d="M141 96 C136 150 124 206 104 252" fill="none" stroke="#1c1f19"
+    stroke-width="9" stroke-linecap="round" opacity=".85"/>`;
+}
+
+/** A holster, so a sidearm has something to sit in. */
+export function holsterPath() {
+  return `<path d="M140 232 h30 c5 0 8 3 8 8 v34 c0 6 -4 9 -10 9 h-26
+    c-6 0 -10 -3 -10 -9 v-34 c0 -5 3 -8 8 -8 z" fill="#1c1f19" opacity=".9"/>
+    <path d="M138 244 h42 v7 h-42 z" fill="#0c0e0c" opacity=".7"/>`;
 }

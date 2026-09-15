@@ -64,6 +64,17 @@ export const TIPS = [
     go: 'build',
   },
   {
+    id: 'trades',
+    title: 'Money that stays yours',
+    when: (s) => countOwned(s) >= 4 && s.cash.clean > 1500000
+      && !has(s, (b) => (BUILDINGS[b.type] || {}).earner),
+    says: "Not every legal place is a laundry. Some of them are just businesses "
+      + "— a car park, a hoarding, a practice. They turn a profit every day, "
+      + "nobody raids them, and the money's clean before it lands. Slower than "
+      + "the chain. Still there when the chain isn't.",
+    go: 'build',
+  },
+  {
     id: 'wash',
     title: 'Street money spends nowhere',
     when: (s) => s.cash.dirty > 500000 && !ofKind(s, 'front'),

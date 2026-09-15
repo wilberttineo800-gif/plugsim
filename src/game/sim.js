@@ -26,7 +26,7 @@ import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { lineEffects, lineKindOf } from './lines.js';
 import { stepBody, infectionStage, BODY_PARTS } from './health.js';
 import { characterOf } from './character.js';
-import { resolveDeath } from './actions.js';
+import { resolveDeath, stepFuneralTrade } from './actions.js';
 import { cullSpoiled } from './organs.js';
 import { stepCaptives, captivesOf, CAPTIVES, hasColdStorage } from './captives.js';
 import { docUpkeep } from './streetdoc.js';
@@ -1455,6 +1455,7 @@ function settleDay(state) {
   stepLicences(state);
   rollResearchDiscoveries(state);
   dailyIncidents(state);
+  stepFuneralTrade(state);
 
   let upkeep = 0;
   for (const b of state.buildings) {

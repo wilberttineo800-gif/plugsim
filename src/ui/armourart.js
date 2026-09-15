@@ -212,6 +212,7 @@ export const ARMOUR_DETAIL = {
   // why it is the cheapest thing in the trade.
   weaver: {
     box: [4, 8, 402, 434],
+    ppi: 19,
     body: `
       ${vest({ fill: 'url(#paAramid)' })}
       <!-- quilting: the rows of stitching holding the panels together -->
@@ -234,6 +235,7 @@ export const ARMOUR_DETAIL = {
   // than tint the aramid a shade greyer and call it a variant.
   mailliner: {
     box: [4, 8, 402, 320],
+    ppi: 19,
     body: `
       ${vest({ drop: 182, fill: 'url(#paPlateSteel)', texture: 'url(#paMail)' })}
       <!-- fabric binding top and bottom, where mail against skin would chafe -->
@@ -250,6 +252,7 @@ export const ARMOUR_DETAIL = {
   // and disappears under a shirt — no slots, no bulk, nothing to print.
   shadow: {
     box: [26, 8, 358, 274],
+    ppi: 19,
     body: `
       ${vest({ drop: 134, fill: 'url(#paAramidLt)' })}
       <!-- one seam down the middle: a single front panel and nothing else -->
@@ -268,6 +271,7 @@ export const ARMOUR_DETAIL = {
   // panels for tape. Black cordura, because that is what a duty vest is.
   dayshift: {
     box: [4, 8, 402, 434],
+    ppi: 19,
     body: `
       ${vest({ fill: 'url(#paCordura)' })}
       <!-- loop panels for a name tape and a badge tab -->
@@ -290,6 +294,7 @@ export const ARMOUR_DETAIL = {
   // so what defines this drawing is everything the others have and it doesn't.
   slick: {
     box: [40, 8, 330, 338],
+    ppi: 22,
     body: `
       ${carrier({ fill: 'url(#paCordura)' })}
       <!-- the plate pocket, stitched as an outline and nothing else -->
@@ -311,6 +316,7 @@ export const ARMOUR_DETAIL = {
   // placard of magazine pouches hanging over the front.
   rigger: {
     box: [4, 8, 402, 366],
+    ppi: 22,
     body: `
       ${carrier({ drop: 160, fill: 'url(#paCorduraLt)' })}
       <!-- shoulder buckles with pull tabs, the quick-release everyone fits -->
@@ -345,6 +351,7 @@ export const ARMOUR_DETAIL = {
   // and a cummerbund wider than the vest itself.
   patrol: {
     box: [4, 8, 402, 434],
+    ppi: 19,
     body: `
       ${vest({ fill: 'url(#paCordura)' })}
       <!-- reflective name tape across the chest -->
@@ -361,6 +368,7 @@ export const ARMOUR_DETAIL = {
   // showing through, and stripped of everything that would add weight.
   sheerweb: {
     box: [26, 8, 358, 340],
+    ppi: 19,
     body: `
       ${vest({ drop: 198, fill: 'url(#paPoly)', texture: 'none' })}
       <!-- unidirectional laminate: layers laid crossways over each other -->
@@ -385,6 +393,7 @@ export const ARMOUR_DETAIL = {
   // rifle stock — that scoop is the entire difference from a full cut.
   highcut: {
     box: [10, -6, 320, 260],
+    ppi: 30,
     body: `
       <path d="M28 132 C28 62 90 18 168 18 s140 44 140 114
                v22 c0 10 -7 17 -17 17 h-26 l-14 34 h-126 l-14 -34 h-26
@@ -420,6 +429,7 @@ export const ARMOUR_DETAIL = {
   // Heavier, more coverage, and a great deal cheaper to press.
   fullcut: {
     box: [10, -6, 320, 268],
+    ppi: 30,
     body: `
       <path d="M24 138 C24 62 88 16 168 16 s144 46 144 122
                v34 c0 12 -8 20 -20 20 h-28 l-16 30 h-120 l-16 -30 h-28
@@ -451,6 +461,7 @@ export const ARMOUR_DETAIL = {
   // drawing, not a texture laid on for its own sake.
   hardline: {
     box: [-14, -14, 328, 388],
+    ppi: 30,
     body: `
       <path d="${sapi(300, 360)}" fill="url(#paPlateSteel)"/>
       <path d="${sapi(300, 360)}" fill="url(#paGrit)"/>
@@ -475,6 +486,7 @@ export const ARMOUR_DETAIL = {
   // that is what UHMWPE is before anybody paints it.
   polyplate: {
     box: [-14, -14, 328, 396],
+    ppi: 30,
     body: `
       <path d="${sapi(300, 360)}" fill="url(#paPoly)"/>
       <path d="M78 0 h144 l78 68 v10 l-84 -70 h-132 l-84 70 v-10 z"
@@ -502,6 +514,7 @@ export const ARMOUR_DETAIL = {
   // edge and the backer wraps round it. That step is the whole silhouette.
   carbide: {
     box: [-14, -14, 328, 392],
+    ppi: 30,
     body: `
       <!-- the backer, which is the part that actually catches the fragments -->
       <path d="${sapi(300, 360)}" fill="url(#paPoly)"/>
@@ -534,6 +547,7 @@ export const ARMOUR_DETAIL = {
   // "the same protection, less of it", so it has to LOOK like less of it.
   boronlite: {
     box: [-14, -14, 328, 386],
+    ppi: 30,
     body: `
       <path d="${sapi(300, 352)}" fill="url(#paPoly)"/>
       <path d="M0 338 h300 v4 a10 10 0 0 1 -10 10 h-280 a10 10 0 0 1 -10 -10 z"
@@ -562,6 +576,7 @@ export const ARMOUR_DETAIL = {
   // are drawn as real hardware rather than suggested.
   minishield: {
     box: [-16, -16, 304, 424],
+    ppi: 20,
     body: `
       <path d="M0 20 c0 -12 8 -20 20 -20 h232 c12 0 20 8 20 20 v352
                c0 12 -8 20 -20 20 h-232 c-12 0 -20 -8 -20 -20 z"
@@ -593,6 +608,7 @@ export const ARMOUR_DETAIL = {
   // light on the side, and a skid along the floor edge.
   barricade: {
     box: [-18, -18, 340, 660],
+    ppi: 13,
     body: `
       <path d="M0 26 c0 -14 10 -24 24 -24 h256 c14 0 24 10 24 24 v574
                c0 14 -10 24 -24 24 h-256 c-14 0 -24 -10 -24 -24 z"

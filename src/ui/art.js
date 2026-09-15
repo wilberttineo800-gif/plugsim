@@ -632,6 +632,11 @@ export function modelArt(id, { size = 150, color = 'currentColor', className = '
 
 export const GUN_IDS = Object.keys(GUN_ART);
 
+// Re-exported so a check can ask "is every class the game can build drawn?"
+// rather than asserting a hard-coded count, which went stale at four classes
+// and stayed wrong through the next four.
+export { FIREARM_CLASS_IDS } from '../game/firearms.js';
+
 /**
  * One firearm, drawn. `size` is the width in pixels; height follows the
  * silhouette's 2:1 field.

@@ -121,6 +121,7 @@ export const GUN_DETAIL = {
   // AK-47: 34.3" overall on a 16.3" barrel, at 14 px/in.
   longmarch: {
     box: [0, 22, 478, 134],
+    ppi: 14,
     mounts: { rail: [252, 38], muzzle: [6, 59], under: [152, 86], mag: [242, 82] },
     body: `
       <rect x="30" y="70" width="152" height="3.5" rx="1.6" fill="#5a626d"/>
@@ -215,6 +216,7 @@ export const GUN_DETAIL = {
   // the trigger guard bottoms out at half of it.
   kestrel: {
     box: [-6, -6, 464, 326],
+    ppi: 55.6,
     mounts: { rail: [200, 8], muzzle: [0, 42], under: [110, 92], mag: [366, 296] },
     body: `
       <!-- barrel at the muzzle -->
@@ -309,6 +311,7 @@ export const GUN_DETAIL = {
   // trigger guard and the breech face is where it already was.
   sable: {
     box: [87, -6, 371, 262],
+    ppi: 55.6,
     mounts: { rail: [240, 8], muzzle: [93, 42], under: [150, 92], mag: [330, 228] },
     body: `
       <path d="M93 26 h16 v32 h-16 z" fill="#2a2e34"/>
@@ -381,6 +384,7 @@ export const GUN_DETAIL = {
   // raised adjustable rear sight, which is what that actually looks like.
   vulcan: {
     box: [-92, -10, 550, 334],
+    ppi: 55.6,
     mounts: { rail: [150, 8], muzzle: [-86, 42], under: [20, 92], mag: [366, 296] },
     body: `
       <path d="M-86 26 h16 v32 h-16 z" fill="#2a2e34"/>
@@ -481,6 +485,7 @@ export const GUN_DETAIL = {
   // here, with the cylinder sitting IN its window rather than beside it.
   drover: {
     box: [-8, -14, 560, 288],
+    ppi: 46,
     mounts: { rail: [300, 18], muzzle: [4, 62], under: [140, 106], mag: [316, 100] },
     body: `
       <!-- one continuous frame: barrel, topstrap, standing breech, grip frame -->
@@ -553,6 +558,7 @@ export const GUN_DETAIL = {
   // everything hung off it, which is what a stamped submachine gun actually is.
   wasp: {
     box: [-10, -16, 726, 306],
+    ppi: 26,
     mounts: { rail: [318, 30], muzzle: [8, 72], under: [150, 116], mag: [392, 220] },
     body: `
       <!-- the receiver tube, unbroken from muzzle end to stock -->
@@ -632,6 +638,7 @@ export const GUN_DETAIL = {
   // mostly cylinder and grip, which is the whole reason it looks like it does.
   bulldog: {
     box: [-8, -10, 520, 300],
+    ppi: 70,
     mounts: { rail: [250, 20], muzzle: [4, 60], under: [90, 100], mag: [262, 98] },
     body: `
       <path fill="url(#pgBlued)" d="
@@ -676,6 +683,7 @@ export const GUN_DETAIL = {
   // no other way to cock it.
   frontier: {
     box: [-8, -18, 556, 300],
+    ppi: 48,
     mounts: { rail: [280, 12], muzzle: [4, 56], under: [110, 96], mag: [286, 96] },
     body: `
       <path fill="url(#pgBlued)" d="
@@ -737,6 +745,7 @@ export const GUN_DETAIL = {
   // the comb is what makes it read as wood somebody shaped.
   coachman: {
     box: [-10, -16, 760, 244],
+    ppi: 20,
     mounts: { rail: [430, 40], muzzle: [6, 62], under: [250, 100], mag: [470, 110] },
     body: `
       <!-- twin barrels, one over the other in side view -->
@@ -812,6 +821,7 @@ export const GUN_DETAIL = {
   // stock with a comb high enough to get your eye behind that glass.
   vigil: {
     box: [-10, -46, 748, 244],
+    ppi: 17,
     mounts: { rail: [356, -30], muzzle: [6, 74], under: [210, 104], mag: [372, 128] },
     body: `
       <!-- barrel: heavy, tapering, and most of the gun -->
@@ -883,6 +893,7 @@ export const GUN_DETAIL = {
   // and drawing it any prettier than that would be wrong.
   grease: {
     box: [-10, -14, 736, 268],
+    ppi: 24,
     mounts: { rail: [300, 30], muzzle: [8, 76], under: [190, 120], mag: [330, 214] },
     body: `
       <path d="M60 52 h330 c10 0 16 6 16 16 v56 c0 10 -6 16 -16 16 h-330
@@ -930,6 +941,7 @@ export const GUN_DETAIL = {
   // which is the only thing anybody remembers about it.
   spectre: {
     box: [-10, -16, 650, 288],
+    ppi: 26,
     mounts: { rail: [300, 24], muzzle: [8, 72], under: [180, 116], mag: [340, 214] },
     body: `
       <path d="M56 50 h330 c10 0 16 6 16 16 v54 c0 10 -6 16 -16 16 h-330
@@ -979,6 +991,7 @@ export const GUN_DETAIL = {
   // most of the mass and all of the silhouette.
   streetsweeper: {
     box: [-12, -16, 660, 300],
+    ppi: 23,
     mounts: { rail: [280, 26], muzzle: [8, 62], under: [150, 100], mag: [300, 150] },
     body: `
       <path d="M10 48 h230 v28 h-230 z" fill="url(#pgBlued)"/>
@@ -1054,6 +1067,7 @@ export const GUN_DETAIL = {
   // slightly flatter rearward grip rake.
   warden: {
     box: [-6, -8, 470, 306],
+    ppi: 52,
     mounts: { rail: [190, 4], muzzle: [0, 34], under: [110, 88], mag: [366, 268] },
     body: `
       <!-- barrel bushing and recoil spring plug -->
@@ -1145,6 +1159,7 @@ export const GUN_DETAIL = {
   // AR-15 carbine: 32.5" overall on a 16" barrel, at 14.5 px/in.
   kite: {
     box: [0, 26, 474, 176],
+    ppi: 14.5,
     mounts: { rail: [280, 34], muzzle: [6, 60], under: [140, 78], mag: [300, 104] },
     body: `
       <!-- A2 flash hider -->
@@ -1247,6 +1262,7 @@ export const GUN_DETAIL = {
   // Remington 870: 38.5" overall on an 18.5" barrel, at 12.2 px/in.
   ridgeback: {
     box: [0, 18, 474, 118],
+    ppi: 12.2,
     mounts: { rail: [280, 38], muzzle: [4, 51], under: [140, 90], mag: [236, 66] },
     body: `
       <!-- barrel, with the bead sight up front -->
@@ -1316,6 +1332,7 @@ export const GUN_DETAIL = {
   // at the butt — get those two wrong and it just reads as a short rifle.
   adder: {
     box: [-10, -18, 776, 300],
+    ppi: 24,
     mounts: { rail: [400, 30], muzzle: [8, 86], under: [200, 128], mag: [520, 246] },
     body: `
       <!-- barrel, out front of the housing -->
@@ -1373,6 +1390,7 @@ export const GUN_DETAIL = {
   // butt is in line with the bore with a comb and a wrist, not a plank.
   praetor: {
     box: [-12, -22, 850, 272],
+    ppi: 19,
     mounts: { rail: [500, 44], muzzle: [8, 82], under: [300, 122], mag: [486, 226] },
     body: `
       <!-- flash hider -->
@@ -1461,6 +1479,7 @@ export const GUN_DETAIL = {
   // would be to make it look chunky, because at this length it doesn't.
   longshot: {
     box: [-12, -22, 900, 300],
+    ppi: 15,
     mounts: { rail: [570, 26], muzzle: [8, 96], under: [214, 138], mag: [530, 232] },
     body: `
       <!-- the arrowhead muzzle brake, the one part everyone recognises -->
@@ -1554,6 +1573,7 @@ export const GUN_DETAIL = {
   // first pass looked like, so the shroud is the thickest thing on the gun.
   whisper: {
     box: [-12, -22, 840, 276],
+    ppi: 19,
     mounts: { rail: [430, 30], muzzle: [10, 88], under: [230, 132], mag: [420, 226] },
     body: `
       <!-- the shroud: one unbroken tube, muzzle to receiver, and FAT -->
@@ -1637,6 +1657,7 @@ export const GUN_DETAIL = {
   // hanging out of it in the open is just a heavy rifle.
   hammerfall: {
     box: [-14, -24, 920, 340],
+    ppi: 17,
     mounts: { rail: [510, 28], muzzle: [10, 84], under: [210, 126], mag: [400, 166] },
     body: `
       <path d="M8 68 h52 v34 h-52 z" fill="#2f353d"/>
@@ -1784,6 +1805,7 @@ export const GUN_DETAIL = {
   // build — and the drum sitting proud under the receiver is the silhouette.
   reaper: {
     box: [-14, -20, 840, 320],
+    ppi: 20,
     mounts: { rail: [430, 44], muzzle: [10, 80], under: [200, 118], mag: [430, 148] },
     body: `
       <path d="M8 64 h42 v32 h-42 z" fill="#2f353d"/>

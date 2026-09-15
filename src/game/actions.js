@@ -242,14 +242,48 @@ export function isDiscovered(state, id) {
  * appears. One oblique line in the log that most players will scroll past,
  * and after it two buildings quietly exist that did not before.
  */
-export function offerTheOtherThing(state) {
+export function offerTheOtherThing(state, route = 'muscle') {
   if (isDiscovered(state, 'back_clinic')) return false;
   state.discovered = (state.discovered || []).concat(['back_clinic', 'morgue']);
-  logEvent(state,
-    'Somebody took you aside afterwards. Wanted to know whether you ever have '
-    + 'anything that needs moving quietly, and whether you had somewhere cold.',
-    'info');
+  logEvent(state, WHO_PUTS_IT_TO_YOU[route] || WHO_PUTS_IT_TO_YOU.muscle, 'info');
   return true;
+}
+
+/**
+ * Two ways in, and they are deliberately opposite ways.
+ *
+ * One is the bottom of the business: take enough blocks by force and somebody
+ * who clears up after you asks a question. The other is the TOP of it — buy
+ * an honest funeral home, run it a month, and the trade tells you itself,
+ * because the only difference between a prep room and the other thing is who
+ * the paperwork says the body belongs to. Somebody who never throws a punch
+ * should still be able to stumble into this, and the funeral home is how.
+ */
+const WHO_PUTS_IT_TO_YOU = {
+  muscle: 'Somebody took you aside afterwards. Wanted to know whether you ever '
+    + 'have anything that needs moving quietly, and whether you had somewhere cold.',
+  funeral: 'Your embalmer has been doing this thirty years. Said, without '
+    + 'looking up from the table, that a licensed prep room takes in a great '
+    + 'deal more than the families ever ask about — and that he knows people '
+    + 'who pay for the difference.',
+};
+
+/** A month in the trade is long enough for somebody to say it out loud. */
+export const FUNERAL_DISCOVERY_DAYS = 28;
+
+/**
+ * A day of running an honest funeral home. Counted rather than checked against
+ * a build date, so a place you sell and rebuy does not reset the clock and a
+ * place you own but never switched on does not start it.
+ */
+export function stepFuneralTrade(state) {
+  if (!state || isDiscovered(state, 'back_clinic')) return false;
+  const running = (state.buildings || []).some((b) => b.type === 'funeral_home' && b.active);
+  if (!running) return false;
+  state.stats = state.stats || {};
+  state.stats.funeralDays = (state.stats.funeralDays || 0) + 1;
+  if (state.stats.funeralDays < FUNERAL_DISCOVERY_DAYS) return false;
+  return offerTheOtherThing(state, 'funeral');
 }
 
 /** Fit out a building you own so it starts doing something. */

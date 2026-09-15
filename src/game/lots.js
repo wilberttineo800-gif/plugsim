@@ -133,6 +133,30 @@ export function levelsOf(tags, kind) {
   return DEFAULT_LEVELS[kind] || 2;
 }
 
+/**
+ * How tall the building really is, in metres, when OSM says so.
+ *
+ * Kept SEPARATE from `levels` on purpose. Levels drives floor area, and floor
+ * area drives rent and price — so quietly deriving a level count from a height
+ * tag would move the economy under every existing save. This is a surveyed
+ * number for drawing with, nothing more, and it is null when nobody measured.
+ *
+ * It matters because `height` is the tag tall buildings actually carry: in
+ * midtown Manhattan 836 of 900 buildings have one and only 120 state levels.
+ * A view built on levels puts the Empire State at twelve storeys.
+ */
+export function heightMetresOf(tags) {
+  const raw = tags.height ?? tags['building:height'];
+  if (raw == null) return null;
+  const m = String(raw).match(/[\d.]+/);
+  if (!m) return null;
+  const v = parseFloat(m[0]);
+  if (!Number.isFinite(v) || v <= 1) return null;
+  // Feet, if somebody tagged it that way. Nothing on Earth is 830m.
+  const feet = /'|ft|feet/i.test(String(raw));
+  return Math.min(feet ? v * 0.3048 : v, 830);
+}
+
 /** Everything under the roof, not just the ground it stands on. */
 export function floorArea(lot) {
   return lot.areaM2 * (lot.levels || 1);
@@ -276,6 +300,7 @@ export function buildLots(ways, districts, { startIndex = 0 } = {}) {
       parkingType,
       spaces: kind === 'parking' ? parkingSpaces(tags, areaM2) : 0,
       levels,
+      heightM: heightMetresOf(tags),
       units,
       rentUpgrades: [],
       name: address

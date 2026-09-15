@@ -25,15 +25,43 @@ export const PITCH = 0.5;
 export const STOREY_M = 3.1;
 
 /**
- * Vertical exaggeration.
+ * Readability lift, and why it is not a multiplier.
  *
- * At true scale a two-storey rowhouse is six metres of wall under a
- * twelve-metre roof, and from above that reads as a flat coloured shape rather
- * than as a house. Every isometric game does this; the difference here is that
- * the footprints are real, so the lie is confined to one number and the plan
- * stays honest.
+ * A two-storey rowhouse is six metres of wall under a twelve-metre roof, and
+ * at true scale that reads as a flat coloured shape rather than as a house.
+ * The obvious fix is to multiply every height, and it is wrong: 2x on the
+ * Empire State is a 760-metre building, and the one place this view has to be
+ * exactly right is the place it is most impressive.
+ *
+ * So the lift is a fixed number of metres ADDED, which decays as the building
+ * gets taller. A rowhouse nearly doubles. A six-storey block gains a couple of
+ * metres. Anything genuinely tall is drawn at its real height, because at that
+ * size it needs no help.
  */
-export const LIFT = 2.1;
+export const LIFT_M = 7.5;
+export const LIFT_FADE_M = 16;
+
+export function liftedHeight(metres) {
+  return metres + LIFT_M * Math.exp(-metres / LIFT_FADE_M);
+}
+
+/**
+ * How tall this building actually is, in metres.
+ *
+ * In order of how much OSM can be trusted: a stated `height` is a surveyed
+ * number and is what every tall building carries; `building:levels` is a
+ * count somebody typed; a kind-based guess is the last resort. Reading levels
+ * first — which is what the game's own `levelsOf` does — is exactly how a
+ * 381-metre tower comes out as a generic twelve-storey block.
+ */
+export function heightMetres(lot) {
+  const tags = lot.tags || {};
+  const direct = parseFloat(lot.heightM ?? tags.height ?? tags['building:height']);
+  if (Number.isFinite(direct) && direct > 1) return Math.min(direct, 830);
+  const levels = parseFloat(tags['building:levels'] ?? tags.levels ?? lot.levels);
+  if (Number.isFinite(levels) && levels > 0) return Math.min(levels, 163) * STOREY_M;
+  return 2 * STOREY_M;
+}
 
 /**
  * Metres east and north of the origin.
@@ -123,8 +151,9 @@ export function buildingFaces(lot, origin, cam, tint = {}) {
   const poly = lot.polygon;
   if (!poly || poly.length < 3) return [];
   const pal = paletteFor(lot.kind, tint);
-  const h = Math.max(1, lot.levels || 1) * STOREY_M * (cam.lift || LIFT)
-    * (lot.kind === 'parking' ? 0.3 : 1);
+  const h = lot.kind === 'parking'
+    ? Math.max(3, heightMetres(lot) * 0.3)
+    : liftedHeight(heightMetres(lot));
 
   const pts = poly.map((p) => toWorld(p, origin));
   const ground = pts.map((p) => toScreen(p.x, p.y, 0, cam));

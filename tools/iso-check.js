@@ -6,8 +6,9 @@
 
 import {
   toWorld, toScreen, depthOf, buildingFaces, sceneFaces, fitCamera, boundsOf,
-  paletteFor, PITCH, STOREY_M, LIFT,
+  paletteFor, PITCH, STOREY_M, liftedHeight, heightMetres, LIFT_M,
 } from '../src/ui/isoart.js';
+import { heightMetresOf } from '../src/game/lots.js';
 
 let pass = 0, fail = 0;
 const ok = (c, m) => { if (c) { pass++; } else { fail++; print('  FAIL ' + m); } };
@@ -82,8 +83,9 @@ const lotOf = (levels, rev = false, kind = 'house') =>
   const high = boundsOf(buildingFaces(lotOf(8), origin, cam));
   ok(high.h > low.h, 'eight storeys is taller on screen than one');
   const gained = (high.h - low.h) / cam.scale;
-  ok(Math.abs(gained - 7 * STOREY_M * LIFT) < 0.001,
-    `and by exactly seven lifted storeys (got ${gained.toFixed(2)}m)`);
+  const expect = liftedHeight(8 * STOREY_M) - liftedHeight(1 * STOREY_M);
+  ok(Math.abs(gained - expect) < 0.001,
+    `and by the lifted difference (got ${gained.toFixed(2)}m, want ${expect.toFixed(2)}m)`);
 
   // A car park is flat, whatever OSM claims about its levels.
   const park = boundsOf(buildingFaces(lotOf(3, false, 'parking'), origin, cam));
@@ -130,6 +132,62 @@ const lotOf = (levels, rev = false, kind = 'house') =>
   ok(paletteFor('nonsense-kind').roof, 'an unknown building kind still gets paint');
   const p = paletteFor('house');
   ok(p.a !== p.b, 'and the two wall faces differ, or a box reads as a hexagon');
+}
+
+
+
+// --- real heights -----------------------------------------------------------
+//
+// The whole point of building on real data: if you go to New York the towers
+// have to be towers. A surveyed `height` tag beats a levels count beats a
+// guess, and getting that order wrong turns the Empire State into a generic
+// twelve-storey block — which is what reading levels first does.
+{
+  ok(heightMetres({ tags: { height: '381' }, levels: 12 }) === 381,
+    'a stated height wins over a levels count');
+  ok(heightMetres({ tags: { height: '381 m' }, levels: 12 }) === 381,
+    'and is read even with the unit on it');
+  ok(heightMetres({ tags: { 'building:levels': '102' } }) === 102 * STOREY_M,
+    'a levels count is used when there is no height');
+  ok(heightMetres({ levels: 3 }) === 3 * STOREY_M, 'and the lot\u2019s own levels after that');
+  ok(heightMetres({}) === 2 * STOREY_M, 'and something sensible with nothing at all');
+  ok(heightMetres({ tags: { height: '99999' } }) === 830,
+    'a nonsense height is clamped rather than drawn');
+
+  // The lift has to fade, or the tallest buildings in the world are wrong.
+  const row = liftedHeight(6.2), tower = liftedHeight(381);
+  ok(row > 6.2 * 1.6, `a rowhouse is lifted enough to read (${row.toFixed(1)}m from 6.2)`);
+  ok(tower - 381 < 0.01, `and a 381m tower is drawn at 381m (got ${tower.toFixed(2)})`);
+  ok(liftedHeight(0) <= LIFT_M + 0.001, 'nothing gains more than the lift itself');
+  // Monotonic: a taller building must never come out shorter than a short one.
+  let prev = -1, mono = true;
+  for (let m = 0; m <= 400; m += 0.5) {
+    const v = liftedHeight(m);
+    if (v < prev) mono = false;
+    prev = v;
+  }
+  ok(mono, 'and taller is always taller on screen');
+}
+
+
+// --- the surveyed height, as the game will hand it over ---------------------
+//
+// The renderer reads what `buildLots` stores, so the parsing has to agree with
+// it. Feet exist in the wild and a building tagged "1250'" is not 1250 metres.
+{
+  ok(heightMetresOf({ height: '443.2' }) === 443.2, 'a plain metre height');
+  ok(heightMetresOf({ height: '112 m' }) === 112, 'and one with a unit on it');
+  ok(heightMetresOf({ 'building:height': '60' }) === 60, 'the other spelling of the tag');
+  ok(Math.abs(heightMetresOf({ height: "1250'" }) - 381) < 0.5,
+    `feet are converted, not taken as metres (${heightMetresOf({ height: "1250'" })})`);
+  ok(heightMetresOf({}) === null, 'nothing when nobody measured');
+  ok(heightMetresOf({ height: 'tall' }) === null, 'and nothing from a word');
+  ok(heightMetresOf({ height: '0.5' }) === null, 'a height under a metre is a mistake');
+  ok(heightMetresOf({ height: '99999' }) === 830, 'and an absurd one is clamped');
+
+  // A lot carrying a surveyed height must beat its own level count.
+  ok(heightMetres({ heightM: 443.2, levels: 12 }) === 443.2,
+    'and the lot field wins over levels, which is the Empire State case exactly');
 }
 
 print(fail ? `iso: ${fail} FAILED, ${pass} passed` : `iso: all ${pass} checks passed`);

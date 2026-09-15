@@ -115,6 +115,7 @@ export class GameUI {
       hud: document.getElementById('hud'),
       rail: document.getElementById('rail'),
       railTabs: document.getElementById('railTabs'),
+      railMin: document.getElementById('railMin'),
       railMenuBtn: document.getElementById('railMenuBtn'),
       railMenuLabel: document.getElementById('railMenuLabel'),
       railBody: document.getElementById('railBody'),
@@ -260,6 +261,7 @@ export class GameUI {
     // The menu names where you are and opens the list of panels. Picking one
     // closes it again — a menu you have to dismiss yourself is a menu in the way.
     this.dom.railMenuBtn.addEventListener('click', () => this.toggleMenu());
+    this.dom.railMin.addEventListener('click', () => this.toggleRail());
     this.dom.railTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-tab]');
       if (!btn) return;
@@ -509,6 +511,9 @@ export class GameUI {
 
   goTab(tab) {
     this.tab = tab;
+    // Choosing a panel while it is rolled up has to open it, or the tap looks
+    // like it did nothing.
+    if (this.dom.rail.classList.contains('is-min')) this.toggleRail(false);
     for (const b of this.dom.railTabs.querySelectorAll('[data-tab]')) {
       b.classList.toggle('is-on', b.dataset.tab === tab);
       if (b.dataset.tab === tab) this.dom.railMenuLabel.textContent = b.textContent.trim();
@@ -523,6 +528,27 @@ export class GameUI {
    * the body, and opening it again — and a dropdown that can be left open in
    * one of those paths is the kind of thing you only notice on a phone.
    */
+  /**
+   * Roll the panel up to its title bar, or back down.
+   *
+   * The panel ran the full height of the window whatever was in it, so a
+   * nearly empty one — R&D before anything is built, say — put a 292px dark
+   * column down the map and showed four rows in it. Collapsing closes the tab
+   * list too: leaving a menu hanging open under a rolled-up panel is exactly
+   * the sort of thing that only looks wrong on a phone.
+   */
+  toggleRail(force) {
+    const min = force === undefined
+      ? !this.dom.rail.classList.contains('is-min')
+      : !!force;
+    this.dom.rail.classList.toggle('is-min', min);
+    this.dom.railMin.setAttribute('aria-expanded', String(!min));
+    this.dom.railMin.textContent = min ? '+' : '\u2013';
+    this.dom.railMin.title = min ? 'Open the panel' : 'Collapse';
+    this.dom.railMin.setAttribute('aria-label', min ? 'Open the panel' : 'Collapse the panel');
+    if (min) this.toggleMenu(false);
+  }
+
   toggleMenu(force) {
     const open = force === undefined
       ? this.dom.railTabs.hidden

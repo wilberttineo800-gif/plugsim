@@ -63,11 +63,18 @@
   <button class="sheet__grip" id="railGrip" aria-label="Close panel"></button>
   <!-- Nine tabs in 292px was already 10.5px type, and every panel added made
        it worse. A menu that names where you are scales to any number of them. -->
-  <button class="rail__menubtn" id="railMenuBtn" aria-expanded="false"
-          aria-controls="railTabs">
-    <span id="railMenuLabel">Build</span>
-    <span class="rail__chev" aria-hidden="true">▾</span>
-  </button>
+  <div class="rail__head">
+    <button class="rail__menubtn" id="railMenuBtn" aria-expanded="false"
+            aria-controls="railTabs">
+      <span id="railMenuLabel">Build</span>
+      <span class="rail__chev" aria-hidden="true">▾</span>
+    </button>
+    <!-- Roll the whole panel up to its title bar. The panel used to run the
+         full height of the window whatever was in it, so a short one left a
+         tall empty box sitting on the map. -->
+    <button class="rail__min" id="railMin" aria-label="Collapse the panel"
+            aria-expanded="true" title="Collapse">–</button>
+  </div>
   <nav class="rail__tabs" id="railTabs" hidden>
     <button data-tab="build" class="is-on">Build</button>
     <button data-tab="market">Market</button>

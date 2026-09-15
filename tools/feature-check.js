@@ -154,7 +154,13 @@
     out.push('  skip  a vehicle is refused with no depot (session already has one)');
   }
 
+  // Car parks come from OSM like everything else, and plenty of real
+  // neighbourhoods have none mapped — Lagos had zero. That is a fact about the
+  // city, not a broken game, so the whole depot chain below skips rather than
+  // reporting six failures somebody has to go and investigate.
   const carParks = s.lots.filter((l) => l.kind === 'parking' && !l.owned);
+  if (!carParks.length) skip('depots and the fleet', 'no car parks mapped in this city');
+  else {
   ok('real car parks came back from the map', carParks.length > 0,
     carParks.length + ' on the map, ' +
     (carParks[0] ? carParks[0].spaces + ' spaces at the first' : ''));
@@ -204,6 +210,7 @@
     .filter(([, slots]) => new Set(slots).size !== slots.length);
   ok('no two vehicles share a bay in the same depot', clashes.length === 0,
     Object.entries(byDepot).map(([d, sl]) => d + '[' + sl.join(',') + ']').join(' '));
+  }
 
   out.push('');
   out.push('=== market ===');

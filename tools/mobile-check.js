@@ -119,6 +119,42 @@ if (!g || !g.state) {
     record(`tab ${tab}`, rail);
   }
 
+  // The panel has to be able to get out of the way.
+  //
+  // It used to run the full height of the window whatever was in it, so a
+  // nearly empty panel still put a tall dark column over the map and there was
+  // no way on a desktop to close it at all. Rolling it up has to leave the
+  // title bar and nothing else — and a class setting `display` outranks
+  // [hidden] on specificity, which is exactly how the tab menu once reported
+  // itself closed and stayed on screen.
+  out.push('');
+  const min = document.getElementById('railMin');
+  const railBody = document.getElementById('railBody');
+  if (!min) { failures++; out.push('MISSING  the collapse control'); }
+  else {
+    const wasMin = rail.classList.contains('is-min');
+    if (wasMin) min.click();
+    const tall = rail.getBoundingClientRect().height;
+    min.click();
+    const short = rail.getBoundingClientRect().height;
+    const gone = getComputedStyle(railBody).display === 'none';
+    if (!gone || short >= tall) {
+      failures++;
+      out.push(`ROLLUP   the panel does not collapse  ${Math.round(tall)} -> ${Math.round(short)}px`
+        + (gone ? '' : ', body still displayed'));
+    } else {
+      out.push(`ok       the panel rolls up  ${Math.round(tall)} -> ${Math.round(short)}px`);
+    }
+    min.click();
+    if (rail.getBoundingClientRect().height <= short) {
+      failures++;
+      out.push('ROLLUP   and does not come back');
+    } else {
+      out.push('ok       and comes back');
+    }
+    if (!wasMin && rail.classList.contains('is-min')) min.click();
+  }
+
   out.push('');
   if (document.body.scrollWidth > W + 1) {
     failures++;

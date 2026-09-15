@@ -1421,15 +1421,29 @@ print('=== 29. filled artwork is actually closed ===');
   check('and so does every filled category drawing', openGuns.length === 0,
         openGuns.length ? openGuns.slice(0, 3).join(' | ') : 'clean');
 
-  const openVeh = [];
-  for (const id of VEHICLE_ART_IDS) {
-    if (VEHICLE_ART[id].stroked) continue;
-    for (const sub of VEHICLE_ART[id].path.split(/(?=M)/).map((x) => x.trim()).filter(Boolean)) {
-      if (!/z\s*$/i.test(sub)) openVeh.push(`${id}: ${sub.slice(0, 22).replace(/\s+/g, ' ')}…`);
-    }
-  }
-  check('and every filled vehicle', openVeh.length === 0,
-        openVeh.length ? openVeh.slice(0, 3).join(' | ') : 'clean');
+  // Vehicles are no longer one path each — they are full drawings, one per
+  // model. What has to hold now is that EVERY model in the dealership has its
+  // own, since twenty-two models sharing twelve bodies is what this replaced.
+  const undrawn = Object.keys(COURIERS).filter((id) => !VEHICLE_ART[id]);
+  check('every vehicle in the dealership has its own drawing', undrawn.length === 0,
+        undrawn.join(', ') || VEHICLE_ART_IDS.length + ' drawings for '
+          + Object.keys(COURIERS).length + ' models');
+
+  // And each states the scale it was drawn at, which is what lets a van be
+  // bigger than a car instead of being the same 64x32 box.
+  const unscaled = VEHICLE_ART_IDS.filter((id) => !(VEHICLE_ART[id].ppi > 0)
+    || !Array.isArray(VEHICLE_ART[id].box) || VEHICLE_ART[id].box.length !== 4);
+  check('and every one states its px/in and its box', unscaled.length === 0,
+        unscaled.join(', ') || 'all ' + VEHICLE_ART_IDS.length);
+
+  // Real relative sizes: a semi has to be longer than a van, which has to be
+  // longer than a hatchback. Drawn at their own px/in, that falls out of the
+  // measurements — if it does not, a measurement is wrong.
+  const feet = (id) => (VEHICLE_ART[id].box[2] / VEHICLE_ART[id].ppi) / 12;
+  const order = ['bike', 'hatchback', 'sedan', 'van', 'boxtruck', 'semi'];
+  const wrong = order.filter((id, i) => i > 0 && feet(id) <= feet(order[i - 1]));
+  check('and they come out in the right size order', wrong.length === 0,
+        wrong.join(', ') || order.map((id) => id + ' ' + feet(id).toFixed(0) + 'ft').join(', '));
 }
 
 print('');
@@ -1802,8 +1816,25 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
 {
   const fronts = Object.values(BUILDINGS).filter((d) => d.kind === 'front');
   const earners = fronts.filter((d) => d.earner);
-  check('there are legal businesses that make money', earners.length >= 8,
+  check('there are legal businesses that make money', earners.length >= 20,
     earners.length + ' trades');
+
+  // A trade that pays for itself in a fortnight makes the chain pointless, and
+  // one that takes two years is never bought. Everything sits in the band.
+  const payback = earners.map((d) => ({
+    id: d.id, days: d.cost / (d.revenuePerDay - d.upkeepPerDay),
+  }));
+  const offBand = payback.filter((r) => r.days < 60 || r.days > 200);
+  check('and each pays for itself in two to six months', offBand.length === 0,
+    offBand.map((r) => r.id + ' ' + Math.round(r.days) + 'd').join(', ')
+    || Math.round(Math.min(...payback.map((r) => r.days))) + '-'
+       + Math.round(Math.max(...payback.map((r) => r.days))) + ' days');
+
+  // They have to be reachable across the whole game, not bunched at one price.
+  const cheapest = Math.min(...earners.map((d) => d.cost));
+  const dearest = Math.max(...earners.map((d) => d.cost));
+  check('and they span the game, not one price bracket', dearest / cheapest > 20,
+    "$" + cheapest + " to $" + dearest);
 
   const losers = earners.filter((d) => (d.revenuePerDay || 0) <= (d.upkeepPerDay || 0));
   check('and every one of them actually turns a profit', losers.length === 0,
@@ -1833,6 +1864,11 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
     A.isDiscovered(st, 'back_clinic') && A.isDiscovered(st, 'morgue'));
 
   // A place you own but never switched on is not the trade.
+  // A crematorium is the same trade and the same door.
+  const crem = { buildings: [{ id: 'b1', type: 'crematorium', active: true }], stats: {}, log: [] };
+  for (let d = 0; d < A.FUNERAL_DISCOVERY_DAYS; d++) A.stepFuneralTrade(crem);
+  check('and so does a crematorium', A.isDiscovered(crem, 'back_clinic'));
+
   const idle = { buildings: [{ id: 'b1', type: 'funeral_home', active: false }], stats: {}, log: [] };
   for (let d = 0; d < A.FUNERAL_DISCOVERY_DAYS * 2; d++) A.stepFuneralTrade(idle);
   check('a funeral home you never opened tells you nothing',

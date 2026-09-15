@@ -271,6 +271,9 @@ const WHO_PUTS_IT_TO_YOU = {
 /** A month in the trade is long enough for somebody to say it out loud. */
 export const FUNERAL_DISCOVERY_DAYS = 28;
 
+/** The honest businesses that put you next to a body every working day. */
+export const FUNERAL_TRADE = ['funeral_home', 'crematorium'];
+
 /**
  * A day of running an honest funeral home. Counted rather than checked against
  * a build date, so a place you sell and rebuy does not reset the clock and a
@@ -278,7 +281,8 @@ export const FUNERAL_DISCOVERY_DAYS = 28;
  */
 export function stepFuneralTrade(state) {
   if (!state || isDiscovered(state, 'back_clinic')) return false;
-  const running = (state.buildings || []).some((b) => b.type === 'funeral_home' && b.active);
+  const running = (state.buildings || []).some(
+    (b) => FUNERAL_TRADE.includes(b.type) && b.active);
   if (!running) return false;
   state.stats = state.stats || {};
   state.stats.funeralDays = (state.stats.funeralDays || 0) + 1;

@@ -1155,3 +1155,21 @@ kbd {
   .imark:hover { gap: 0; padding-right: 3px; }
   .imark:hover .imark__label { max-width: 0; }
 }
+
+/* The fleet, drawn. A vehicle card that showed no vehicle was the last place
+   in the game where you bought something sight unseen. */
+.fleetart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 6px 0 2px;
+  padding: 6px 4px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,.035), rgba(0,0,0,.14));
+}
+.fleetart .art { width: 100%; height: auto; max-width: 190px; }
+.fleetart--sm .art { max-width: 148px; }
+@media (max-width: 720px) {
+  .fleetart .art { max-width: 152px; }
+  .fleetart--sm .art { max-width: 124px; }
+}

@@ -2252,6 +2252,7 @@ export class GameUI {
               <span class="card__name">${esc(def.name)}${have ? ` <span style="color:var(--sodium)">×${have}</span>` : ''}</span>
               <span class="card__cost ${short ? 'is-short' : ''}">${moneyShort(def.cost)}</span>
             </div>
+            <div class="fleetart">${vehicleArt(id, { size: 168 })}</div>
             <div class="card__blurb">${esc(def.blurb)}</div>
             <div class="card__meta">
               <span>${units(def.capacity)} cap</span>
@@ -2361,6 +2362,7 @@ export class GameUI {
           <span class="card__name">${esc(c.name)}</span>
           <span class="card__cost" style="color:var(--text-dim)">${units(carried)}/${units(fitted.capacity)}</span>
         </div>
+        <div class="fleetart fleetart--sm">${vehicleArt(c.type, { size: 132 })}</div>
         <div class="card__meta">
           <span>${driver ? esc(driver.name) : '<span style="color:var(--warn)">parked, no driver</span>'}</span>
           <span>${esc(this.phaseLabel(c))}</span>

@@ -520,6 +520,11 @@
           Object.keys(A.PRODUCT_ART).length + 1) + ' drawings in frame');
       // Every class the game can actually build needs a category drawing, and
       // the count is not a constant — this asserted 4 long after there were 8.
+      // The fleet, in the same pass. These went unchecked for the whole life of
+      // the twelve-shared-silhouettes version, which is part of why nobody
+      // noticed a cab and a saloon were the same picture.
+      for (const id of A.VEHICLE_ART_IDS) check('vehicle ' + id, A.vehicleArt(id, { size: 200 }));
+
       const undrawn = (A.FIREARM_CLASS_IDS || []).filter((c) => !A.GUN_IDS.includes(c));
       ok('every gun category is drawn', undrawn.length === 0,
         undrawn.join(', ') || A.GUN_IDS.length + ' drawn: ' + A.GUN_IDS.join(', '));

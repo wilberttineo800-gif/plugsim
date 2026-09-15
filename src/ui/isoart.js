@@ -266,6 +266,60 @@ export function fitCamera(lots, origin, { width, height, turn = 0, pad = 24 }) {
   };
 }
 
+/**
+ * A camera centred on a point, showing a stated width of ground.
+ *
+ * This is the one a phone wants, and `fitCamera` is not. An isometric diamond
+ * is about twice as wide as it is tall and a phone is about twice as tall as
+ * it is wide, so fitting a whole survey into a portrait screen leaves most of
+ * the screen empty and makes every building a few pixels across. Every mobile
+ * map solves this the same way: start close to where you are and let the
+ * person pan. `metresAcross` is how much ground the short edge covers.
+ */
+export function frameOn(centre, origin, {
+  width, height, turn = 0, metresAcross = 240, groundAt = 0.5,
+}) {
+  const short = Math.min(width, height);
+  const scale = short / Math.max(20, metresAcross);
+  const w = toWorld(centre, origin);
+  const cam = { scale, ox: 0, oy: 0, turn };
+  const at = toScreen(w.x, w.y, 0, cam);
+  // Buildings grow UP from where they stand, so centring the ground point puts
+  // anything tall off the top of the screen. `groundAt` sits it lower down and
+  // leaves the upper half for what is standing on it.
+  return { scale, ox: width / 2 - at.sx, oy: height * groundAt - at.sy, turn };
+}
+
+/**
+ * The ground the city stands on.
+ *
+ * Without it the gaps between buildings are the page background, and the whole
+ * survey reads as blocks floating in a void rather than as a place. Roads fix
+ * this properly, but roads are a second Overpass query and Overpass refuses
+ * when its two slots an IP are busy — so the floor is derived from the
+ * footprints themselves and is always there.
+ *
+ * Returned as a quad at z=0, so it projects and turns with everything else.
+ */
+export function groundQuad(lots, origin, cam, { padM = 60 } = {}) {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const lot of lots) {
+    for (const p of lot.polygon || []) {
+      const w = toWorld(p, origin);
+      if (w.x < minX) minX = w.x;
+      if (w.x > maxX) maxX = w.x;
+      if (w.y < minY) minY = w.y;
+      if (w.y > maxY) maxY = w.y;
+    }
+  }
+  if (!Number.isFinite(minX)) return null;
+  minX -= padM; minY -= padM; maxX += padM; maxY += padM;
+  return [
+    toScreen(minX, minY, 0, cam), toScreen(maxX, minY, 0, cam),
+    toScreen(maxX, maxY, 0, cam), toScreen(minX, maxY, 0, cam),
+  ];
+}
+
 /** Draw a prepared scene to a 2D canvas context. */
 export function paint(ctx, faces, { ground = '#0d1219' } = {}) {
   const { width, height } = ctx.canvas;

@@ -6,7 +6,7 @@
 
 import {
   toWorld, toScreen, depthOf, buildingFaces, sceneFaces, fitCamera, boundsOf,
-  paletteFor, PITCH, STOREY_M, liftedHeight, heightMetres, LIFT_M,
+  paletteFor, PITCH, STOREY_M, liftedHeight, heightMetres, LIFT_M, frameOn, groundQuad,
 } from '../src/ui/isoart.js';
 import { heightMetresOf } from '../src/game/lots.js';
 
@@ -188,6 +188,66 @@ const lotOf = (levels, rev = false, kind = 'house') =>
   // A lot carrying a surveyed height must beat its own level count.
   ok(heightMetres({ heightM: 443.2, levels: 12 }) === 443.2,
     'and the lot field wins over levels, which is the Empire State case exactly');
+}
+
+
+// --- framing for a screen that is taller than it is wide --------------------
+//
+// Fitting a whole survey onto a phone is what made the prototype unusable
+// there: an isometric diamond is roughly 2:1 wide and a portrait phone is
+// roughly 1:2 tall, so the fit is decided by width and most of the screen ends
+// up empty with every building a few pixels across.
+{
+  const centre = { lat: origin.lat, lng: origin.lng };
+  for (const [w, h] of [[390, 755], [1440, 800], [768, 1024]]) {
+    const cam = frameOn(centre, origin, { width: w, height: h, metresAcross: 240 });
+    const at = toScreen(0, 0, 0, cam);
+    ok(Math.abs(at.sx - w / 2) < 0.001 && Math.abs(at.sy - h / 2) < 0.001,
+      `the centre lands in the middle at ${w}x${h}`);
+    const low = frameOn(centre, origin, { width: w, height: h, metresAcross: 240, groundAt: 0.62 });
+    const lowAt = toScreen(0, 0, 0, low);
+    ok(Math.abs(lowAt.sy - h * 0.62) < 0.001,
+      `and lower down when asked, so towers have room at ${w}x${h}`);
+    // 240m of ground across the short edge, whichever edge that is.
+    const across = Math.min(w, h) / cam.scale;
+    ok(Math.abs(across - 240) < 0.001, `and 240m spans the short edge at ${w}x${h}`);
+  }
+
+  // On a phone, framing has to be closer than fitting a whole district.
+  const lots = [];
+  for (let i = 0; i < 40; i++) {
+    lots.push({
+      id: 'x' + i, kind: 'rowhouse', levels: 2,
+      polygon: square().map((p) => ({
+        lat: p.lat + (i % 8) * 0.0004, lng: p.lng + Math.floor(i / 8) * 0.0004,
+      })),
+    });
+  }
+  const fitted = fitCamera(lots, origin, { width: 390, height: 755 });
+  const framed = frameOn(origin, origin, { width: 390, height: 755, metresAcross: 240 });
+  ok(framed.scale > fitted.scale * 2,
+    `and is much closer than the fit (${framed.scale.toFixed(2)} vs ${fitted.scale.toFixed(2)} px/m)`);
+}
+
+
+// --- the floor --------------------------------------------------------------
+{
+  const lots = [lotOf(2), {
+    id: 'b', kind: 'house', levels: 2,
+    polygon: square().map((p) => ({ lat: p.lat + 0.001, lng: p.lng + 0.001 })),
+  }];
+  const q = groundQuad(lots, origin, cam);
+  ok(q && q.length === 4, 'the ground is a quad');
+  const b = boundsOf([{ points: q }]);
+  const inner = boundsOf(sceneFaces(lots, origin, cam));
+  ok(b.minX < inner.minX && b.maxX > inner.maxX,
+    'and reaches past the buildings standing on it');
+  ok(groundQuad([], origin, cam) === null, 'and there is none when there is nothing');
+
+  // It has to turn with the city, or it stops being the same piece of ground.
+  const a0 = groundQuad(lots, origin, { ...cam, turn: 0 });
+  const a1 = groundQuad(lots, origin, { ...cam, turn: 1 });
+  ok(JSON.stringify(a0) !== JSON.stringify(a1), 'and turns with the camera');
 }
 
 print(fail ? `iso: ${fail} FAILED, ${pass} passed` : `iso: all ${pass} checks passed`);

@@ -247,6 +247,106 @@ function hairShape(style, hex) {
   }
 }
 
+/**
+ * The same head from behind.
+ *
+ * A back view is not a front view with the face deleted — a blank oval reads
+ * as a mistake. What is actually there is the two ears in silhouette at the
+ * sides, the occipital curve, and the shadow where the skull meets the neck,
+ * and those three things are enough to say "this person has turned round".
+ */
+function backOfHead(skin) {
+  return `<g>
+    <path d="M70 36 c-5 0 -8 4 -8 10 s3 11 8 12 z" fill="${skin.dark}" opacity=".85"/>
+    <path d="M130 36 c5 0 8 4 8 10 s-3 11 -8 12 z" fill="${skin.dark}" opacity=".85"/>
+    <path d="M76 16 c8 -6 30 -6 48 0 c-8 -3 -40 -3 -48 0 z" fill="#fff" opacity=".07"/>
+    <path d="M78 58 c6 12 14 18 22 18 s16 -6 22 -18 v6
+      c0 14 -9 24 -22 24 s-22 -10 -22 -24 z" fill="${skin.dark}" opacity=".3"/>
+    <path d="M84 70 h32 v14 h-32 z" fill="${skin.dark}" opacity=".35"/>
+  </g>`;
+}
+
+/**
+ * Hair from behind.
+ *
+ * Every style covers MORE from the back than the front — there is no hairline
+ * to stop at — and three of them (locs, braids, long) are mostly back: from
+ * the front they are a cap with a bit showing, from behind they are the whole
+ * head and half the shoulders. Drawing the front shape twice would have made
+ * those three read as bald from the back.
+ */
+function hairBackShape(style, hex) {
+  const dark = hex;
+  const skull = `M100 6 c20 0 32 14 32 34 c0 14 -5 26 -14 32 h-36
+    c-9 -6 -14 -18 -14 -32 c0 -20 12 -34 32 -34 z`;
+  const full = `<path d="${skull}" fill="${dark}"/>
+    <path d="M100 6 c15 0 25 8 29 20 c-7 -8 -17 -12 -29 -12 s-22 4 -29 12
+      c4 -12 14 -20 29 -20 z" fill="#fff" opacity=".13"/>
+    <path d="M${72} 60 c10 6 46 6 56 0" fill="none" stroke="#000"
+      stroke-width="3" opacity=".25"/>`;
+  switch (style) {
+    case 'bald': return '';
+    case 'buzz': return `<path d="${skull}" fill="${dark}" opacity=".6"/>`;
+    case 'short': return full;
+    case 'fade':
+      return `<path d="${skull}" fill="${dark}"/>
+        <path d="M70 46 h60 v26 h-60 z" fill="${dark}" opacity=".5"/>`;
+    case 'afro':
+      return `<ellipse cx="100" cy="34" rx="40" ry="34" fill="${dark}"/>
+        <ellipse cx="100" cy="22" rx="28" ry="16" fill="#fff" opacity=".12"/>
+        <path d="M66 52 c14 12 54 12 68 0" fill="none" stroke="#000"
+          stroke-width="3" opacity=".22"/>`;
+    case 'locs':
+      // Each loc needs a dark edge and its own length. Packed side by side at
+      // one length they merged into a black curtain with stripes in it.
+      return `${full}<g fill="${dark}" stroke="#000" stroke-opacity=".45" stroke-width="2.2">
+        <rect x="60" y="40" width="9" height="78" rx="4.5"/>
+        <rect x="75" y="46" width="9" height="96" rx="4.5"/>
+        <rect x="90" y="48" width="9" height="86" rx="4.5"/>
+        <rect x="105" y="48" width="9" height="100" rx="4.5"/>
+        <rect x="120" y="46" width="9" height="84" rx="4.5"/>
+        <rect x="132" y="40" width="9" height="94" rx="4.5"/>
+      </g>`;
+    case 'braids':
+      return `${full}<g stroke="#000" stroke-width="1.8" opacity=".35">
+          <path d="M78 10 v62"/><path d="M89 7 v65"/><path d="M100 6 v66"/>
+          <path d="M111 7 v65"/><path d="M122 10 v62"/>
+        </g>
+        <g fill="${dark}" stroke="#000" stroke-opacity=".45" stroke-width="2">
+          <rect x="69" y="62" width="9" height="56" rx="4"/>
+          <rect x="86" y="66" width="9" height="70" rx="4"/>
+          <rect x="105" y="66" width="9" height="62" rx="4"/>
+          <rect x="122" y="62" width="9" height="74" rx="4"/>
+        </g>`;
+    case 'long':
+      return `${full}<path d="M66 40 h68 c4 34 6 66 6 96 c0 10 -6 16 -18 16 h-44
+        c-12 0 -18 -6 -18 -16 c0 -30 2 -62 6 -96 z" fill="${dark}"/>
+        <path d="M100 42 v108" stroke="#000" stroke-width="2" opacity=".18"/>`;
+    case 'bun':
+      // From the front a bun is a bump above the head. From behind it is the
+      // single most recognisable thing about the whole hairstyle.
+      return `${full}<circle cx="100" cy="30" r="20" fill="${dark}"/>
+        <circle cx="100" cy="30" r="20" fill="#000" opacity=".16"/>
+        <circle cx="100" cy="24" r="11" fill="#fff" opacity=".07"/>`;
+    case 'cap':
+      return `<path d="${skull}" fill="${dark}"/>
+        <path d="M69 40 h62 v10 h-62 z" fill="${dark}"/>
+        <path d="M92 26 h16 v16 h-16 z" fill="#000" opacity=".3"/>`;
+    case 'durag':
+      return `<path d="${skull}" fill="${dark}"/>
+        <path d="M67 38 h66 v12 h-66 z" fill="${dark}"/>
+        <path d="M94 48 l-14 60 h12 l10 -54 l10 54 h12 l-14 -60 z" fill="${dark}" opacity=".9"/>`;
+    case 'beanie':
+      return `<path d="${skull}" fill="${dark}"/>
+        <path d="M66 36 h68 v16 h-68 z" fill="${dark}"/>
+        <path d="M66 36 h68 v16 h-68 z" fill="#fff" opacity=".08"/>
+        <g stroke="#000" stroke-width="1.4" opacity=".25">
+          <path d="M78 8 v28"/><path d="M100 6 v30"/><path d="M122 8 v28"/>
+        </g>`;
+    default: return '';
+  }
+}
+
 function facialShape(style, hex) {
   switch (style) {
     case 'none': return '';
@@ -294,7 +394,7 @@ function shade(hex, amount) {
   return `#${ch.map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
-function clothingShapes(def, hex, build) {
+function clothingShapes(def, hex, build, back = false) {
   const g = (id, extra = '') => {
     const part = BODY_ART[id];
     const tr = partTransform(part, build);
@@ -362,21 +462,40 @@ function clothingShapes(def, hex, build) {
   }
 
   if (def.hood) {
-    out.push(`<path d="M70 78 c8 10 20 15 30 15 s22 -5 30 -15
-      c6 4 9 10 9 18 v6 h-78 v-6 c0 -8 3 -14 9 -18 z" fill="${hex}"/>
-      <path d="M70 78 c8 10 20 15 30 15 s22 -5 30 -15 c3 2 5 4 7 7
-      c-9 9 -22 14 -37 14 s-28 -5 -37 -14 c2 -3 4 -5 7 -7 z" fill="#000" opacity=".22"/>`);
+    // From the front a hood is a collar round the neck. From behind it is the
+    // whole hood, lying down the back — which is most of what makes a hoodie
+    // recognisable as one from that side.
+    out.push(back
+      ? `<path d="M68 76 h64 c8 0 12 6 12 16 c0 34 -10 56 -44 56 s-44 -22 -44 -56
+           c0 -10 4 -16 12 -16 z" fill="${hex}"/>
+         <path d="M68 76 h64 c8 0 12 6 12 16 v4 h-88 v-4 c0 -10 4 -16 12 -16 z"
+           fill="#000" opacity=".2"/>
+         <path d="M100 92 v52" stroke="#000" stroke-width="2.5" opacity=".18"/>`
+      : `<path d="M70 78 c8 10 20 15 30 15 s22 -5 30 -15
+           c6 4 9 10 9 18 v6 h-78 v-6 c0 -8 3 -14 9 -18 z" fill="${hex}"/>
+         <path d="M70 78 c8 10 20 15 30 15 s22 -5 30 -15 c3 2 5 4 7 7
+           c-9 9 -22 14 -37 14 s-28 -5 -37 -14 c2 -3 4 -5 7 -7 z" fill="#000" opacity=".22"/>`);
   }
   if (def.collar) {
-    out.push(`<path d="M82 80 l18 14 l18 -14 l10 6 l-28 22 l-28 -22 z" fill="${hex}"/>
-      <path d="M82 80 l18 14 l18 -14 l10 6 l-28 22 l-28 -22 z" fill="#000" opacity=".18"/>`);
+    // A collar from behind is a plain band. The V is a front-only shape.
+    out.push(back
+      ? `<path d="M76 80 h48 v16 h-48 z" fill="${hex}"/>
+         <path d="M76 80 h48 v5 h-48 z" fill="#000" opacity=".2"/>`
+      : `<path d="M82 80 l18 14 l18 -14 l10 6 l-28 22 l-28 -22 z" fill="${hex}"/>
+         <path d="M82 80 l18 14 l18 -14 l10 6 l-28 22 l-28 -22 z" fill="#000" opacity=".18"/>`);
+  }
+  // A yoke seam across the shoulder blades. Every garment has one and from
+  // behind it is the only thing stopping the back reading as a blank slab.
+  if (back) {
+    out.push(`<path d="M54 112 c14 6 78 6 92 0" fill="none" stroke="#000"
+      stroke-width="2.5" opacity=".2"/>`);
   }
   if (def.quilted) {
     out.push(`<g stroke="#000" stroke-width="2" opacity=".22" fill="none">
       <path d="M54 104 h92"/><path d="M52 132 h96"/><path d="M52 160 h96"/><path d="M54 188 h92"/>
     </g>`);
   }
-  if (def.id === 'shirt') {
+  if (def.id === 'shirt' && !back) {
     out.push(`<g fill="#000" opacity=".3">
       <circle cx="100" cy="120" r="3"/><circle cx="100" cy="146" r="3"/>
       <circle cx="100" cy="172" r="3"/><circle cx="100" cy="198" r="3"/>
@@ -392,7 +511,8 @@ function clothingShapes(def, hex, build) {
  * armour, wound markers — so the character screen and the X-ray still share
  * one drawing.
  */
-export function figureFor(appearance, { overlay = () => '', lostParts = {} } = {}) {
+export function figureFor(appearance, { overlay = () => '', lostParts = {}, view = 'front' } = {}) {
+  const back = view === 'back';
   const a = normaliseAppearance(appearance);
   const build = BUILDS[a.build];
   const skin = SKINS[a.skin];
@@ -412,10 +532,10 @@ export function figureFor(appearance, { overlay = () => '', lostParts = {} } = {
 
   return `<g transform="translate(100 0) scale(1 ${build.height}) translate(-100 0)">
     ${body}
-    ${faceShapes(skin)}
-    ${clothingShapes(wearing, cloth.hex, build)}
-    ${hairShape(a.hair, hair.hex)}
-    ${facialShape(a.facial, hair.hex)}
+    ${back ? backOfHead(skin) : faceShapes(skin)}
+    ${clothingShapes(wearing, cloth.hex, build, back)}
+    ${back ? hairBackShape(a.hair, hair.hex) : hairShape(a.hair, hair.hex)}
+    ${back ? '' : facialShape(a.facial, hair.hex)}
     ${Object.keys(BODY_ART).map(overlay).join('')}
   </g>`;
 }
@@ -482,7 +602,9 @@ export const GEAR_PLACEMENT = {
  * together with the `box` and `ppi` it was authored with. Everything else
  * follows from those three.
  */
-export function placeGear(slot, body, { box, ppi, variant = null, build = null } = {}) {
+export function placeGear(slot, body, {
+  box, ppi, variant = null, build = null, view = 'front',
+} = {}) {
   const at = GEAR_PLACEMENT[variant ? `${slot}:${variant}` : slot] || GEAR_PLACEMENT[slot];
   if (!at || !body || !box || !ppi) return '';
 
@@ -502,7 +624,13 @@ export function placeGear(slot, body, { box, ppi, variant = null, build = null }
   const spin = at.rotate ? `translate(${px} ${py}) rotate(${at.rotate}) translate(${-px} ${-py})` : '';
   const y = at.pivot ? py - (box[3] * scale) / 2 - ay * scale : ty - ay * scale;
 
-  return `<g filter="url(#bfKit)"><g transform="${spin}
+  // Seen from behind, everything swaps sides: a hip holster, a slung rifle,
+  // the buckles on a carrier. One mirror about the midline does the lot and is
+  // physically what is happening — it is the same object, viewed from the other
+  // side — so nothing needs its own back-view placement numbers.
+  const flip = view === 'back' ? `translate(${FIGURE_W} 0) scale(-1 1) ` : '';
+
+  return `<g filter="url(#bfKit)"><g transform="${flip}${spin}
     translate(${(tx - ax * scale * spread).toFixed(2)} ${y.toFixed(2)})
     scale(${(scale * spread).toFixed(5)} ${scale.toFixed(5)})">${body}</g></g>`;
 }
@@ -514,14 +642,18 @@ export const ARMOUR_VARIANT = {
 };
 
 /** A sling, so a long gun is being carried rather than floating. */
-export function slingPath() {
-  return `<path d="M141 96 C136 150 124 206 104 252" fill="none" stroke="#1c1f19"
-    stroke-width="9" stroke-linecap="round" opacity=".85"/>`;
+export function slingPath(view = 'front') {
+  return view === 'back'
+    ? `<path d="M59 96 C64 150 76 206 96 252" fill="none" stroke="#1c1f19"
+        stroke-width="9" stroke-linecap="round" opacity=".85"/>`
+    : `<path d="M141 96 C136 150 124 206 104 252" fill="none" stroke="#1c1f19"
+        stroke-width="9" stroke-linecap="round" opacity=".85"/>`;
 }
 
 /** A holster, so a sidearm has something to sit in. */
-export function holsterPath() {
-  return `<path d="M140 232 h30 c5 0 8 3 8 8 v34 c0 6 -4 9 -10 9 h-26
+export function holsterPath(view = 'front') {
+  const flip = view === 'back' ? `<g transform="translate(${FIGURE_W} 0) scale(-1 1)">` : '<g>';
+  return `${flip}<path d="M140 232 h30 c5 0 8 3 8 8 v34 c0 6 -4 9 -10 9 h-26
     c-6 0 -10 -3 -10 -9 v-34 c0 -5 3 -8 8 -8 z" fill="#1c1f19" opacity=".9"/>
-    <path d="M138 244 h42 v7 h-42 z" fill="#0c0e0c" opacity=".7"/>`;
+    <path d="M138 244 h42 v7 h-42 z" fill="#0c0e0c" opacity=".7"/></g>`;
 }

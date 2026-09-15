@@ -178,6 +178,101 @@ function cummerbund(y, h = 68, { slots = true } = {}) {
 }
 
 /**
+ * The same vest from behind.
+ *
+ * Not the front drawing flipped. A carrier's back is a different object: the
+ * straps come over the shoulders and terminate on it rather than passing
+ * behind a panel, there is no neck opening, and there is a drag handle across
+ * the top — which is the single most recognisable thing on the back of one and
+ * appears nowhere on the front.
+ */
+function vestBackOf({ drop = 296, fill = 'url(#paCordura)', texture = 'url(#paWeave)' } = {}) {
+  const panel = `M70 100 h280 c20 0 30 10 30 30 v${drop}
+    c0 20 -12 32 -32 32 h-276 c-20 0 -32 -12 -32 -32 v-${drop} c0 -20 10 -30 30 -30 z`;
+  const strapEnd = (x, deg) =>
+    `<g transform="translate(${x} 60) rotate(${deg})">
+      <rect x="-27" y="-34" width="54" height="86" rx="16" fill="${fill}"/>
+      <rect x="-27" y="-34" width="54" height="86" rx="16" fill="${texture}"/>
+      <rect x="-24" y="18" width="48" height="12" rx="5" fill="#0c0e0c" opacity=".5"/>
+    </g>`;
+  return `${strapEnd(146, 21)}${strapEnd(274, -21)}
+    <path d="${panel}" fill="${fill}"/>
+    <path d="${panel}" fill="${texture}"/>
+    <path d="M70 100 h280 c20 0 30 10 30 30 v6 h-340 v-6 c0 -20 10 -30 30 -30 z"
+          fill="#9aa08b" opacity=".26"/>
+    <!-- the drag handle -->
+    <path d="M160 108 h100 c10 0 16 6 16 16 v10 c0 10 -6 16 -16 16 h-100
+             c-10 0 -16 -6 -16 -16 v-10 c0 -10 6 -16 16 -16 z" fill="#14160f"/>
+    <path d="M176 122 h68 v12 h-68 z" fill="#8d9382" opacity=".3"/>
+    <path d="M100 ${100 + drop / 2} h220" stroke="#0c0e0c" stroke-width="3" opacity=".3"/>`;
+}
+
+/** A plate carrier from behind: same idea, narrower panel. */
+function carrierBackOf({ drop = 196, fill = 'url(#paCordura)', texture = 'url(#paWeave)' } = {}) {
+  const panel = `M96 104 h228 c18 0 27 9 27 27 v${drop}
+    c0 18 -11 29 -29 29 h-224 c-18 0 -29 -11 -29 -29 v-${drop} c0 -18 9 -27 27 -27 z`;
+  const strapEnd = (x, deg) =>
+    `<g transform="translate(${x} 62) rotate(${deg})">
+      <rect x="-24" y="-32" width="48" height="80" rx="15" fill="${fill}"/>
+      <rect x="-24" y="-32" width="48" height="80" rx="15" fill="${texture}"/>
+      <rect x="-21" y="16" width="42" height="11" rx="5" fill="#0c0e0c" opacity=".5"/>
+    </g>`;
+  return `${strapEnd(160, 19)}${strapEnd(260, -19)}
+    <path d="${panel}" fill="${fill}"/>
+    <path d="${panel}" fill="${texture}"/>
+    <path d="M96 104 h228 c18 0 27 9 27 27 v6 h-282 v-6 c0 -18 9 -27 27 -27 z"
+          fill="#9aa08b" opacity=".26"/>
+    <path d="M172 110 h76 c10 0 16 6 16 15 v9 c0 9 -6 15 -16 15 h-76
+             c-10 0 -16 -6 -16 -15 v-9 c0 -9 6 -15 16 -15 z" fill="#14160f"/>
+    <path d="M186 122 h48 v11 h-48 z" fill="#8d9382" opacity=".3"/>`;
+}
+
+/**
+ * A hard plate from behind: the BACKER, not the strike face.
+ *
+ * Every plate in the game is a strike face bonded to a polyethylene backer,
+ * and the backer is plain — no grit, no ceramic, no rating stencil, just the
+ * spall liner and a label. Showing the strike face on both sides would say the
+ * plate is the same object either way up, which is the one thing it is not.
+ */
+function plateBackOf(w = 300, h = 360) {
+  return `<path d="${sapi(w, h)}" fill="url(#paPoly)"/>
+    <path d="${sapi(w, h)}" fill="#3b3626" opacity=".28"/>
+    <path d="M${w * 0.26} 0 h${w - w * 0.52} l${w * 0.26} ${h * 0.19} v8
+             l-${w * 0.28} -${h * 0.19} h-${w * 0.44} l-${w * 0.28} ${h * 0.19} v-8 z"
+          fill="#000" opacity=".22"/>
+    <!-- the label every backer carries: side, size, lot -->
+    <path d="M${w * 0.22} ${h * 0.42} h${w * 0.56} v${h * 0.2} h-${w * 0.56} z"
+          fill="#cfc6a6" opacity=".55"/>
+    <g fill="#2b2619" opacity=".5">
+      <rect x="${w * 0.27}" y="${h * 0.47}" width="${w * 0.3}" height="${h * 0.035}"/>
+      <rect x="${w * 0.27}" y="${h * 0.53}" width="${w * 0.18}" height="${h * 0.035}"/>
+    </g>
+    <path d="M0 ${h - 16} h${w} v6 a10 10 0 0 1 -10 10 h-${w - 20} a10 10 0 0 1 -10 -10 z"
+          fill="#15181c"/>`;
+}
+
+/** A helmet from behind: the occipital pad and the retention dial. */
+function helmetBackOf({ earDrop = 34 } = {}) {
+  return `<path d="M28 132 C28 62 90 18 168 18 s140 44 140 114
+             v22 c0 10 -7 17 -17 17 h-26 l-14 ${earDrop} h-126 l-14 -${earDrop} h-26
+             c-10 0 -17 -7 -17 -17 z" fill="url(#paAramid)"/>
+    <path d="M28 132 C28 62 90 18 168 18 s140 44 140 114 v6
+             c0 -68 -62 -110 -140 -110 s-140 42 -140 110 z" fill="#b5a884" opacity=".28"/>
+    <path d="M28 132 C28 62 90 18 168 18 s140 44 140 114
+             v22 c0 10 -7 17 -17 17 h-26 l-14 ${earDrop} h-126 l-14 -${earDrop} h-26
+             c-10 0 -17 -7 -17 -17 z" fill="url(#paWeave)"/>
+    <!-- the retention dial, dead centre at the back of every modern shell -->
+    <circle cx="168" cy="140" r="28" fill="#14160f"/>
+    <circle cx="168" cy="140" r="18" fill="#3f3c31"/>
+    <circle cx="168" cy="140" r="7" fill="#8d9382" opacity=".5"/>
+    <path d="M62 128 h212 v14 h-212 z" fill="#0c0e0c" opacity=".35"/>
+    <!-- and the counterweight pouch, which only exists on the back -->
+    <path d="M118 62 h100 c10 0 16 6 16 16 v28 h-132 v-28 c0 -10 6 -16 16 -16 z"
+          fill="#2b2619" opacity=".8"/>`;
+}
+
+/**
  * A SAPI shooter's-cut plate: square at the bottom, top corners angled away so
  * it clears the shoulder. Every hard plate in the game is this outline.
  */
@@ -213,6 +308,13 @@ export const ARMOUR_DETAIL = {
   weaver: {
     box: [4, 8, 402, 434],
     ppi: 19,
+    back: `
+      ${vestBackOf({ fill: 'url(#paAramid)' })}
+      <g stroke="#332d1e" stroke-width="2.6" opacity=".3" fill="none">
+        <path d="M76 190 h268"/><path d="M74 236 h272"/><path d="M74 282 h272"/>
+        <path d="M74 328 h272"/><path d="M76 374 h268"/>
+      </g>
+    `,
     body: `
       ${vest({ fill: 'url(#paAramid)' })}
       <!-- quilting: the rows of stitching holding the panels together -->
@@ -236,6 +338,11 @@ export const ARMOUR_DETAIL = {
   mailliner: {
     box: [4, 8, 402, 320],
     ppi: 19,
+    back: `
+      ${vestBackOf({ drop: 182, fill: 'url(#paPlateSteel)', texture: 'url(#paMail)' })}
+      <path d="M74 158 h252 v24 h-252 z" fill="url(#paCordura)"/>
+      <path d="M72 282 h256 v28 h-256 z" fill="url(#paCordura)"/>
+    `,
     body: `
       ${vest({ drop: 182, fill: 'url(#paPlateSteel)', texture: 'url(#paMail)' })}
       <!-- fabric binding top and bottom, where mail against skin would chafe -->
@@ -253,6 +360,10 @@ export const ARMOUR_DETAIL = {
   shadow: {
     box: [26, 8, 358, 274],
     ppi: 19,
+    back: `
+      ${vestBackOf({ drop: 134, fill: 'url(#paAramidLt)' })}
+      <path d="M210 158 v110" stroke="#332d1e" stroke-width="3" opacity=".38" fill="none"/>
+    `,
     body: `
       ${vest({ drop: 134, fill: 'url(#paAramidLt)' })}
       <!-- one seam down the middle: a single front panel and nothing else -->
@@ -272,6 +383,13 @@ export const ARMOUR_DETAIL = {
   dayshift: {
     box: [4, 8, 402, 434],
     ppi: 19,
+    back: `
+      ${vestBackOf({ fill: 'url(#paCordura)' })}
+      <!-- the loop field across the back, where the big tape goes -->
+      <path d="M96 232 h228 v72 h-228 z" fill="#14160f" opacity=".8"/>
+      <path d="M110 250 h200 v36 h-200 z" fill="#3b3f35" opacity=".7"/>
+      ${cummerbund(344, 62)}
+    `,
     body: `
       ${vest({ fill: 'url(#paCordura)' })}
       <!-- loop panels for a name tape and a badge tab -->
@@ -295,6 +413,11 @@ export const ARMOUR_DETAIL = {
   slick: {
     box: [40, 8, 330, 338],
     ppi: 22,
+    back: `
+      ${carrierBackOf({ fill: 'url(#paCordura)' })}
+      <path d="M112 162 h196 v152 h-196 z" fill="none" stroke="#0c0e0c"
+            stroke-width="3.5" opacity=".55"/>
+    `,
     body: `
       ${carrier({ fill: 'url(#paCordura)' })}
       <!-- the plate pocket, stitched as an outline and nothing else -->
@@ -317,6 +440,11 @@ export const ARMOUR_DETAIL = {
   rigger: {
     box: [4, 8, 402, 366],
     ppi: 22,
+    back: `
+      ${carrierBackOf({ drop: 160, fill: 'url(#paCorduraLt)' })}
+      ${laserGrid(112, 176, 196, 108, 4, 4)}
+      ${cummerbund(300, 58)}
+    `,
     body: `
       ${carrier({ drop: 160, fill: 'url(#paCorduraLt)' })}
       <!-- shoulder buckles with pull tabs, the quick-release everyone fits -->
@@ -352,6 +480,15 @@ export const ARMOUR_DETAIL = {
   patrol: {
     box: [4, 8, 402, 434],
     ppi: 19,
+    back: `
+      ${vestBackOf({ fill: 'url(#paCordura)' })}
+      <!-- the big reflective band across the back. On a duty vest this is the
+           side people actually see, and it is bigger than anything on the front -->
+      <path d="M84 216 h252 v72 h-252 z" fill="#14160f"/>
+      <path d="M96 232 h228 v42 h-228 z" fill="#b9c3cc" opacity=".4"/>
+      ${laserGrid(84, 308, 252, 44, 5, 2)}
+      ${cummerbund(344, 62)}
+    `,
     body: `
       ${vest({ fill: 'url(#paCordura)' })}
       <!-- reflective name tape across the chest -->
@@ -369,6 +506,13 @@ export const ARMOUR_DETAIL = {
   sheerweb: {
     box: [26, 8, 358, 340],
     ppi: 19,
+    back: `
+      ${vestBackOf({ drop: 198, fill: 'url(#paPoly)', texture: 'none' })}
+      <g fill="none" stroke="#4e4a3c" stroke-width="2" opacity=".3">
+        <path d="M74 190 h272"/><path d="M72 226 h276"/><path d="M72 262 h276"/>
+        <path d="M74 298 h272"/>
+      </g>
+    `,
     body: `
       ${vest({ drop: 198, fill: 'url(#paPoly)', texture: 'none' })}
       <!-- unidirectional laminate: layers laid crossways over each other -->
@@ -394,6 +538,11 @@ export const ARMOUR_DETAIL = {
   highcut: {
     box: [10, -6, 320, 260],
     ppi: 30,
+    back: `
+      ${helmetBackOf({ earDrop: 22 })}
+      <path d="M26 108 h20 v56 h-20 z" fill="#141612"/>
+      <path d="M290 108 h20 v56 h-20 z" fill="#141612"/>
+    `,
     body: `
       <path d="M28 132 C28 62 90 18 168 18 s140 44 140 114
                v22 c0 10 -7 17 -17 17 h-26 l-14 34 h-126 l-14 -34 h-26
@@ -430,6 +579,9 @@ export const ARMOUR_DETAIL = {
   fullcut: {
     box: [10, -6, 320, 268],
     ppi: 30,
+    back: `
+      ${helmetBackOf({ earDrop: 62 })}
+    `,
     body: `
       <path d="M24 138 C24 62 88 16 168 16 s144 46 144 122
                v34 c0 12 -8 20 -20 20 h-28 l-16 30 h-120 l-16 -30 h-28
@@ -462,6 +614,9 @@ export const ARMOUR_DETAIL = {
   hardline: {
     box: [-14, -14, 328, 388],
     ppi: 30,
+    back: `
+      ${plateBackOf(300, 360)}
+    `,
     body: `
       <path d="${sapi(300, 360)}" fill="url(#paPlateSteel)"/>
       <path d="${sapi(300, 360)}" fill="url(#paGrit)"/>
@@ -487,6 +642,9 @@ export const ARMOUR_DETAIL = {
   polyplate: {
     box: [-14, -14, 328, 396],
     ppi: 30,
+    back: `
+      ${plateBackOf(300, 360)}
+    `,
     body: `
       <path d="${sapi(300, 360)}" fill="url(#paPoly)"/>
       <path d="M78 0 h144 l78 68 v10 l-84 -70 h-132 l-84 70 v-10 z"
@@ -515,6 +673,9 @@ export const ARMOUR_DETAIL = {
   carbide: {
     box: [-14, -14, 328, 392],
     ppi: 30,
+    back: `
+      ${plateBackOf(300, 360)}
+    `,
     body: `
       <!-- the backer, which is the part that actually catches the fragments -->
       <path d="${sapi(300, 360)}" fill="url(#paPoly)"/>
@@ -548,6 +709,9 @@ export const ARMOUR_DETAIL = {
   boronlite: {
     box: [-14, -14, 328, 386],
     ppi: 30,
+    back: `
+      ${plateBackOf(300, 352)}
+    `,
     body: `
       <path d="${sapi(300, 352)}" fill="url(#paPoly)"/>
       <path d="M0 338 h300 v4 a10 10 0 0 1 -10 10 h-280 a10 10 0 0 1 -10 -10 z"
@@ -577,6 +741,18 @@ export const ARMOUR_DETAIL = {
   minishield: {
     box: [-16, -16, 304, 424],
     ppi: 20,
+    back: `
+      <!-- the face of it: no handle, no bracket, just armour and glass -->
+      <path d="M0 20 c0 -12 8 -20 20 -20 h232 c12 0 20 8 20 20 v352
+               c0 12 -8 20 -20 20 h-232 c-12 0 -20 -8 -20 -20 z" fill="url(#paCordura)"/>
+      <path d="M0 20 c0 -12 8 -20 20 -20 h232 c12 0 20 8 20 20 v8 h-272 z"
+            fill="#8d9382" opacity=".3"/>
+      <path d="M44 44 h184 v96 h-184 z" fill="#141612"/>
+      <path d="M52 52 h168 v80 h-168 z" fill="url(#paGlass)"/>
+      <path d="M60 58 l52 0 -58 62 v-56 z" fill="#cfe3f2" opacity=".2"/>
+      <path d="M40 200 h192 v10 h-192 z" fill="#0c0e0c" opacity=".4"/>
+      <path d="M40 300 h192 v10 h-192 z" fill="#0c0e0c" opacity=".4"/>
+    `,
     body: `
       <path d="M0 20 c0 -12 8 -20 20 -20 h232 c12 0 20 8 20 20 v352
                c0 12 -8 20 -20 20 h-232 c-12 0 -20 -8 -20 -20 z"
@@ -609,6 +785,21 @@ export const ARMOUR_DETAIL = {
   barricade: {
     box: [-18, -18, 340, 660],
     ppi: 13,
+    back: `
+      <path d="M0 26 c0 -14 10 -24 24 -24 h256 c14 0 24 10 24 24 v574
+               c0 14 -10 24 -24 24 h-256 c-14 0 -24 -10 -24 -24 z"
+            fill="url(#paPlateSteel)"/>
+      <path d="M0 26 c0 -14 10 -24 24 -24 h256 c14 0 24 10 24 24 v10 h-304 z"
+            fill="#c3ccd6" opacity=".22"/>
+      <path d="M52 60 h200 v110 h-200 z" fill="#141612"/>
+      <path d="M62 70 h180 v90 h-180 z" fill="url(#paGlass)"/>
+      <path d="M72 78 l60 0 -66 70 v-62 z" fill="#cfe3f2" opacity=".18"/>
+      <g fill="#0c0e0c" opacity=".35">
+        <rect x="40" y="220" width="224" height="12"/>
+        <rect x="40" y="340" width="224" height="12"/>
+        <rect x="40" y="460" width="224" height="12"/>
+      </g>
+    `,
     body: `
       <path d="M0 26 c0 -14 10 -24 24 -24 h256 c14 0 24 10 24 24 v574
                c0 14 -10 24 -24 24 h-256 c-14 0 -24 -10 -24 -24 z"

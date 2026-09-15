@@ -431,6 +431,7 @@ export class GameUI {
       case 'harvest': g.harvestCasualty(id); break;
       case 'sell-organs': g.sellOrgans(); break;
       case 'snatch': g.snatchSomebody(id); break;
+      case 'figure-view': this.figureView = type; this.render(); break;
       case 'take-part': {
         // Nothing here should happen because a thumb landed in the wrong
         // place. A part they have no spare of asks once, in place, and only
@@ -906,6 +907,11 @@ export class GameUI {
     // covers, a long gun is slung across the front and a sidearm sits in a
     // holster on the hip — so what you equipped is what you can see, rather
     // than a coloured tint standing in for it.
+    // Front or back. A carrier's back panel, the drag handle, the retention
+    // dial on a helmet and a rifle slung across your shoulders are all on the
+    // side you could never see, which is the whole reason this toggle exists.
+    const view = this.figureView === 'back' ? 'back' : 'front';
+
     const gearFor = (slotId) => {
       const piece = worn[slotId];
       if (!piece || !piece.modelId) return '';
@@ -914,25 +920,34 @@ export class GameUI {
         if (!d) return '';
         const model = ARMOUR_MODELS[piece.modelId];
         const variant = ARMOUR_VARIANT[model ? model.category : ''] || null;
-        return placeGear(slotId, d.body, { box: d.box, ppi: d.ppi, variant, build });
+        // Fall back to the front drawing rather than vanishing, so a pattern
+        // that has not been drawn from behind yet is still visibly worn.
+        const art = (view === 'back' && d.back) || d.body;
+        return placeGear(slotId, art, { box: d.box, ppi: d.ppi, variant, build, view });
       }
       const g = GUN_DETAIL[piece.modelId];
       if (!g) return '';
-      return placeGear(slotId, g.body, { box: g.box, ppi: g.ppi, build });
+      return placeGear(slotId, g.body, { box: g.box, ppi: g.ppi, build, view });
     };
 
     const fig = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
       width="172" height="${Math.round(172 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
       ${sharedBodyDefs()}
-      ${figureFor(ch.appearance, { overlay, lostParts })}
-      ${worn.sidearm ? holsterPath() : ''}
+      ${figureFor(ch.appearance, { overlay, lostParts, view })}
+      ${worn.sidearm ? holsterPath(view) : ''}
       ${gearFor('torso')}
       ${gearFor('head')}
-      ${worn.primary ? slingPath() : ''}
+      ${worn.primary ? slingPath(view) : ''}
       ${gearFor('primary')}
       ${gearFor('sidearm')}
       ${gearFor('offhand')}
-    </svg>`;
+    </svg>
+    <div class="viewswitch">
+      <button class="chip ${view === 'front' ? 'chip--good' : ''}"
+        data-action="figure-view" data-type="front">Front</button>
+      <button class="chip ${view === 'back' ? 'chip--good' : ''}"
+        data-action="figure-view" data-type="back">Back</button>
+    </div>`;
 
     const slots = SLOT_IDS.map((id) => {
       const slot = SLOTS[id];

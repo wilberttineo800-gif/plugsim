@@ -9,15 +9,19 @@ import { GUN_DETAIL, DETAIL_DEFS } from '../src/ui/gunart-detail.js';
 import { appearanceFrom, BUILDS } from '../src/game/appearance.js';
 import { ARMOUR_MODELS } from '../src/game/armour.js';
 
+// `jsc -m tools/kitsheet.js 1 3 back` renders the same figures from behind.
+const VIEW = (typeof arguments !== 'undefined' && arguments[2]) === 'back' ? 'back' : 'front';
+
 const armour = (id, slot, build) => {
   const d = ARMOUR_DETAIL[id];
   if (!d) return '';
   const variant = ARMOUR_VARIANT[(ARMOUR_MODELS[id] || {}).category] || null;
-  return placeGear(slot, d.body, { box: d.box, ppi: d.ppi, variant, build });
+  const art = (VIEW === 'back' && d.back) || d.body;
+  return placeGear(slot, art, { box: d.box, ppi: d.ppi, variant, build, view: VIEW });
 };
 const gun = (id, slot) => {
   const g = GUN_DETAIL[id];
-  return g ? placeGear(slot, g.body, { box: g.box, ppi: g.ppi }) : '';
+  return g ? placeGear(slot, g.body, { box: g.box, ppi: g.ppi, view: VIEW }) : '';
 };
 
 const SETS = [
@@ -42,11 +46,11 @@ const cells = SHOW.map((s, i) => {
   return `<g transform="translate(${i * CW} 0)">
     <rect width="${CW}" height="${CH}" fill="${i % 2 ? '#121721' : '#0f141c'}"/>
     <g transform="translate(${PAD} ${PAD})">
-      ${figureFor(look)}
-      ${s.sidearm ? holsterPath() : ''}
+      ${figureFor(look, { view: VIEW })}
+      ${s.sidearm ? holsterPath(VIEW) : ''}
       ${s.torso ? armour(s.torso, 'torso', build) : ''}
       ${s.head ? armour(s.head, 'head', build) : ''}
-      ${s.primary ? slingPath() : ''}
+      ${s.primary ? slingPath(VIEW) : ''}
       ${s.primary ? gun(s.primary, 'primary') : ''}
       ${s.sidearm ? gun(s.sidearm, 'sidearm') : ''}
       ${s.offhand ? armour(s.offhand, 'offhand', build) : ''}

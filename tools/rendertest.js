@@ -134,6 +134,16 @@ const cases = [
     A.equipGear(state, 'head', kept.find((p) => p.classId === 'helmet').id);
     return ui.tabCharacter();
   }],
+  // The same character, turned round. Everything on the back — the drag
+  // handle, the plate's backer, the retention dial, a slung rifle — is drawn
+  // from a different set of art, so it is a second panel's worth of
+  // interpolation and needs its own pass.
+  ['tabCharacter (back view)', () => {
+    ui.figureView = 'back';
+    const html = ui.tabCharacter();
+    ui.figureView = 'front';
+    return html;
+  }],
   ['tabXray (shot up)', () => {
     A.takeFire(state, { rounds: 5, threat: 0.8 });
     // Push it forward far enough for the infection clock to have run.

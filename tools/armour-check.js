@@ -100,4 +100,22 @@ ok(nij.maxHeatToApply > ffl.maxHeatToApply, 'and a lab cares less about your rec
 ok(ARMOUR_CLASSES.shield.requiresLicence === 'leSupply',
   'shields need the supply contract, because nobody else buys one');
 
+
+// --- Both sides of every piece ----------------------------------------------
+//
+// The character screen turns round now. A pattern with no back drawing falls
+// back to its front one, which is not broken but IS a lie — you would be
+// looking at a plate's strike face from behind it. So every pattern gets a
+// back, and this is what stops the next one added from quietly missing it.
+{
+  const missing = ARMOUR_DETAIL_IDS.filter((id) => !ARMOUR_DETAIL[id].back);
+  ok(missing.length === 0, `every pattern is drawn from behind${
+    missing.length ? ': missing ' + missing.join(', ') : ` (all ${ARMOUR_DETAIL_IDS.length})`}`);
+
+  // And the back is its own drawing, not the front one under a new name.
+  const same = ARMOUR_DETAIL_IDS.filter((id) => ARMOUR_DETAIL[id].back === ARMOUR_DETAIL[id].body);
+  ok(same.length === 0, `and none of them just reuses the front${
+    same.length ? ': ' + same.join(', ') : ''}`);
+}
+
 print(fail ? `armour: ${fail} FAILED, ${pass} passed` : `armour: all ${pass} checks passed`);

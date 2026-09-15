@@ -199,6 +199,15 @@ const cases = [
     ch.body.installed = {};
     return html;
   }],
+  // Once it has been put to you, the Market tab has to name the building.
+  // Before, discovery led to a screen with nothing on it at all.
+  ['tabMarket (offered, nowhere to do it)', () => {
+    A.offerTheOtherThing(state);
+    const html = ui.tabMarket();
+    if (!/Mortuary/.test(html)) throw new Error('no building named after discovery');
+    if (!/Back Clinic/.test(html)) throw new Error('only one of the two named');
+    return html;
+  }],
   ['buildingPanel armour line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],
   ['buildingPanel firearms line', () => ui.buildingPanel(

@@ -52,7 +52,7 @@ import {
 } from '../game/organs.js';
 import { PARTS, PART_KINDS, wholeBodyValue } from '../game/anatomy.js';
 import {
-  hasClinic, casualtiesOf, docOf, fitmentsFor, STREET_DOC,
+  hasClinic, casualtiesOf, docOf, fitmentsFor, STREET_DOC, isDiscovered,
   TREATMENT, TREATMENT_IDS, treatmentPrice, treatmentRisk, reportableWounds,
   hushCost, livesLeft, nextLifeCost,
 } from '../game/actions.js';
@@ -1298,11 +1298,47 @@ export class GameUI {
    * — not "harvest for $86,000" but "they will drink more water" against "that
    * was the one there was no spare of".
    */
+  /**
+   * What to build, once somebody has put it to you.
+   *
+   * The offer is one oblique line in the log and that is deliberate. What was
+   * NOT deliberate is that after it, nothing anywhere named the building — so
+   * a player who had been told the trade exists still had no way to act on it
+   * and the whole thread dead-ended. Discovery stays hidden; what you do with
+   * it does not have to be.
+   */
+  clinicPointer() {
+    const s = this.game.state;
+    if (!isDiscovered(s, 'back_clinic') || hasClinic(s)) return '';
+    const rows = ['morgue', 'back_clinic'].map((id) => {
+      const def = BUILDINGS[id];
+      const gate = unlockStatus(s, id);
+      return `<div class="row">
+        <span>${esc(def.name)}${def.needsLicence
+          ? `<br><span style="color:var(--text-dim)">needs a ${
+              esc(LICENCES[def.needsLicence].short)} licence</span>` : ''}</span>
+        <span class="${gate && gate.locked ? 'warn' : 'good'}" style="text-align:right">
+          ${gate && gate.locked ? esc(gate.reason) : `${moneyShort(def.cost)} to fit out`}
+          <br><span style="color:var(--text-dim)">holds ${def.holds}${
+            def.coldStorage ? ', cold' : ', no cold room'}</span></span>
+      </div>`;
+    }).join('');
+    return `<div class="sect">
+      <div class="sect__title"><span>Somewhere to do it</span></div>
+      <p class="card__blurb" style="margin:0 0 8px">
+        Nothing here works without a room for it. Either of these is one — the
+        licensed one is cheaper to reach and keeps things cold, the other asks
+        no questions and does not.
+      </p>
+      ${rows}
+    </div>`;
+  }
+
   captiveBlock() {
     const s = this.game.state;
     const held = captivesOf(s);
     const room = holdingCapacity(s);
-    if (!room && !held.length) return '';
+    if (!room && !held.length) return this.clinicPointer();
     const atHour = Math.floor((s.minutes || 0) / 60);
 
     const cards = held.map((c) => {

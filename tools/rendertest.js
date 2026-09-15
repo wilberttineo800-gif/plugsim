@@ -161,6 +161,20 @@ const cases = [
     if (!/Funeral/.test(html)) throw new Error('funeral home not offered');
     return html;
   }],
+  // Back view with a limb gone. Amputation is "don't draw that part", and the
+  // back view draws the same parts — so if the two ever stop agreeing, it
+  // shows here and nowhere else.
+  ['tabCharacter (back, limb lost)', () => {
+    const ch = require_character();
+    ch.body.parts.armL.lost = true;
+    ui.figureView = 'back';
+    const html = ui.tabCharacter();
+    ui.figureView = 'front';
+    const front = ui.tabCharacter();
+    ch.body.parts.armL.lost = false;
+    if (html === front) throw new Error('back view is identical to the front');
+    return html;
+  }],
   ['buildingPanel armour line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],
   ['buildingPanel firearms line', () => ui.buildingPanel(

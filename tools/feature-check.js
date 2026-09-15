@@ -149,9 +149,16 @@
     const offered = Array.from(
       document.querySelectorAll('#railBody [data-action="develop"][data-id="' + freePark.id + '"]')
     ).map((b) => b.dataset.type);
-    ok('a car park only offers a depot',
-      offered.length === 1 && offered[0] === 'depot',
-      'offers: ' + (offered.join(', ') || 'nothing'));
+    // Everything offered here has to be something that NEEDS a car park, and
+    // nothing else. Asserting the literal list went stale the day a second
+    // parking-only building (the haulage yard) was added.
+    const parkingOnly = Object.values(window.__plugsimBuildings || {})
+      .filter((d) => d.requiresKind === 'parking').map((d) => d.id);
+    const wrong = offered.filter((id) => !parkingOnly.includes(id));
+    ok('a car park only offers what needs a car park',
+      offered.length > 0 && wrong.length === 0,
+      wrong.length ? 'also offers ' + wrong.join(', ')
+        : 'offers: ' + (offered.join(', ') || 'nothing'));
 
     g.developLot(freePark.id, 'grow_house');
     ok('premises are refused on a car park',

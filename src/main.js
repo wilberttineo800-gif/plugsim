@@ -550,6 +550,9 @@ import('./game/incidents.js').then((m) => { window.__plugsimIncidents = m; }).ca
 // Exposed for the browser check, which has to be able to put a round into a
 // body and wind the clock on without waiting for a turf war to go wrong.
 import('./game/health.js').then((m) => { window.__plugsimHealth = m; }).catch(() => {});
+// Same reason: the check asserts things about the building table itself rather
+// than about a hard-coded list of ids, which is what went stale last time.
+import('./game/constants.js').then((m) => { window.__plugsimBuildings = m.BUILDINGS; }).catch(() => {});
 
 game.sellItemTo = (itemId, playerId) => {
   diag.trace('sell item to operation');

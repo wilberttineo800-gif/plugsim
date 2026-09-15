@@ -1559,7 +1559,26 @@ function settleDay(state) {
   } else {
     state.unpaid = false;
     state.arrears = 0;
+    relight(state);
     logEvent(state, `Day settled — $${total.toLocaleString()} out for upkeep and payroll.`, 'info');
+  }
+}
+
+/**
+ * Turn back on what running out of money turned off.
+ *
+ * Without this, going broke once was permanent in a way nothing said out loud:
+ * the sites went dark and stayed dark through any recovery, so a 3500-day run
+ * sat at 73 properties and zero production for its last fifteen hundred days,
+ * and a player would have had to work out for themselves that every building
+ * needed switching on by hand. The game shut them; the game reopens them.
+ */
+function relight(state) {
+  for (const b of state.buildings || []) {
+    if (!b.darkByArrears) continue;
+    b.active = true;
+    b.darkByArrears = false;
+    logEvent(state, `${b.name} is running again.`, 'good');
   }
 }
 
@@ -1593,7 +1612,12 @@ function collectArrears(state) {
   if (lit.length > 1) {
     const dark = lit[lit.length - 1];
     dark.active = false;
-    logEvent(state, `${dark.name} is dark — nothing left to run it on.`, 'bad');
+    // Marked, so squaring the books turns it back on. A site the PLAYER shut
+    // has no such flag and stays shut — the game may undo what the game did,
+    // and nothing else.
+    dark.darkByArrears = true;
+    logEvent(state, `${dark.name} is dark — nothing left to run it on. It comes `
+      + 'back when the books are square.', 'bad');
     return;
   }
   // Last resort: something gets sold to whoever will take it.

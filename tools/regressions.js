@@ -2140,3 +2140,44 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
+
+// Going broke must not be permanent in a way nothing says out loud.
+//
+// It was. Arrears shut sites down and nothing ever turned them back on, so a
+// 3500-day run sat at 73 properties and ZERO production for its last fifteen
+// hundred days — the debt stopped growing only because nothing was running,
+// and a player would have had to work out on their own that every building
+// needed switching back on by hand.
+{
+  const ds = generateDistricts({ lat: 42.33, lng: -83.04 }, []);
+  const cs = generateCrews(ds, { lat: 42.33, lng: -83.04 });
+  applyInitialControl(ds, cs);
+  const st = createState({
+    origin: { lat: 42.33, lng: -83.04 }, cityName: 'D',
+    districts: ds, crews: cs, lots: syntheticLots(ds),
+  });
+  st.adminUnlockAll = true;
+  st.cash.clean = 40000000;
+  for (const type of ['grow_house', 'lab', 'stash', 'fungi_room']) {
+    const lot = cheapestLotFor(st, BUILDINGS[type]);
+    if (lot) { A.buyLot(st, lot.id); A.developLot(st, lot.id, type); }
+  }
+  // One the player deliberately shut. It must stay shut.
+  const mine = st.buildings[0];
+  A.toggleBuilding(st, mine.id);
+
+  st.cash.clean = 0; st.cash.dirty = 0;
+  const lit0 = st.buildings.filter((b) => b.active).length;
+  for (let d = 0; d < 80; d++) stepSim(st, DAY);
+  const wentDark = st.buildings.filter((b) => b.darkByArrears).length;
+  check('running out of money puts sites out', wentDark > 0, wentDark + ' dark');
+
+  st.cash.clean = 80000000;
+  stepSim(st, DAY);
+  check('and squaring the books brings them back',
+    st.buildings.filter((b) => b.darkByArrears).length === 0,
+    st.buildings.filter((b) => b.active).length + ' of ' + st.buildings.length + ' running');
+  check('but one you shut yourself stays shut', mine.active === false);
+}
+
+print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

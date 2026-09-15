@@ -151,9 +151,12 @@ export function buildingFaces(lot, origin, cam, tint = {}) {
   const poly = lot.polygon;
   if (!poly || poly.length < 3) return [];
   const pal = paletteFor(lot.kind, tint);
+  // `cam.lift === false` draws true heights, which is the only honest way to
+  // check whether the lift is doing anything you would not want it to.
+  const real = heightMetres(lot);
   const h = lot.kind === 'parking'
-    ? Math.max(3, heightMetres(lot) * 0.3)
-    : liftedHeight(heightMetres(lot));
+    ? Math.max(3, real * 0.3)
+    : (cam.lift === false ? real : liftedHeight(real));
 
   const pts = poly.map((p) => toWorld(p, origin));
   const ground = pts.map((p) => toScreen(p.x, p.y, 0, cam));
@@ -191,6 +194,7 @@ export function buildingFaces(lot, origin, cam, tint = {}) {
       fill: steep ? pal.b : pal.a,
       depth: depthOf((a.x + b.x) / 2, (a.y + b.y) / 2, cam),
       kind: 'wall',
+      lot,
     });
     sum += depthOf((a.x + b.x) / 2, (a.y + b.y) / 2, cam);
   }
@@ -201,6 +205,9 @@ export function buildingFaces(lot, origin, cam, tint = {}) {
     stroke: pal.trim,
     depth: sum / Math.max(1, pts.length) + 0.01,
     kind: 'roof',
+    // Carried through so a renderer can say which building was tapped without
+    // keeping a parallel index in step with the face list.
+    lot,
   });
   return faces;
 }

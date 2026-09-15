@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Plugsim · isometric prototype</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13;
+    font: 14px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #c8d2de; }
+  #view { display: block; width: 100vw; height: 100vh; touch-action: none; cursor: grab; }
+  #view.drag { cursor: grabbing; }
+  .bar { position: fixed; left: 10px; top: 10px; right: 10px; display: flex; gap: 6px;
+    flex-wrap: wrap; align-items: center; z-index: 5; }
+  input, button { font: inherit; color: #dbe4ee; background: #181f29;
+    border: 1px solid #2c3743; border-radius: 8px; padding: 8px 11px; }
+  input { flex: 1 1 190px; min-width: 130px; }
+  button:active { background: #232d3a; }
+  button.on { border-color: #5f8f6c; color: #a9d8b6; }
+  .note { position: fixed; left: 10px; bottom: 10px; right: 10px; z-index: 5;
+    color: #7d8a99; font-size: 12px; pointer-events: none; }
+  .note b { color: #c8d2de; font-weight: 600; }
+  .pill { background: #131a23; border: 1px solid #222c38; border-radius: 8px;
+    padding: 6px 9px; display: inline-block; pointer-events: auto; }
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div class="bar">
+  <input id="q" placeholder="a city, a street, anywhere" value="Empire State Building, New York">
+  <button id="go">Survey</button>
+  <button id="turn">Turn ⟳</button>
+  <button id="roads" class="on">Roads</button>
+  <button id="lift" class="on">Lift</button>
+  <button id="sample">Sample</button>
+</div>
+
+<div class="note"><span class="pill" id="status">Type somewhere and press Survey. Drag to pan, pinch or scroll to zoom, tap a building.</span></div>
+
+<script type="module">
+import { geocode, fetchBuildings } from '../src/game/geo.js';
+import { classify, polygonAreaM2, heightMetresOf } from '../src/game/lots.js';
+import {
+  sceneFaces, fitCamera, toScreen, toWorld, heightMetres, paint,
+} from '../src/ui/isoart.js';
+
+const cv = document.getElementById('view');
+const ctx = cv.getContext('2d', { alpha: false });
+const statusEl = document.getElementById('status');
+const say = (m) => { statusEl.innerHTML = m; };
+
+let lots = [], roads = [], origin = null;
+let cam = { scale: 1, ox: 0, oy: 0, turn: 0, lift: true };
+let faces = [], picked = null;
+let showRoads = true;
+
+// --- the canvas -------------------------------------------------------------
+//
+// Canvas rather than SVG because a survey is a couple of thousand buildings and
+// three faces each, and eight thousand DOM nodes is not something a phone will
+// carry. Rather than WebGL because there is no build step here and a map does
+// not need sixty frames a second — it needs to be right when it stops moving.
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(innerWidth * dpr);
+  cv.height = Math.round(innerHeight * dpr);
+  cv.style.width = innerWidth + 'px';
+  cv.style.height = innerHeight + 'px';
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  draw();
+}
+
+/**
+ * Cull, then sort, then fill.
+ *
+ * Culling first is the whole budget: at a normal zoom most of a surveyed
+ * district is off screen, and a face that is off screen costs nothing to skip
+ * and a real amount to sort and fill.
+ */
+function build() {
+  if (!lots.length) { faces = []; return; }
+  const pad = 200;
+  const all = sceneFaces(lots, origin, cam, (l) => ({
+    owned: l === picked,
+  }));
+  faces = all.filter((f) => {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of f.points) {
+      if (p.sx < minX) minX = p.sx; if (p.sx > maxX) maxX = p.sx;
+      if (p.sy < minY) minY = p.sy; if (p.sy > maxY) maxY = p.sy;
+    }
+    // CSS pixels, not device pixels. The faces are projected in CSS pixels
+    // because the camera offsets come from pointer coordinates, and culling
+    // them against cv.width on a retina screen makes the box twice too wide —
+    // which costs fill time for faces nobody can see.
+    return maxX > -pad && minX < innerWidth + pad && maxY > -pad && minY < innerHeight + pad;
+  });
+}
+
+function drawRoads() {
+  if (!showRoads || !roads.length) return;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  for (const r of roads) {
+    const w = Math.max(1.5, r.width * cam.scale);
+    ctx.beginPath();
+    for (let i = 0; i < r.pts.length; i++) {
+      const s = toScreen(r.pts[i].x, r.pts[i].y, 0, cam);
+      if (i) ctx.lineTo(s.sx, s.sy); else ctx.moveTo(s.sx, s.sy);
+    }
+    ctx.strokeStyle = '#1b222b';
+    ctx.lineWidth = w + 3;
+    ctx.stroke();
+    ctx.strokeStyle = r.fill;
+    ctx.lineWidth = w;
+    ctx.stroke();
+  }
+}
+
+function draw() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fillStyle = '#0d1219';
+  ctx.fillRect(0, 0, innerWidth, innerHeight);
+  drawRoads();
+  for (const f of faces) {
+    ctx.beginPath();
+    ctx.moveTo(f.points[0].sx, f.points[0].sy);
+    for (let i = 1; i < f.points.length; i++) ctx.lineTo(f.points[i].sx, f.points[i].sy);
+    ctx.closePath();
+    ctx.fillStyle = f.fill;
+    ctx.fill();
+    if (f.stroke && cam.scale > 0.6) {
+      ctx.strokeStyle = f.stroke;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+  }
+}
+
+const render = () => { build(); draw(); };
+
+// --- pan, zoom, turn --------------------------------------------------------
+
+let drag = null, pinch = null;
+cv.addEventListener('pointerdown', (e) => {
+  cv.setPointerCapture(e.pointerId);
+  drag = { id: e.pointerId, x: e.clientX, y: e.clientY, ox: cam.ox, oy: cam.oy, moved: 0 };
+  cv.classList.add('drag');
+});
+cv.addEventListener('pointermove', (e) => {
+  if (!drag || e.pointerId !== drag.id) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  drag.moved = Math.max(drag.moved, Math.abs(dx) + Math.abs(dy));
+  cam.ox = drag.ox + dx;
+  cam.oy = drag.oy + dy;
+  render();
+});
+cv.addEventListener('pointerup', (e) => {
+  cv.classList.remove('drag');
+  if (drag && drag.moved < 5) pick(e.clientX, e.clientY);
+  drag = null;
+});
+cv.addEventListener('pointercancel', () => { drag = null; cv.classList.remove('drag'); });
+
+function zoomAt(cx, cy, factor) {
+  const k = Math.max(0.05, Math.min(30, cam.scale * factor)) / cam.scale;
+  cam.ox = cx - (cx - cam.ox) * k;
+  cam.oy = cy - (cy - cam.oy) * k;
+  cam.scale *= k;
+  render();
+}
+cv.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  zoomAt(e.clientX, e.clientY, Math.exp(-e.deltaY * 0.0016));
+}, { passive: false });
+
+// Pinch, because this is meant to be looked at on a phone.
+const touches = new Map();
+cv.addEventListener('touchstart', (e) => {
+  for (const t of e.changedTouches) touches.set(t.identifier, t);
+  if (touches.size === 2) {
+    const [a, b] = [...touches.values()];
+    pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) };
+    drag = null;
+  }
+}, { passive: true });
+cv.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) if (touches.has(t.identifier)) touches.set(t.identifier, t);
+  if (pinch && touches.size === 2) {
+    e.preventDefault();
+    const [a, b] = [...touches.values()];
+    const d = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+    zoomAt((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2, d / pinch.d);
+    pinch.d = d;
+  }
+}, { passive: false });
+const endTouch = (e) => {
+  for (const t of e.changedTouches) touches.delete(t.identifier);
+  if (touches.size < 2) pinch = null;
+};
+cv.addEventListener('touchend', endTouch, { passive: true });
+cv.addEventListener('touchcancel', endTouch, { passive: true });
+
+/**
+ * What did they tap?
+ *
+ * Tested against the ROOF polygons only, nearest first. A wall belongs to the
+ * building whose roof is above it, and the roof is what a finger is aimed at.
+ */
+function pick(cx, cy) {
+  for (let i = faces.length - 1; i >= 0; i--) {
+    const f = faces[i];
+    if (f.kind !== 'roof' || !inside(cx, cy, f.points)) continue;
+    picked = f.lot || null;
+    render();
+    const h = picked ? heightMetres(picked) : 0;
+    say(picked
+      ? `<b>${picked.tags.name || picked.kind}</b> · ${Math.round(picked.areaM2)} m²`
+        + ` · ${h.toFixed(h < 20 ? 1 : 0)} m`
+        + (picked.tags.height ? ' <i>surveyed</i>' : ' <i>from levels</i>')
+      : 'Nothing there.');
+    return;
+  }
+  picked = null; render(); say('Nothing there.');
+}
+function inside(x, y, pts) {
+  let hit = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i], b = pts[j];
+    if ((a.sy > y) !== (b.sy > y)
+      && x < ((b.sx - a.sx) * (y - a.sy)) / (b.sy - a.sy) + a.sx) hit = !hit;
+  }
+  return hit;
+}
+
+// --- the survey -------------------------------------------------------------
+
+const ROAD_STYLE = {
+  motorway: { width: 22, fill: '#3a3f47' }, trunk: { width: 19, fill: '#373c44' },
+  primary: { width: 17, fill: '#343942' }, secondary: { width: 14, fill: '#31363e' },
+  tertiary: { width: 12, fill: '#2e333b' }, residential: { width: 9, fill: '#2b3038' },
+  unclassified: { width: 9, fill: '#2b3038' }, service: { width: 5, fill: '#262b32' },
+  living_street: { width: 8, fill: '#2b3038' }, pedestrian: { width: 6, fill: '#282d34' },
+  footway: { width: 2.5, fill: '#242930' },
+};
+
+/** Turn raw Overpass ways into the shape the renderer wants. */
+function adopt(ways) {
+  lots = [];
+  for (const w of ways) {
+    const g = w.geometry;
+    if (!g || g.length < 3) continue;
+    const polygon = g.map((p) => ({ lat: p.lat, lng: p.lon }));
+    const areaM2 = polygonAreaM2(polygon);
+    if (areaM2 < 12) continue;
+    const tags = w.tags || {};
+    lots.push({
+      id: 'W' + w.id, polygon, tags, areaM2,
+      kind: tags.amenity === 'parking' ? 'parking' : classify(tags, areaM2),
+      levels: parseInt(tags['building:levels'], 10) || null,
+      heightM: heightMetresOf(tags),
+    });
+  }
+}
+
+function frame(label) {
+  cam = { ...fitCamera(lots, origin, { width: innerWidth, height: innerHeight }), lift: cam.lift };
+  render();
+  const withHeight = lots.filter((l) => l.heightM).length;
+  const tallest = lots.reduce((m, l) => Math.max(m, heightMetres(l)), 0);
+  say(`${label}<b>${lots.length}</b> buildings · <b>${withHeight}</b> surveyed heights `
+    + `· tallest <b>${Math.round(tallest)} m</b>`);
+}
+
+/**
+ * A saved survey, so this can be looked at without going back to Overpass.
+ *
+ * Overpass grants two query slots an IP and refuses outright when they are
+ * busy, which is a poor way to find out whether your renderer works.
+ */
+async function sample() {
+  say('Loading the saved survey…');
+  const res = await fetch('./sample/midtown.json');
+  const json = await res.json();
+  const g = json.elements[0].geometry[0];
+  origin = { lat: g.lat, lng: g.lon };
+  adopt(json.elements);
+  roads = [];
+  frame('Midtown, saved · ');
+}
+
+async function survey(where) {
+  say('Finding ' + where + '…');
+  const place = await geocode(where);
+  if (!place) return say('Nowhere by that name.');
+  origin = { lat: place.lat, lng: place.lng };
+
+  // Roughly 900m across, which is a neighbourhood you can read.
+  const d = 0.0056, dx = d / Math.cos((origin.lat * Math.PI) / 180);
+  const box = [origin.lat - d, origin.lng - dx, origin.lat + d, origin.lng + dx];
+
+  say('Surveying ' + (place.label || where) + '…');
+  const ways = await fetchBuildings(box[0], box[1], box[2], box[3], 2200,
+    (n) => say(`Overpass busy — retry ${n}…`));
+
+  adopt(ways);
+  await surveyRoads(box);
+  frame(`${place.label || where} · `);
+}
+
+async function surveyRoads(box) {
+  const q = `[out:json][timeout:40];(way["highway"](${box.join(',')}););out geom 1600;`;
+  try {
+    const res = await fetch('https://overpass-api.de/api/interpreter', {
+      method: 'POST', body: 'data=' + encodeURIComponent(q),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    });
+    const json = await res.json();
+    roads = (json.elements || [])
+      .filter((w) => w.geometry && w.geometry.length > 1)
+      .map((w) => {
+        const st = ROAD_STYLE[(w.tags || {}).highway] || null;
+        if (!st) return null;
+        return {
+          width: st.width, fill: st.fill,
+          pts: w.geometry.map((p) => toWorld({ lat: p.lat, lng: p.lon }, origin)),
+        };
+      })
+      .filter(Boolean)
+      // Big roads underneath, small ones on top, so a service road does not
+      // paint a stripe across an avenue.
+      .sort((a, b) => b.width - a.width);
+  } catch { roads = []; }
+}
+
+// --- controls ---------------------------------------------------------------
+
+document.getElementById('go').onclick = () => survey(document.getElementById('q').value);
+document.getElementById('sample').onclick = () => sample();
+document.getElementById('q').onkeydown = (e) => {
+  if (e.key === 'Enter') survey(e.target.value);
+};
+document.getElementById('turn').onclick = () => { cam.turn = (cam.turn + 1) & 3; render(); };
+document.getElementById('roads').onclick = (e) => {
+  showRoads = !showRoads;
+  e.target.classList.toggle('on', showRoads);
+  draw();
+};
+document.getElementById('lift').onclick = (e) => {
+  cam.lift = !cam.lift;
+  e.target.classList.toggle('on', cam.lift);
+  render();
+};
+addEventListener('resize', resize);
+resize();
+
+// Exposed so a check can drive this page the way it drives the game.
+window.__iso = {
+  get lots() { return lots; }, get cam() { return cam; },
+  get faces() { return faces; }, get origin() { return origin; },
+  get roads() { return roads; }, survey, sample, render, build,
+  zoomAt, pick, turn: () => { cam.turn = (cam.turn + 1) & 3; render(); },
+};
+</script>
+</body>
+</html>

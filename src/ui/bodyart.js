@@ -504,6 +504,208 @@ function clothingShapes(def, hex, build, back = false) {
   return out.join('');
 }
 
+// --- Fitments ---------------------------------------------------------------
+//
+// A replacement limb that cannot be seen is a number on a card. The whole
+// escalation — a peg tonight, a moulded arm you forget about, somebody else's
+// that works because it was theirs, a bionic that is better than you were —
+// only lands if the four look like four different decisions, so each tier gets
+// its own material rather than a tint of the same one.
+//
+// They are drawn AFTER the clothes, deliberately. A sleeve over a prosthetic
+// hides the entire point; a sleeve that stops at a socket cuff is how anybody
+// who actually wears one has it.
+
+export const FITMENT_PAINT = {
+  crude: {
+    // A peg and a hook. Timber, a steel band, and no pretence.
+    fill: '#6b573c', edge: '#41341f', metal: '#8e97a3', glow: null,
+    label: 'timber and banding',
+  },
+  prosthetic: {
+    // Moulded shell. Pale, matte, seamed — deliberately unremarkable.
+    fill: '#a3a9b1', edge: '#6d737b', metal: '#8d96a2', glow: null,
+    label: 'moulded shell',
+  },
+  salvaged: {
+    // Somebody else's. It looks like a limb because it IS one; what gives it
+    // away is that the tone does not match and there is a suture line where it
+    // was joined. That mismatch is the whole story of where it came from.
+    fill: '#8a6a58', edge: '#5d463a', metal: '#c4b3a4', glow: null,
+    label: 'somebody else\u2019s',
+  },
+  bionic: {
+    fill: '#3a444f', edge: '#1d242c', metal: '#9fb0c2', glow: '#5fd0c8',
+    label: 'powered',
+  },
+};
+
+/**
+ * One replaced limb.
+ *
+ * `part` is the same BODY_ART entry the flesh version uses, so a fitment sits
+ * exactly where the limb it replaces sat and a build that thickens the arm
+ * thickens the fitment with it. What changes is the material and the hardware
+ * drawn on top: a socket cuff at the join in every case, then whatever that
+ * tier actually is.
+ */
+function fitmentOn(partId, tierId, build) {
+  const paint = FITMENT_PAINT[tierId];
+  const part = BODY_ART[partId];
+  if (!paint || !part) return '';
+  const tr = partTransform(part, build);
+  const arm = partId === 'armL' || partId === 'armR';
+
+  // The socket: where the fitment meets what is left of the person. Drawn on
+  // every tier because every one of them has to attach to something.
+  const socket = arm
+    ? `<path d="M22 96 h44 v26 h-44 z" fill="${paint.edge}"/>
+       <path d="M22 96 h44 v6 h-44 z" fill="#fff" opacity=".18"/>`
+    : `<path d="M52 266 h48 v28 h-48 z" fill="${paint.edge}"/>
+       <path d="M52 266 h48 v6 h-48 z" fill="#fff" opacity=".18"/>`;
+
+  let detail = '';
+  if (tierId === 'crude') {
+    // A peg narrows to a point and a hook is not a hand. Both replace the
+    // bottom of the limb rather than sitting on it.
+    detail = arm
+      ? `<path d="M30 190 h20 l-4 46 h-12 z" fill="${paint.fill}"/>
+         <path d="M40 232 c14 0 22 10 22 24 c0 10 -6 16 -13 16 c-6 0 -9 -4 -9 -9
+                  c0 -4 3 -6 6 -6" fill="none" stroke="${paint.metal}"
+               stroke-width="8" stroke-linecap="round"/>
+         <g fill="${paint.edge}" opacity=".5">
+           <rect x="28" y="140" width="24" height="5"/>
+           <rect x="28" y="168" width="24" height="5"/>
+         </g>`
+      : `<path d="M66 300 h22 l-6 96 h-10 z" fill="${paint.fill}"/>
+         <path d="M58 396 h38 c6 0 9 4 9 10 s-3 10 -9 10 h-38
+                  c-6 0 -9 -4 -9 -10 s3 -10 9 -10 z" fill="${paint.metal}"/>
+         <g fill="${paint.edge}" opacity=".5">
+           <rect x="64" y="330" width="26" height="5"/>
+           <rect x="64" y="360" width="26" height="5"/>
+         </g>`;
+  } else if (tierId === 'salvaged') {
+    // The suture line at the join, and nothing else. It is a limb.
+    detail = arm
+      ? `<path d="M21 132 h44" stroke="${paint.metal}" stroke-width="3" opacity=".75"/>
+         <g stroke="${paint.metal}" stroke-width="2.4" opacity=".7">
+           <path d="M26 126 v13"/><path d="M34 126 v13"/><path d="M42 126 v13"/>
+           <path d="M50 126 v13"/><path d="M58 126 v13"/>
+         </g>`
+      : `<path d="M52 304 h46" stroke="${paint.metal}" stroke-width="3" opacity=".75"/>
+         <g stroke="${paint.metal}" stroke-width="2.4" opacity=".7">
+           <path d="M58 298 v13"/><path d="M68 298 v13"/><path d="M78 298 v13"/>
+           <path d="M88 298 v13"/>
+         </g>`;
+  } else if (tierId === 'bionic') {
+    // Joint rings, an actuator down the length, and one live line. The glow is
+    // the only thing in the whole figure that is lit from inside, which is
+    // exactly the amount of attention this tier should draw.
+    detail = arm
+      ? `<g fill="${paint.metal}" opacity=".85">
+           <rect x="20" y="136" width="30" height="9" rx="4"/>
+           <rect x="18" y="182" width="30" height="9" rx="4"/>
+           <rect x="14" y="228" width="30" height="9" rx="4"/>
+         </g>
+         <path d="M36 104 L28 246" stroke="${paint.glow}" stroke-width="4"
+               opacity=".8" stroke-linecap="round"/>
+         <circle cx="31" cy="212" r="7" fill="${paint.glow}" opacity=".9"/>`
+      : `<g fill="${paint.metal}" opacity=".85">
+           <rect x="56" y="316" width="42" height="11" rx="5"/>
+           <rect x="56" y="368" width="40" height="11" rx="5"/>
+           <rect x="58" y="416" width="36" height="11" rx="5"/>
+         </g>
+         <path d="M78 284 L74 434" stroke="${paint.glow}" stroke-width="4"
+               opacity=".8" stroke-linecap="round"/>
+         <circle cx="76" cy="352" r="8" fill="${paint.glow}" opacity=".9"/>`;
+  } else {
+    // Prosthetic: a seam down the shell and a knuckle line. Understated on
+    // purpose — this is the tier you are supposed to stop noticing.
+    detail = arm
+      ? `<path d="M34 108 L27 244" stroke="${paint.edge}" stroke-width="3" opacity=".55"/>
+         <rect x="18" y="214" width="30" height="8" rx="4" fill="${paint.edge}" opacity=".5"/>`
+      : `<path d="M76 286 L72 432" stroke="${paint.edge}" stroke-width="3" opacity=".55"/>
+         <rect x="58" y="356" width="38" height="9" rx="4" fill="${paint.edge}" opacity=".5"/>`;
+  }
+
+  return `<g${tr ? ` transform="${tr}"` : ''}>
+    <path d="${part.path}" fill="${paint.fill}"/>
+    <path d="${part.path}" fill="#000" opacity=".1"/>
+    <path d="${part.path}" fill="none" stroke="${paint.edge}" stroke-width="3"/>
+    ${detail}
+    ${socket}
+  </g>`;
+}
+
+/** A replaced hand or foot: the end of the limb, not the whole thing. */
+function endFitment(kind, tierId, build) {
+  const paint = FITMENT_PAINT[tierId];
+  if (!paint) return '';
+  const hand = kind === 'hand';
+  const ids = hand ? ['armL', 'armR'] : ['legL', 'legR'];
+  return ids.map((id) => {
+    const tr = partTransform(BODY_ART[id], build);
+    return `<g${tr ? ` transform="${tr}"` : ''}>
+      ${hand
+        ? `<path d="M18 226 h34 c5 0 8 4 8 9 l-3 26 c-1 7 -6 11 -13 11 h-16
+             c-7 0 -12 -4 -13 -11 l-3 -26 c0 -5 3 -9 8 -9 z" fill="${paint.fill}"/>
+           <path d="M18 226 h34 c5 0 8 4 8 9 v3 h-50 v-3 c0 -5 3 -9 8 -9 z"
+             fill="${paint.edge}"/>
+           ${paint.glow ? `<circle cx="34" cy="248" r="6" fill="${paint.glow}" opacity=".9"/>` : ''}`
+        : `<path d="M58 406 h40 c6 0 10 4 10 11 l-2 16 c-1 7 -5 11 -12 11 h-32
+             c-7 0 -12 -4 -13 -11 l-2 -16 c0 -7 4 -11 11 -11 z" fill="${paint.fill}"/>
+           <path d="M58 406 h40 c6 0 10 4 10 11 v3 h-62 v-3 c0 -7 4 -11 12 -11 z"
+             fill="${paint.edge}"/>
+           ${paint.glow ? `<rect x="66" y="424" width="26" height="5" rx="2.5"
+             fill="${paint.glow}" opacity=".9"/>` : ''}`}
+    </g>`;
+  }).join('');
+}
+
+/** A replaced eye. Front view only — from behind there is nothing to see. */
+function eyeFitment(tierId) {
+  const paint = FITMENT_PAINT[tierId];
+  if (!paint) return '';
+  return `<g>
+    <circle cx="112" cy="40" r="6" fill="${paint.edge}"/>
+    <circle cx="112" cy="40" r="4" fill="${paint.glow || paint.metal}"
+      opacity="${paint.glow ? '.95' : '.8'}"/>
+    ${paint.glow ? `<circle cx="112" cy="40" r="8" fill="none" stroke="${paint.glow}"
+      stroke-width="1.6" opacity=".5"/>` : ''}
+  </g>`;
+}
+
+/**
+ * Everything fitted to this body, drawn.
+ *
+ * `fittings` is the game's `body.installed` map — fitment id to tier — so this
+ * needs no knowledge of the health model beyond which ids name a limb.
+ */
+export function fitmentShapes(fittings, { build = null, view = 'front' } = {}) {
+  if (!fittings) return '';
+  const tierOf = (id) => {
+    const raw = fittings[id];
+    if (!raw) return null;
+    return typeof raw === 'string' ? raw : raw.tier;
+  };
+  const out = [];
+  for (const id of ['armL', 'armR', 'legL', 'legR']) {
+    const tier = tierOf(id);
+    if (tier) out.push(fitmentOn(id, tier, build));
+  }
+  // A replaced hand on an arm that is itself replaced is already drawn.
+  if (tierOf('hand') && !tierOf('armL') && !tierOf('armR')) {
+    out.push(endFitment('hand', tierOf('hand'), build));
+  }
+  if (tierOf('foot') && !tierOf('legL') && !tierOf('legR')) {
+    out.push(endFitment('foot', tierOf('foot'), build));
+  }
+  if (tierOf('eye') && view !== 'back') out.push(eyeFitment(tierOf('eye')));
+  // Same drop shadow the kit uses, for the same reason: it has to read as a
+  // separate object sitting on the person whatever colour they are wearing.
+  return out.length ? `<g filter="url(#bfKit)">${out.join('')}</g>` : '';
+}
+
 /**
  * A whole person.
  *
@@ -511,7 +713,9 @@ function clothingShapes(def, hex, build, back = false) {
  * armour, wound markers — so the character screen and the X-ray still share
  * one drawing.
  */
-export function figureFor(appearance, { overlay = () => '', lostParts = {}, view = 'front' } = {}) {
+export function figureFor(appearance, {
+  overlay = () => '', lostParts = {}, view = 'front', fittings = null,
+} = {}) {
   const back = view === 'back';
   const a = normaliseAppearance(appearance);
   const build = BUILDS[a.build];
@@ -536,6 +740,7 @@ export function figureFor(appearance, { overlay = () => '', lostParts = {}, view
     ${clothingShapes(wearing, cloth.hex, build, back)}
     ${back ? hairBackShape(a.hair, hair.hex) : hairShape(a.hair, hair.hex)}
     ${back ? '' : facialShape(a.facial, hair.hex)}
+    ${fitmentShapes(fittings, { build, view })}
     ${Object.keys(BODY_ART).map(overlay).join('')}
   </g>`;
 }

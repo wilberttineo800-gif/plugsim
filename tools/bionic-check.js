@@ -10,6 +10,7 @@ import {
   TIERS, TIER_IDS, FITMENTS, FITMENT_IDS, tiersFor, fitmentCost, installedEfficiency,
 } from '../src/game/bionics.js';
 import { STREET_DOC, hasDoc, riskOf } from '../src/game/streetdoc.js';
+import { FITMENT_PAINT, fitmentShapes } from '../src/ui/bodyart.js';
 import {
   newBody, capacities, isAlive, removePart, missingCount,
 } from '../src/game/health.js';
@@ -263,5 +264,48 @@ for (let i = 0; i < 80; i++) {
   if (r.ok && r.impairment) leftMark++;
 }
 ok(leftMark > 0, `patching yourself up can leave something permanent (${leftMark}/80)`);
+
+
+// --- You can see what you paid for ------------------------------------------
+//
+// Four tiers that cost from $63k to $840k and differ by half a body's worth of
+// capability have to LOOK different on the figure, or the whole escalation is
+// a number on a card. A tier with no paint draws nothing at all, which is the
+// failure mode worth pinning.
+{
+  const unpainted = TIER_IDS.filter((id) => !FITMENT_PAINT[id]);
+  ok(unpainted.length === 0,
+    `every tier is drawn${unpainted.length ? ': missing ' + unpainted.join(', ') : ''}`);
+
+  const fills = TIER_IDS.map((id) => (FITMENT_PAINT[id] || {}).fill);
+  ok(new Set(fills).size === TIER_IDS.length,
+    'and no two tiers share a material');
+
+  // Only the bionic tier is lit from inside. That is the one that is supposed
+  // to draw the eye, and if everything glowed nothing would.
+  const lit = TIER_IDS.filter((id) => FITMENT_PAINT[id].glow);
+  ok(lit.length === 1 && lit[0] === 'bionic', `only the bionic tier glows (${lit.join(',') || 'none'})`);
+
+  // Each limb fitment actually produces geometry, front and back.
+  const blank = [];
+  for (const id of ['armL', 'armR', 'legL', 'legR', 'hand', 'foot', 'eye']) {
+    for (const tier of TIER_IDS) {
+      for (const view of ['front', 'back']) {
+        const svg = fitmentShapes({ [id]: tier }, { view });
+        // An eye is the one thing with nothing to show from behind.
+        if (id === 'eye' && view === 'back') continue;
+        if (!/<path|<circle|<rect/.test(svg)) blank.push(`${id}/${tier}/${view}`);
+      }
+    }
+  }
+  ok(blank.length === 0, `and every fitment draws something${
+    blank.length ? ': blank for ' + blank.slice(0, 4).join(', ') : ' (28 combinations)'}`);
+
+  // A replaced limb is drawn over the limb it replaces, so it has to move with
+  // the build the same way the flesh version does.
+  const wide = fitmentShapes({ armL: 'bionic' }, { build: { limb: 1.3, shoulder: 1, waist: 1 } });
+  const narrow = fitmentShapes({ armL: 'bionic' }, { build: { limb: 0.8, shoulder: 1, waist: 1 } });
+  ok(wide !== narrow, 'and a heavier build gets a heavier fitment');
+}
 
 print(fail ? `bionics+stats+lives: ${fail} FAILED in total` : `bionics+stats+lives: all ${pass} checks passed in total`);

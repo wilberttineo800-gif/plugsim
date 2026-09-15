@@ -175,6 +175,30 @@ const cases = [
     if (html === front) throw new Error('back view is identical to the front');
     return html;
   }],
+  // Work done on you, on the figure and on the film. A fitment is drawn over
+  // the limb it replaces on one and shows as hardware on the other, so both
+  // panels change and both have to survive it.
+  ['tabCharacter (bionic, front and back)', () => {
+    const ch = require_character();
+    ch.body.parts.armR.lost = true;
+    ch.body.installed = { armR: { tier: 'bionic', efficiency: 1.2 }, legL: { tier: 'crude' },
+      eye: { tier: 'prosthetic' } };
+    const front = ui.tabCharacter();
+    ui.figureView = 'back';
+    const back = ui.tabCharacter();
+    ui.figureView = 'front';
+    if (front === back) throw new Error('fitments render the same from both sides');
+    // The replaced limb must not still be painted as a void underneath.
+    if (/#1a1e24/.test(front)) throw new Error('a replaced limb is still drawn as missing');
+    return front + back;
+  }],
+  ['tabXray (with fitments)', () => {
+    const html = ui.tabXray();
+    const ch = require_character();
+    ch.body.parts.armR.lost = false;
+    ch.body.installed = {};
+    return html;
+  }],
   ['buildingPanel armour line', () => ui.buildingPanel(
     state.buildings.find((b) => BUILDINGS[b.type].product === 'plate'))],
   ['buildingPanel firearms line', () => ui.buildingPanel(

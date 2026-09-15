@@ -42,7 +42,7 @@ import {
 } from '../game/character.js';
 import {
   BODY_ART, BODY_DEFS, SKELETON, FIGURE_W, FIGURE_H, figure, figureFor, partTransform,
-  placeGear, slingPath, holsterPath, ARMOUR_VARIANT,
+  placeGear, slingPath, holsterPath, ARMOUR_VARIANT, fitmentShapes, FITMENT_PAINT,
 } from './bodyart.js';
 import { ARMOUR_DETAIL } from './armourart.js';
 import { GUN_DETAIL } from './gunart-detail.js';
@@ -900,8 +900,14 @@ export class GameUI {
         <path d="${part.path}" fill="none" stroke="#a8b79b" stroke-width="3" opacity=".55"/>
       </g>`;
     };
+    // A limb that has been replaced is not a gap any more — it is drawn over
+    // by the fitment, and left in `lostParts` it showed as a black void with a
+    // prosthetic on top of it.
+    const fitted = body.installed || {};
     const lostParts = {};
-    for (const id of BODY_PART_IDS) if (body.parts[id].lost) lostParts[id] = true;
+    for (const id of BODY_PART_IDS) {
+      if (body.parts[id].lost && !fitted[id]) lostParts[id] = true;
+    }
 
     // The kit is already drawn; this puts it on. Armour goes on the body it
     // covers, a long gun is slung across the front and a sidearm sits in a
@@ -933,7 +939,7 @@ export class GameUI {
     const fig = `<svg class="figure" viewBox="0 0 ${FIGURE_W} ${FIGURE_H}"
       width="172" height="${Math.round(172 * FIGURE_H / FIGURE_W)}" aria-hidden="true">
       ${sharedBodyDefs()}
-      ${figureFor(ch.appearance, { overlay, lostParts, view })}
+      ${figureFor(ch.appearance, { overlay, lostParts, view, fittings: body.installed })}
       ${worn.sidearm ? holsterPath(view) : ''}
       ${gearFor('torso')}
       ${gearFor('head')}
@@ -1082,6 +1088,34 @@ export class GameUI {
     const reportable = reportableWounds(body);
     const penalties = activePenalties(s);
 
+    // Hardware is the one thing an X-ray shows better than anything else does.
+    // A steel peg, a moulded shell and a bionic actuator are three completely
+    // different densities on a film, so they are drawn as three brightnesses
+    // — and a replaced limb stops reading as an absent one.
+    const fittedOn = body.installed || {};
+    const RADIO = {
+      crude: { fill: '#8e97a3', op: 0.75 },
+      prosthetic: { fill: '#5d6b7a', op: 0.55 },
+      salvaged: { fill: 'url(#bfFilm)', op: 0 },
+      bionic: { fill: '#e8f3ff', op: 0.95 },
+    };
+    const build0 = BUILDS[(ch.appearance || {}).build] || BUILDS.regular;
+    const xrayFitments = ['armL', 'armR', 'legL', 'legR'].map((id) => {
+      const raw = fittedOn[id];
+      if (!raw) return '';
+      const tier = typeof raw === 'string' ? raw : raw.tier;
+      const look = RADIO[tier];
+      // Salvaged is somebody's own flesh and bone. It is invisible on a film,
+      // which is exactly why it is the one nobody can prove you had done.
+      if (!look || !look.op) return '';
+      const part = BODY_ART[id];
+      const tr = partTransform(part, build0);
+      return `<g${tr ? ` transform="${tr}"` : ''}>
+        <path d="${part.path}" fill="${look.fill}" opacity="${look.op}"/>
+        <path d="${part.path}" fill="none" stroke="#f2f6fa" stroke-width="2" opacity=".5"/>
+      </g>`;
+    }).join('');
+
     const marks = (partId) => {
       const here = open.filter((w) => w.part === partId);
       if (!here.length) return '';
@@ -1105,11 +1139,12 @@ export class GameUI {
       ${sharedBodyDefs()}
       <rect width="${FIGURE_W}" height="${FIGURE_H}" fill="#070d14"/>
       ${figure({
-        fillFor: (id) => (body.parts[id].lost ? '#04080c' : 'url(#bfFilm)'),
+        fillFor: (id) => (body.parts[id].lost && !fittedOn[id] ? '#04080c' : 'url(#bfFilm)'),
         stroke: '#1b2836',
         build: BUILDS[(ch.appearance || {}).build] || BUILDS.regular,
       })}
       ${SKELETON}
+      ${xrayFitments}
       ${BODY_PART_IDS.map(marks).join('')}
     </svg>`;
 

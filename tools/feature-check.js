@@ -16,6 +16,27 @@
     cond ? pass++ : fail++;
     return cond;
   };
+  /**
+   * Not tested here, and why.
+   *
+   * The city is generated from whatever OSM has around a random point, so some
+   * runs genuinely have no 320m² building on the market and no way to test the
+   * thing that needs one. That is not a failure — but it used to be reported
+   * as one, and a suite that cries wolf on a third of its runs is a suite
+   * people stop reading. Twice today I had to stash my own changes and re-run
+   * just to learn whether I had broken something or the city had.
+   */
+  const skip = (name, why) => { out.push('  skip  ' + name + '  (' + why + ')'); };
+
+  /**
+   * Feature checks are not balance checks.
+   *
+   * Half the flaky failures were the harness running out of money partway
+   * through, which proves nothing about whether the feature works. Anything
+   * that costs money says so here first.
+   */
+  const afford = (n) => { s.cash.clean = Math.max(s.cash.clean, n); };
+
   const money = (n) => '$' + Math.round(n).toLocaleString('en-US');
   const packs = (b) => Object.values(b.packs).reduce((a, v) => a + v, 0);
 
@@ -79,6 +100,7 @@
     || s.buildings.find((b) => b.kind === 'lab');
   ok('a second operation opens', !!labB, labB && labB.name);
 
+  afford(2000000);
   const upBefore = s.cash.clean;
   const yieldBefore = growB.scale;
   g.upgradeBuilding(growB.id, 'lights');
@@ -199,16 +221,24 @@
   out.push('=== rent and resale ===');
   const rentLot = s.lots.filter((l) => !l.owned && l.kind !== 'parking')
     .sort((a, b) => a.price - b.price)[0];
+  if (!rentLot) skip('letting', 'nothing left on the market');
+  else {
+  afford(rentLot.price + 100000);
   g.buyLot(rentLot.id);
   const r = g.rentOut(rentLot.id);
   ok('a building can be let', rentLot.rented === true);
+  }
   const sellLot2 = s.lots.filter((l) => !l.owned && l.kind !== 'parking')
     .sort((a, b) => a.price - b.price)[0];
-  g.buyLot(sellLot2.id);
-  const cashBeforeSale = s.cash.clean;
-  g.sellLot(sellLot2.id);
-  ok('a building can be sold back', sellLot2.owned === false,
-    'got ' + money(s.cash.clean - cashBeforeSale) + ' back');
+  if (!sellLot2) skip('resale', 'nothing left on the market');
+  else {
+    afford(sellLot2.price + 100000);
+    g.buyLot(sellLot2.id);
+    const cashBeforeSale = s.cash.clean;
+    g.sellLot(sellLot2.id);
+    ok('a building can be sold back', sellLot2.owned === false,
+      'got ' + money(s.cash.clean - cashBeforeSale) + ' back');
+  }
 
   out.push('');
   out.push('=== ui ===');
@@ -294,6 +324,7 @@
   out.push('=== firearms ===');
   {
     for (const d of s.districts) d.heat = 0;
+    afford(5000000);
     g.applyForLicence('ffl01');
     const rec = (s.licences || {}).ffl01;
     ok('a licence can be applied for',
@@ -335,6 +366,7 @@
     const rlot = s.lots.filter((l) => !l.owned && l.kind !== 'parking'
       && l.areaM2 >= 320 && l.areaM2 <= 3200).sort((a, b) => a.price - b.price)[0];
     if (rlot) {
+      afford(rlot.price + 8000000);
       g.buyLot(rlot.id);
       g.developLot(rlot.id, 'research_lab');
       const built = s.buildings.find((b) => b.lotId === rlot.id);

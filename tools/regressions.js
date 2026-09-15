@@ -5,7 +5,7 @@
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute, saveGame, loadGame, buildingLabel } from '../src/game/state.js';
-import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld, sizeScale } from '../src/game/sim.js';
+import { stepSim, cityPrice, catchUp, MAX_CATCHUP_HOURS, rentBonusFor, seedWorld, sizeScale, notorietyOf, pressureOn } from '../src/game/sim.js';
 import { upkeepFor, vehicleStats, maxRoutesFor, rentUpgrades, RENT_UPGRADES } from '../src/game/upgrades.js';
 import { lotPrice, dwellingsIn, rentPerDay } from '../src/game/lots.js';
 import { sellRatePerHour, streetPrice as streetPriceOf } from '../src/game/economy.js';
@@ -34,7 +34,7 @@ import { makeRng } from '../src/game/rng.js';
 const pctOf = (v) => Math.round(v * 100) + '%';
 import { syntheticLots, cheapestLotFor } from './fixtures.js';
 import { currentStep, progress as onboardingProgress, STEPS } from '../src/game/onboarding.js';
-import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS, MARKET } from '../src/game/constants.js';
+import { BUILDINGS, BUILDING_IDS, COURIERS, PRODUCT_IDS, PRODUCTS, MARKET, HEAT } from '../src/game/constants.js';
 import { fitsBuilding, operationOptions } from '../src/game/actions.js';
 import { haversineKm } from '../src/game/geo.js';
 import * as A from '../src/game/actions.js';
@@ -1873,6 +1873,100 @@ print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' check
   for (let d = 0; d < A.FUNERAL_DISCOVERY_DAYS * 2; d++) A.stepFuneralTrade(idle);
   check('a funeral home you never opened tells you nothing',
     !A.isDiscovered(idle, 'back_clinic'));
+}
+
+print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');
+
+// Heat has to be able to happen.
+//
+// It could not. A measured thousand-day run — 31 properties, 28 lines, product
+// actually selling — peaked at 10.8 on its hottest block against a raid floor
+// of 28: zero raids in three game years, and the warning bands at 22, 46 and
+// 72 never fired either, so the player never saw the mechanic at all. Block
+// heat decays proportionally and bleeds into its neighbours, so SPREADING OUT
+// was a complete and free answer to the only cost in the game meant to push
+// back on everything. These pin the half that fixes it.
+{
+  const world = () => {
+    const ds = generateDistricts({ lat: 42.33, lng: -83.04 }, []);
+    const cs = generateCrews(ds, { lat: 42.33, lng: -83.04 });
+    applyInitialControl(ds, cs);
+    const st = createState({
+      origin: { lat: 42.33, lng: -83.04 }, cityName: 'D',
+      districts: ds, crews: cs, lots: syntheticLots(ds),
+    });
+    st.cash.clean = 500000000;
+    st.adminUnlockAll = true;
+    return st;
+  };
+  const put = (st, type, n = 1) => {
+    for (let i = 0; i < n; i++) {
+      const lot = cheapestLotFor(st, BUILDINGS[type]);
+      if (!lot) return;
+      A.buyLot(st, lot.id);
+      A.developLot(st, lot.id, type);
+    }
+  };
+
+  const quiet = world();
+  check('a closet operation is nobody', notorietyOf(quiet) === 0,
+    notorietyOf(quiet).toFixed(1));
+
+  put(quiet, 'closet_grow', 2);
+  check('and two closets still is', notorietyOf(quiet) < 2, notorietyOf(quiet).toFixed(1));
+
+  const big = world();
+  put(big, 'meth_cook', 6);
+  put(big, 'rock_house', 6);
+  put(big, 'cut_house', 4);
+  // Let the blocks warm up to whatever they settle at, which is the number
+  // that used to be the whole story.
+  for (let d = 0; d < 120; d++) stepSim(big, 24 * 60);
+  const known = notorietyOf(big);
+  check('sixteen hot lines make you somebody', known > 5, known.toFixed(1) + ' notoriety');
+  check('and more of them makes you more so than two closets',
+    known > notorietyOf(quiet) * 4 + 2, `${notorietyOf(quiet).toFixed(1)} vs ${known.toFixed(1)}`);
+
+  // The whole point: spreading out must no longer make you invisible. Each one
+  // sits on its own block, so no block gets hot — and the number that decides
+  // things is no longer the block's.
+  const worstBlock = Math.max(0, ...big.districts.map((d) => d.heat || 0));
+  const worstPressure = Math.max(...big.districts.map((d) => pressureOn(big, d)));
+  check('and spreading them out no longer hides you',
+    worstPressure > worstBlock && Math.abs(worstPressure - worstBlock - known) < 0.001,
+    `block ${worstBlock.toFixed(1)} + known ${known.toFixed(1)} = ${worstPressure.toFixed(1)}`);
+
+  // Settled block heat on its own must be nowhere near enough to raid on, or
+  // this whole mechanic is back where it started.
+  check('because a spread-out block never gets there by itself',
+    worstBlock < HEAT.raidHeatFloor, worstBlock.toFixed(1) + ' vs floor ' + HEAT.raidHeatFloor);
+
+  // A front is a reason for you to exist, and enough of them says so.
+  const fronted = world();
+  put(fronted, 'meth_cook', 6);
+  put(fronted, 'rock_house', 6);
+  put(fronted, 'cut_house', 4);
+  const bare = notorietyOf(fronted);
+  put(fronted, 'laundromat', 6);
+  check('and legitimate business quiets it down',
+    notorietyOf(fronted) < bare, `${bare.toFixed(1)} -> ${notorietyOf(fronted).toFixed(1)}`);
+
+  // Derived, not accumulated: shutting a line down has to lower it the same
+  // day, or a player who overreached once could never get back under it.
+  const closable = world();
+  put(closable, 'meth_cook', 8);
+  const running = notorietyOf(closable);
+  for (const b of closable.buildings) b.active = false;
+  check('and shutting down lowers it immediately', notorietyOf(closable) === 0,
+    `${running.toFixed(1)} -> ${notorietyOf(closable).toFixed(1)}`);
+
+  // It is a number on a scale, not an unbounded counter.
+  const absurd = world();
+  put(absurd, 'meth_cook', 14);
+  put(absurd, 'fent_suite', 14);
+  put(absurd, 'rock_house', 14);
+  check('and it never runs off the end of the scale',
+    notorietyOf(absurd) <= HEAT.max, notorietyOf(absurd).toFixed(1));
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

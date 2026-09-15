@@ -943,7 +943,7 @@ function dailyIncidents(state) {
     if (!worked.has(d.id)) continue;
 
     // Attention building on a block you actually use.
-    if (d.heat > HEAT.stopHeatFloor && rng() < 0.25) {
+    if (pressureOn(state, d) > HEAT.stopHeatFloor && rng() < 0.25) {
       raise(state, 'eyes', { latlng: d.center, districtId: d.id, detail: Math.round(d.heat) + ' heat' });
     }
 
@@ -1272,6 +1272,43 @@ function stepHeat(state, dt) {
 // There's no heat gauge in the UI, so police pressure has to reach the player
 // as news on the radio instead. Only band changes are reported, so the ticker
 // stays quiet until something actually shifts.
+/**
+ * How well known the whole operation is, city-wide.
+ *
+ * Derived rather than accumulated: it is a read of what you are running right
+ * now, so shutting a line down lowers it the same day. That is deliberate —
+ * an accumulating counter would mean a player who overreached once could never
+ * get back under it, and the interesting decision here is "is this worth the
+ * attention", which only works if the answer can change.
+ *
+ * Fronts subtract, because their whole purpose is to be a reason for you to
+ * exist. Enough of them genuinely does quiet a large operation down.
+ */
+export function notorietyOf(state) {
+  let footprint = 0;
+  for (const b of state.buildings || []) {
+    if (!b.active) continue;
+    const def = BUILDINGS[b.type] || {};
+    const kind = lineKindOf(b);
+    const lineHeat = kind ? lineEffects(b).heatMult : 1;
+    footprint += (def.heatPerDay || 0) * lineHeat * sizeScale(b);
+  }
+  const over = footprint - HEAT.notorietyFloorFootprint;
+  return over <= 0 ? 0 : clamp(over * HEAT.notorietyScale, 0, HEAT.max);
+}
+
+/**
+ * What a block is worth to the police: its own heat plus who you are.
+ *
+ * Everything that reads heat to DECIDE something reads this instead, so the
+ * two halves cannot drift apart. `d.heat` stays the block's own number, which
+ * is what the map colours and what cooling a corner actually changes.
+ */
+export function pressureOn(state, district) {
+  if (!district) return 0;
+  return clamp(district.heat + notorietyOf(state), 0, HEAT.max);
+}
+
 const HEAT_BANDS = [
   { at: 0, key: 'quiet' },
   { at: 22, key: 'watched', up: (n) => `Patrols are getting thicker around ${n}.` },
@@ -1287,7 +1324,7 @@ function bandFor(heat) {
 
 function reportHeatShifts(state) {
   for (const d of state.districts) {
-    const band = bandFor(d.heat);
+    const band = bandFor(pressureOn(state, d));
     const previous = d.heatBand || 'quiet';
     if (band.key === previous) continue;
 
@@ -1308,9 +1345,10 @@ function stepEnforcement(state, dt, hooks = {}) {
     const b = state.buildings[i];
     if (!b.active || b.kind === 'front') continue;
     const d = districtById(state, b.districtId);
-    if (!d || d.heat < HEAT.raidHeatFloor) continue;
+    const pressure = pressureOn(state, d);
+    if (!d || pressure < HEAT.raidHeatFloor) continue;
 
-    const factor = (d.heat - HEAT.raidHeatFloor) / (HEAT.max - HEAT.raidHeatFloor);
+    const factor = (pressure - HEAT.raidHeatFloor) / (HEAT.max - HEAT.raidHeatFloor);
     // What you've arranged on the block counts as much as what you've fitted
     // to the building. A bought precinct is quiet, not absent.
     const turf = turfEffects(d);

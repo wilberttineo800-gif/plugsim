@@ -14,11 +14,12 @@
 import { generateDistricts } from '../src/game/districts.js';
 import { generateCrews, applyInitialControl } from '../src/game/crews.js';
 import { createState, createRoute } from '../src/game/state.js';
-import { stepSim, seedWorld } from '../src/game/sim.js';
+import { stepSim, seedWorld, notorietyOf } from '../src/game/sim.js';
 import { syntheticLots } from './fixtures.js';
 import { BUILDINGS, START_CASH_CLEAN } from '../src/game/constants.js';
 import { unlockStatus } from '../src/game/progression.js';
 import { haversineKm } from '../src/game/geo.js';
+import { DRIVERS, COURIERS } from '../src/game/constants.js';
 import * as A from '../src/game/actions.js';
 import { lotResale } from '../src/game/lots.js';
 
@@ -54,6 +55,18 @@ function openWorld() {
  * exactly one depot, which is the whole reason the run looked like it stalled
  * on money when it was actually stalled on bays.
  */
+/**
+ * The hottest block right now.
+ *
+ * Reported on every status line because heat is the only cost in the game that
+ * is supposed to push back on all of it, and a number that never moves is a
+ * mechanic that is not running. Reading it out on a real operation is the only
+ * honest way to know.
+ */
+function hottest(st) {
+  return (st.districts || []).reduce((m, d) => Math.max(m, d.heat || 0), 0);
+}
+
 function bestLotFor(st, type, budget) {
   const def = BUILDINGS[type];
   if (!def) return null;
@@ -188,8 +201,53 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   const served = (r) => (st.couriers || []).some(
     (c) => c.routeId === r.id || (c.routeIds || []).includes(r.id));
   const unserved = (st.routes || []).filter((r) => !served(r));
-  if (unserved.length && cash > 300000
-      && (st.couriers || []).length <= (st.routes || []).length) {
+  // The stall this replaces: the guard was `couriers <= routes`, and a vehicle
+  // that exists but carries nothing still counted. One courier left idle — no
+  // bay, no driver, or a circuit already full — pushed the count to the ceiling
+  // while a route stayed unserved, so no more were ever bought, `healthy` was
+  // never true again and expansion stopped dead at about ten properties. Every
+  // "days to finish" number this tool has ever printed came from a run that
+  // had already stopped growing.
+  //
+  // Count what is actually HAULING instead, and let an existing vehicle pick up
+  // a second line before buying another — which is what a person would do.
+  const idle = (st.couriers || []).filter(
+    (c) => !c.routeId && !(c.routeIds || []).length);
+  for (const c of idle) {
+    if (!unserved.length) break;
+    const r = unserved.shift();
+    if (!c.driverId) {
+      const hire = A.hireDriver(st);
+      if (hire && hire.driver) A.assignDriver(st, c.id, hire.driver.id);
+    }
+    A.assignCourier(st, c.id, r.id);
+  }
+  // Spare capacity on a vehicle already on the road is free: a circuit takes
+  // more than one line. This has to ADD to the circuit — `assignCourier`
+  // REPLACES it, so calling that here quietly orphaned whatever the vehicle
+  // was already hauling, which put the route straight back on the unserved
+  // list. The bot then bought another vehicle, every day, forever: sixty of
+  // them against five routes.
+  for (const r of [...unserved]) {
+    const taker = (st.couriers || []).find(
+      (c) => c.driverId && (c.routeIds || []).length
+        && A.addRouteToVehicle(st, c.id, r.id).ok);
+    if (!taker) break;
+    unserved.splice(unserved.indexOf(r), 1);
+  }
+
+  // Never buy a vehicle nobody can drive. The roster is capped at two dozen
+  // people who will do this work, so past that point a purchase is a bill with
+  // no haulage attached.
+  const spareDriver = (st.drivers || []).some(
+    (d) => !(st.couriers || []).some((c) => c.driverId === d.id));
+  const canStaff = spareDriver || (st.drivers || []).length < DRIVERS.maxRoster;
+  // And never more vehicles than there is work for. Without this the fleet ran
+  // to sixty against seven routes — a bill with no haulage attached, which is
+  // not a mistake a person makes twice.
+  const fleetRoom = (st.couriers || []).length < (st.routes || []).length + 2;
+
+  if (unserved.length && cash > 300000 && canStaff && fleetRoom) {
     let veh = A.buyVehicle(st, (st.couriers || []).length < 3 ? 'sedan' : 'van');
     // A full depot is not a dead end, it is a shopping list — the game says so
     // in the error. The bot used to ignore it, and because expansion is gated
@@ -202,9 +260,18 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     // park every single day, never had enough left for the van, and bought 634
     // car parks over a thousand days while its clean balance sat at $400k.
     // A fix that swaps one deadlock for a worse one is not a fix.
+    // What a depot actually costs, asked of the game rather than guessed.
+    //
+    // This used to be `cash > 3000000`, and that number is why the run stalled
+    // for good: bays fill at around two million, the bot could never reach
+    // three, so the last route stayed unserved, `healthy` stayed false, the
+    // operation stopped growing and income went flat — which kept cash under
+    // the threshold forever. A magic number holding a deadlock shut.
     const needsBay = veh && !veh.vehicle && /bay/i.test(veh.error || '');
-    if (needsBay && cash > 3000000) {
-      const park = bestLotFor(st, 'depot', cash * 0.35);
+    if (needsBay) {
+      // Leave enough behind for the vehicle the depot is being bought FOR.
+      const room = cash - (COURIERS.sedan.cost + 200000);
+      const park = room > 0 ? bestLotFor(st, 'depot', room) : null;
       if (park) {
         A.buyLot(st, park.id);
         const built = A.developLot(st, park.id, 'depot');
@@ -214,26 +281,18 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
       }
     }
     if (veh && veh.vehicle) {
-      const hire = A.hireDriver(st);
-      if (hire && hire.driver) A.assignDriver(st, veh.vehicle.id, hire.driver.id);
+      const free = (st.drivers || []).find(
+        (d) => !(st.couriers || []).some((c) => c.driverId === d.id));
+      const driver = free || (A.hireDriver(st) || {}).driver;
+      if (driver) A.assignDriver(st, veh.vehicle.id, driver.id);
       A.assignCourier(st, veh.vehicle.id, unserved[0].id);
     }
   }
 
-  // KNOWN LIMITATION, left deliberately rather than chased further.
-  //
-  // `healthy` requires every route to have a courier, and in long runs one
-  // route stays unserved however many vehicles are bought — so expansion stops
-  // at around ten properties and the run measures cash accumulation rather
-  // than progress. The unlock gate is fixed (this asks the game now instead of
-  // keeping a second copy of its rules) and the depot deadlock is fixed, but
-  // this last stall is a bot problem rather than a game problem, and chasing
-  // it further was costing more than it was worth. Treat "days to finish" from
-  // this tool as unmeasured until somebody sorts it.
-  //
   // Only grow the operation when it is demonstrably healthy: everything is
   // being hauled, and there is real clean money spare after the reserve.
-  const healthy = unserved.length === 0 && cash > 2500000;
+  const stillUnserved = (st.routes || []).filter((r) => !served(r));
+  const healthy = stillUnserved.length === 0 && cash > 2500000;
 
   // Reserve enough to keep buying supplies, but nothing like the 20-day float
   // that used to stop the bot scaling at all. Falling behind on haulage is the
@@ -342,7 +401,11 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
   const couriers = (st.couriers || []).length;
   const idleRoute = unserved[0];
 
-  if ((backedUp || idleRoute) && couriers < 60 && cash > 300000) {
+  // A backed-up room is not always a haulage problem — if every line already
+  // has a vehicle on it, the bottleneck is the block's appetite, and another
+  // van is just another bill. `couriers < 60` was a stop sign, not a reason,
+  // and the bot drove straight to it: sixty vehicles against seven routes.
+  if ((backedUp || idleRoute) && fleetRoom && cash > 300000) {
     const veh = A.buyVehicle(st, couriers < 3 ? 'sedan' : couriers < 10 ? 'van' : 'boxtruck');
     if (veh && veh.vehicle) {
       const hire = A.hireDriver(st);
@@ -361,7 +424,10 @@ for (let day = 1; day <= MAX_DAYS && !done; day++) {
     print('  day ' + String(day).padStart(4) + '  $' + Math.round(cash).toLocaleString()
           + ' clean / $' + Math.round(st.cash.dirty).toLocaleString() + ' street, '
           + props + ' props, ' + (st.couriers||[]).length + ' veh, ' + (st.routes||[]).length + ' routes, ' + st.buildings.filter((b)=>(BUILDINGS[b.type]||{}).kind==='front').length
-          + ' fronts, worth $' + Math.round(netWorth(st)).toLocaleString());
+          + ' fronts, worth $' + Math.round(netWorth(st)).toLocaleString()
+          + ', heat ' + hottest(st).toFixed(1) + '+' + notorietyOf(st).toFixed(0)
+          + '=' + (hottest(st) + notorietyOf(st)).toFixed(0)
+          + ', ' + (st.stats.raids || 0) + ' raids');
   }
 }
 

@@ -5,11 +5,11 @@
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
   PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
-  UNIT_LADDER, RETAIL_MARKUP,
+  UNIT_LADDER, RETAIL_MARKUP, HEAT,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
-import { sizeScale, sizeCapacity, rentBonusFor } from '../game/sim.js';
+import { sizeScale, sizeCapacity, rentBonusFor, notorietyOf } from '../game/sim.js';
 import { routeLabel, fixerRemaining, muscleCost, operationOptions, fleetSpaces, fittingDiscount } from '../game/actions.js';
 import { HELPER, currentStep, progress as onboardingProgress } from '../game/onboarding.js';
 import { pendingTip } from '../game/guide.js';
@@ -2031,6 +2031,7 @@ export class GameUI {
 
     return (
       this.productGraph() +
+      this.notorietyBlock() +
       `<div class="sect">
         <div class="sect__title"><span>Blocks</span><span>${s.districts.length}</span></div>
         <p class="card__blurb" style="margin:0 0 10px">
@@ -2040,6 +2041,47 @@ export class GameUI {
         ${rows}
       </div>`
     );
+  }
+
+  /**
+   * How well known you are, and what that is about to cost.
+   *
+   * Block heat has always been on the map. What was invisible — and what
+   * actually decides whether anything happens to you — is the half that
+   * attaches to the operation rather than to a corner. A player could run
+   * thirty lines, watch every block sit at nine, and have no idea why the
+   * police had started turning up.
+   */
+  notorietyBlock() {
+    const s = this.game.state;
+    const known = notorietyOf(s);
+    const worst = Math.max(0, ...(s.districts || []).map((d) => d.heat || 0));
+    const pressure = Math.min(HEAT.max, worst + known);
+    const fronts = (s.buildings || []).filter(
+      (b) => b.active && (BUILDINGS[b.type] || {}).kind === 'front').length;
+
+    const step = pressure >= HEAT.raidHeatFloor
+      ? { tone: 'bad', says: 'Raids are on the table. Anything stored on your hottest block can go.' }
+      : pressure >= HEAT.stopHeatFloor
+        ? { tone: 'warn', says: 'Couriers are getting pulled over. A load stopped is a load seized.' }
+        : { tone: 'good', says: 'Nothing standing out. This is the cheap end of the game.' };
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Attention</span>
+        <span class="${step.tone}">${Math.round(pressure)}</span></div>
+      <p class="card__blurb" style="margin:0 0 8px">${esc(step.says)}</p>
+      <div class="meter" style="margin-bottom:8px"><i style="width:${
+        Math.round((pressure / HEAT.max) * 100)}%;background:var(--${step.tone})"></i></div>
+      <div class="row"><span>Your hottest block</span><span>${Math.round(worst)}</span></div>
+      <div class="row"><span>Known for what you run</span>
+        <span class="${known > 0 ? 'warn' : ''}">+${Math.round(known)}</span></div>
+      <div class="row"><span>Legitimate business</span>
+        <span class="${fronts ? 'good' : 'warn'}">${fronts
+          ? `${fronts} — each one quiets you down`
+          : 'none — nothing explaining you'}</span></div>
+      <div class="row"><span>Pulled over from</span><span>${HEAT.stopHeatFloor}</span></div>
+      <div class="row"><span>Raided from</span><span>${HEAT.raidHeatFloor}</span></div>
+    </div>`;
   }
 
   /**

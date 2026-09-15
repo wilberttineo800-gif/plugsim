@@ -3463,6 +3463,27 @@ export const HEAT = {
   // pressure blooms outward instead of staying pinned to one hex.
   diffusePerDay: 0.18,
   max: 100,
+
+  // --- Notoriety ------------------------------------------------------------
+  //
+  // Block heat alone could never make anything happen, and the reason is worth
+  // writing down: heat is per-block, decays proportionally, and bleeds 18% a
+  // day into its neighbours. So SPREADING OUT was a complete answer to it. A
+  // measured thousand-day run — 31 properties, 28 lines, product actually
+  // selling — peaked at 10.8 on its hottest block against a raid floor of 28.
+  // Zero raids in three game years, and the warning bands at 22, 46 and 72
+  // never fired either, so the player never even saw the mechanic.
+  //
+  // Notoriety is the half that was missing: attention that attaches to YOU
+  // rather than to a corner. It scales with the whole illegal operation, it is
+  // the same everywhere, and it is added to a block's own heat when anything
+  // is decided. Spreading still lowers the local peak — it just no longer
+  // makes you invisible. Fronts count against it, because a legitimate face is
+  // exactly what it is for.
+  notorietyScale: 0.62,
+  // Nobody is notorious for a grow in a spare room.
+  notorietyFloorFootprint: 4,
+
   // Chance per game-hour that a building in a hot district gets raided.
   raidChanceAtMaxHeat: 0.10,
   raidHeatFloor: 28, // below this, no raids

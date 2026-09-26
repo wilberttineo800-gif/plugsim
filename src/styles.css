@@ -768,18 +768,14 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 }
 
 .start--retro .start__panel h1 {
+  font-family: 'Bebas Neue', var(--font-display), sans-serif;
+  font-weight: 400;
   color: var(--nyc-yellow);
   text-shadow:
     2px 0 0 var(--nyc-red),
     4px 3px 0 var(--nyc-black);
   transform: skewX(-3deg);
-  letter-spacing: .02em;
-}
-
-.start--retro .start__tag::after {
-  content: ' 90s New York, replayed nightly.';
-  font-family: 'Permanent Marker', var(--font-display), cursive;
-  color: var(--nyc-red); font-size: 13px;
+  letter-spacing: .04em;
 }
 
 .start--retro .primarybtn {

@@ -340,6 +340,9 @@ export class GameUI {
     document.getElementById('btnSave').addEventListener('click', () => this.game.save());
     document.getElementById('btnHelp').addEventListener('click', () => this.game.toggleHelp(true));
     document.getElementById('helpClose').addEventListener('click', () => this.game.toggleHelp(false));
+    document.getElementById('btnPremium').addEventListener('click', () => this.game.togglePremium(true));
+    document.getElementById('premiumClose').addEventListener('click', () => this.game.togglePremium(false));
+    document.getElementById('premiumRedeem').addEventListener('click', () => this.game.redeemPremium());
   }
 
   onChange(e) {

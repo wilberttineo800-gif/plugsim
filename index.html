@@ -6,7 +6,7 @@
 <title>Plugsim — Supply Line</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=Permanent+Marker&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="src/styles.css">
 </head>
@@ -54,6 +54,7 @@
     </label>
     <button class="ghostbtn" id="btnWhereAmI" title="Centre on you, or follow your real position">Me</button>
     <button class="ghostbtn" id="btnSave" title="Save (S)">Save</button>
+    <button class="ghostbtn" id="btnPremium" title="Remove ads, support development">★ Premium</button>
     <button class="ghostbtn" id="btnHelp" title="Help (?)">?</button>
   </div>
 </header>
@@ -119,8 +120,12 @@
 
 <div id="toasts"></div>
 
+<!-- ── Ad slot (own-domain AdSense path; hidden entirely when premium) ────── -->
+<div class="ad-slot" id="adSlot" hidden></div>
+
 <!-- ── Start screen ─────────────────────────────────────────────────────── -->
-<div class="start" id="startScreen">
+<div class="start start--retro" id="startScreen">
+  <div class="start__skyline" id="startSkyline" aria-hidden="true"></div>
   <div class="start__panel">
     <div class="start__mark">
       <span class="start__kicker">Supply-chain crime sim</span>
@@ -186,6 +191,23 @@
     </ul>
     <h3>Keys</h3>
     <p class="keys"><kbd>Space</kbd> pause · <kbd>1</kbd>–<kbd>4</kbd> speed · <kbd>S</kbd> save · <kbd>Esc</kbd> cancel · <kbd>?</kbd> this panel</p>
+  </div>
+</div>
+
+<!-- ── Premium ──────────────────────────────────────────────────────────── -->
+<div class="modal" id="premiumModal" hidden>
+  <div class="modal__panel">
+    <button class="inspector__close" id="premiumClose" aria-label="Close">✕</button>
+    <h2>Go premium</h2>
+    <div class="premium__body">
+      <p>Buy once on Gumroad, then paste your license key below. Removes ads for
+      good, on this device — no subscription, no account.</p>
+      <div class="start__searchrow premium__row">
+        <input id="premiumKey" type="text" placeholder="License key from your Gumroad receipt" autocomplete="off">
+        <button class="primarybtn" id="premiumRedeem">Redeem</button>
+      </div>
+      <p class="keys">Haven't bought it yet? <a href="https://gumroad.com/l/plugsim-premium" target="_blank" rel="noopener">Get it on Gumroad</a>.</p>
+    </div>
   </div>
 </div>
 

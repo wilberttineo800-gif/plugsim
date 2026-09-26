@@ -11,6 +11,8 @@ import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
 import { DESTINATIONS } from './game/cities.js';
 import { markTipSeen } from './game/guide.js';
 import { devToolsOn } from './game/dev.js';
+import { premiumOn, redeemLicenseKey } from './game/premium.js';
+import { skylineSVG } from './ui/skylineart.js';
 
 // Strip the testing tools out of the page for anyone but me, immediately —
 // not at bootGame, which only runs once a city is started and leaves the tab
@@ -18,6 +20,34 @@ import { devToolsOn } from './game/dev.js';
 if (!devToolsOn()) {
   document.querySelectorAll('[data-tab="admin"]').forEach((b) => b.remove());
 }
+
+// Ads only ever load for a non-premium visitor, and the check happens before
+// anything ad-related is created — a premium unlock costs nothing extra to
+// respect, it just means this whole block never runs.
+function applyAdGate() {
+  const adSlot = document.getElementById('adSlot');
+  if (!adSlot) return;
+  if (premiumOn()) {
+    adSlot.hidden = true;
+    adSlot.innerHTML = '';
+    return;
+  }
+  if (adSlot.dataset.loaded) return;
+  adSlot.dataset.loaded = '1';
+  // TODO: real ca-pub / slot IDs once an AdSense account exists — see the
+  // plugsim-consultant agent's notes on why a game-portal ad network is the
+  // primary bet and this own-domain slot is a secondary, low-cost experiment.
+  const client = 'ca-pub-0000000000000000';
+  const script = document.createElement('script');
+  script.async = true;
+  script.crossOrigin = 'anonymous';
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`;
+  document.head.appendChild(script);
+  adSlot.hidden = false;
+  adSlot.innerHTML = `<ins class="adsbygoogle" style="display:block" data-ad-client="${client}" data-ad-slot="0000000000" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+  (window.adsbygoogle = window.adsbygoogle || []).push({});
+}
+applyAdGate();
 import {
   createState, saveGame, loadGame, hasSave, clearSave, logEvent,
   buildingById, districtById,
@@ -85,6 +115,8 @@ const startEl = document.getElementById('startScreen');
 const statusEl = document.getElementById('startStatus');
 const resultsEl = document.getElementById('cityResults');
 const searchInput = document.getElementById('citySearch');
+
+document.getElementById('startSkyline').innerHTML = skylineSVG();
 
 function setStatus(text, bad = false) {
   statusEl.textContent = text;
@@ -988,6 +1020,23 @@ game.toggleHelp = (open) => {
   document.getElementById('helpModal').hidden = !open;
 };
 
+game.togglePremium = (open) => {
+  document.getElementById('premiumModal').hidden = !open;
+};
+
+game.redeemPremium = async () => {
+  const input = document.getElementById('premiumKey');
+  const key = input.value;
+  if (!key.trim()) return toast('Enter the license key from your Gumroad receipt.', 'warn');
+  toast('Checking…', 'info', 1500);
+  const ok = await redeemLicenseKey(key);
+  if (!ok) return toast("That key didn't check out — try again, or buy it on Gumroad first.", 'bad');
+  toast('Unlocked — thanks for backing the game.', 'good', 4200);
+  input.value = '';
+  game.togglePremium(false);
+  applyAdGate();
+};
+
 game.buyLot = (lotId) => {
   diag.trace('buy lot');
   const r = A.buyLot(game.state, lotId);
@@ -1285,6 +1334,7 @@ function wireKeys() {
       case 'Escape':
         if (game.placing) game.cancelPlacement();
         else if (!document.getElementById('helpModal').hidden) game.toggleHelp(false);
+        else if (!document.getElementById('premiumModal').hidden) game.togglePremium(false);
         else game.select(null);
         break;
       default: break;

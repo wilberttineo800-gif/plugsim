@@ -24,35 +24,41 @@ if (!devToolsOn()) {
 // Ads only ever load for a non-premium visitor, and the check happens before
 // anything ad-related is created — a premium unlock costs nothing extra to
 // respect, it just means this whole block never runs.
+//
+// STILL A PLACEHOLDER ID ON PURPOSE. Google's Publisher Policies prohibit
+// monetizing "illegal content" and "dangerous or derogatory content"
+// (transnational drug trafficking, promotion of violence against others),
+// and this game's own action set — organ harvesting, captivity, killing,
+// drug manufacturing — is exactly that, not just an edgy skin on it. Running
+// this domain's own AdSense account risks a policy strike or suspension that
+// follows the whole account, not just this site — see the plugsim-consultant
+// agent's notes for the researched alternative (Gumroad direct sale, no ad
+// network). Until that's deliberately overridden, skip loading Google's
+// script entirely rather than hit their ad-serving infra with a fake client
+// ID every dev session — which also used to blow the layout open: an
+// unfilled full-width-responsive unit gets `height/max-height:none
+// !important` written onto its container by Google's own script, which no
+// stylesheet rule can out-specificity. A fixed-size unit (below) never asks
+// for that resize in the first place.
+const ADSENSE_CLIENT = 'ca-pub-0000000000000000'; // real one goes here, deliberately, when that day comes
 function applyAdGate() {
   const adSlot = document.getElementById('adSlot');
   if (!adSlot) return;
-  if (premiumOn()) {
+  if (premiumOn() || ADSENSE_CLIENT === 'ca-pub-0000000000000000') {
     adSlot.hidden = true;
     adSlot.innerHTML = '';
     return;
   }
   if (adSlot.dataset.loaded) return;
   adSlot.dataset.loaded = '1';
-  // TODO: real ca-pub / slot IDs once an AdSense account exists — but read
-  // this first. Google's Publisher Policies prohibit monetizing "illegal
-  // content" and "dangerous or derogatory content" (transnational drug
-  // trafficking, promotion of violence against others), and this game's own
-  // action set — organ harvesting, captivity, killing, drug manufacturing —
-  // is exactly that, not just an edgy skin on it. Running this domain's own
-  // AdSense account risks a policy strike or suspension that can follow the
-  // whole account, not just this site. Confirm the current policy text and
-  // accept that risk deliberately before ever filling in a real client ID
-  // here; see the plugsim-consultant agent's notes for the researched
-  // alternative (Gumroad direct sale, no ad network).
-  const client = 'ca-pub-0000000000000000';
   const script = document.createElement('script');
   script.async = true;
   script.crossOrigin = 'anonymous';
-  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${client}`;
+  script.src = `https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=${ADSENSE_CLIENT}`;
   document.head.appendChild(script);
   adSlot.hidden = false;
-  adSlot.innerHTML = `<ins class="adsbygoogle" style="display:block" data-ad-client="${client}" data-ad-slot="0000000000" data-ad-format="auto" data-full-width-responsive="true"></ins>`;
+  // Fixed size, not full-width-responsive — see the comment above.
+  adSlot.innerHTML = `<ins class="adsbygoogle" style="display:inline-block;width:728px;height:90px" data-ad-client="${ADSENSE_CLIENT}" data-ad-slot="0000000000"></ins>`;
   (window.adsbygoogle = window.adsbygoogle || []).push({});
 }
 applyAdGate();

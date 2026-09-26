@@ -17,9 +17,9 @@ export function skylineSVG() {
       <rect x="274" y="55"  width="28"  height="145"/>
       <rect x="284" y="20"  width="8"   height="40"/>
       <rect x="308" y="95"  width="46"  height="105"/>
-      <rect x="360" y="10"  width="34"  height="190"/>
-      <polygon points="360,10 377,-14 394,10"/>
-      <rect x="373" y="-30" width="8"   height="20"/>
+      <rect x="360" y="40"  width="34"  height="160"/>
+      <polygon points="360,40 377,16 394,40"/>
+      <rect x="373" y="4"   width="8"   height="12"/>
       <rect x="400" y="120" width="30"  height="80"/>
       <rect x="436" y="75"  width="40"  height="125"/>
       <rect x="482" y="105" width="24"  height="95"/>

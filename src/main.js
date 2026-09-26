@@ -34,9 +34,17 @@ function applyAdGate() {
   }
   if (adSlot.dataset.loaded) return;
   adSlot.dataset.loaded = '1';
-  // TODO: real ca-pub / slot IDs once an AdSense account exists — see the
-  // plugsim-consultant agent's notes on why a game-portal ad network is the
-  // primary bet and this own-domain slot is a secondary, low-cost experiment.
+  // TODO: real ca-pub / slot IDs once an AdSense account exists — but read
+  // this first. Google's Publisher Policies prohibit monetizing "illegal
+  // content" and "dangerous or derogatory content" (transnational drug
+  // trafficking, promotion of violence against others), and this game's own
+  // action set — organ harvesting, captivity, killing, drug manufacturing —
+  // is exactly that, not just an edgy skin on it. Running this domain's own
+  // AdSense account risks a policy strike or suspension that can follow the
+  // whole account, not just this site. Confirm the current policy text and
+  // accept that risk deliberately before ever filling in a real client ID
+  // here; see the plugsim-consultant agent's notes for the researched
+  // alternative (Gumroad direct sale, no ad network).
   const client = 'ca-pub-0000000000000000';
   const script = document.createElement('script');
   script.async = true;

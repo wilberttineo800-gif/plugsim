@@ -35,7 +35,12 @@ export async function redeemLicenseKey(key) {
     });
     const res = await fetch('https://api.gumroad.com/v2/licenses/verify', { method: 'POST', body });
     const data = await res.json();
-    if (data && data.success) {
+    // `success: true` only means "this key exists for this product" — Gumroad
+    // still returns it for a purchase that was later refunded or charged
+    // back. Check the purchase record itself, or a refunded buyer keeps the
+    // unlock forever.
+    const p = data && data.purchase;
+    if (data && data.success && p && !p.refunded && !p.chargebacked && !(p.disputed && !p.dispute_won)) {
       localStorage.setItem(PREMIUM_KEY, '1');
       return true;
     }

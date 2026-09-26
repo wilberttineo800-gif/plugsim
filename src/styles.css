@@ -783,6 +783,36 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 }
 .start--retro .primarybtn:hover { background: #ffd84a; }
 
+/* The search row, results list and secondary actions only ever got the
+   base dark "dispatch console" look — every other element on this screen
+   went retro, so next to the yellow headline and Search button they read
+   as flat and unfinished. */
+.start--retro .start__field label {
+  color: var(--nyc-yellow);
+}
+.start--retro .start__searchrow input {
+  border-color: var(--nyc-black); background: var(--nyc-black);
+}
+.start--retro .start__searchrow input:focus {
+  border-color: var(--nyc-yellow);
+  box-shadow: 0 0 0 3px rgba(243, 198, 35, .18);
+}
+.start--retro .start__results .result {
+  border-left: 3px solid var(--nyc-yellow);
+  background: var(--nyc-black);
+  border-top-color: var(--line-soft); border-right-color: var(--line-soft); border-bottom-color: var(--line-soft);
+}
+.start--retro .start__results .result:hover {
+  border-left-color: #ffd84a;
+  background: #1b1610;
+}
+.start--retro .ghostbtn {
+  background: var(--nyc-black); border-color: var(--nyc-yellow); color: var(--nyc-yellow);
+}
+.start--retro .ghostbtn:hover {
+  background: var(--nyc-yellow); color: var(--nyc-black);
+}
+
 /* ── Modal ─────────────────────────────────────────────────────────────── */
 
 .modal {

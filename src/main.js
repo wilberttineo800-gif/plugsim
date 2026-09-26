@@ -12,7 +12,6 @@ import { DESTINATIONS } from './game/cities.js';
 import { markTipSeen } from './game/guide.js';
 import { devToolsOn } from './game/dev.js';
 import { premiumOn, redeemLicenseKey } from './game/premium.js';
-import { skylineSVG } from './ui/skylineart.js';
 
 // Strip the testing tools out of the page for anyone but me, immediately —
 // not at bootGame, which only runs once a city is started and leaves the tab
@@ -129,8 +128,6 @@ const startEl = document.getElementById('startScreen');
 const statusEl = document.getElementById('startStatus');
 const resultsEl = document.getElementById('cityResults');
 const searchInput = document.getElementById('citySearch');
-
-document.getElementById('startSkyline').innerHTML = skylineSVG();
 
 function setStatus(text, bad = false) {
   statusEl.textContent = text;

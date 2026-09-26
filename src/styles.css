@@ -703,115 +703,143 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 }
 .start__status.is-bad { color: var(--bad); }
 
-/* ── Start screen: retro NYC (start--retro) ───────────────────────────────
-   Scoped entirely under this one modifier class — every selector below is
-   prefixed .start--retro, every new color lives in a var defined ON
-   .start--retro (not :root), so none of it can leak into the dispatch-console
-   theme the rest of the app uses. Delete this block (or drop the class in
-   index.html) and the screen is back to the plain version exactly. */
+/* ── Start screen: case file (start--case) ────────────────────────────────
+   Scoped entirely under this one modifier class, same discipline as the
+   retro-NYC version this replaced: every color lives in a var defined ON
+   .start--case, nothing here touches a bare .primarybtn/.ghostbtn/theme
+   selector, so it can't leak into the dispatch-console UI used everywhere
+   else post-boot. Delete this block (or drop the class in index.html) and
+   the screen is back to the plain version exactly.
 
-.start--retro {
-  --nyc-yellow: #f3c623;
-  --nyc-red:    #b3312c;
-  --nyc-black:  #15110d;
-  overflow: hidden;
-}
+   Genre reference is an evidence board / case file, not the night-skyline
+   idea it replaced: a manila folder dropped on a dark desk, redacted bars,
+   a rubber-stamp headline, typed field labels — paper and ink instead of
+   neon and checker-cab yellow. */
 
-.start--retro .start__skyline {
-  position: absolute; inset: auto 0 0 0; height: 46%;
-  /* var(--nyc-black) at low opacity measured as rgb(21,17,13) on the near-
-     black ground rgb(8,11,16) — indistinguishable in practice. A visibly
-     lighter, warmer silhouette plus a sodium-glow horizon line is what
-     actually reads as "skyline at night" rather than flat ground. */
-  color: #40301f; opacity: .9;
-  pointer-events: none; z-index: 0;
-}
-.start--retro .start__skyline::before {
-  content: ''; position: absolute; inset: 0;
-  background: linear-gradient(0deg, transparent 62%, rgba(255, 138, 61, .16) 100%);
-}
-.start--retro .start__skyline svg { display: block; width: 100%; height: 100%; }
-
-/* Halftone/newsprint dot texture, then CRT scanlines on top — both faint
-   enough to read as "old print/old broadcast" without fighting the text. */
-.start--retro::before,
-.start--retro::after {
-  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 1;
-}
-.start--retro::before {
-  background-image: radial-gradient(var(--nyc-yellow) 1px, transparent 1.4px);
-  background-size: 5px 5px;
-  opacity: .05; mix-blend-mode: screen;
-}
-.start--retro::after {
-  background: repeating-linear-gradient(
-    0deg, rgba(0, 0, 0, .35) 0 1px, transparent 1px 3px);
-  opacity: .10;
+.start--case {
+  --case-paper:      #d9cba3;
+  --case-paper-dark: #c7b78d;
+  --case-paper-lite: #eee3c4;
+  --case-ink:        #201b14;
+  --case-ink-dim:    #5c5340;
+  --case-red:        #8f2020;
+  --font-case: 'Special Elite', var(--font-mono), monospace;
 }
 
-.start--retro .start__panel {
-  position: relative; z-index: 2;
-  border-color: var(--nyc-black);
-}
-/* A checker-cab strip along the top of the panel, the one loud accent. */
-.start--retro .start__panel::before {
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 5px;
-  background: repeating-linear-gradient(
-    45deg, var(--nyc-black) 0 9px, var(--nyc-yellow) 9px 18px);
+/* The desk: near-black, same ground as the rest of the app, with a soft
+   lamp-cone glow over where the folder sits rather than a themed backdrop
+   filling the whole screen. */
+.start--case {
+  background:
+    radial-gradient(900px 600px at 50% 18%, rgba(255, 214, 150, .08), transparent 65%),
+    var(--ground);
 }
 
-.start--retro .start__kicker {
+.start--case .start__panel {
+  position: relative;
+  background: var(--case-paper);
+  background-image:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, .025) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(0, 0, 0, .015) 0 1px, transparent 1px 3px);
+  border: 1px solid var(--case-paper-dark);
+  color: var(--case-ink);
+  transform: rotate(-.6deg);
+  box-shadow: 0 30px 70px rgba(0, 0, 0, .75), 0 2px 0 rgba(0, 0, 0, .15) inset;
+}
+
+/* A folder tab standing up off the top edge, like the file itself has a
+   label rather than the screen having a banner. */
+.start--case .start__panel::before {
+  content: 'CASE FILE';
+  position: absolute; top: -22px; left: 30px;
+  background: var(--case-paper-dark); color: var(--case-ink);
+  font-family: var(--font-case);
+  font-size: 11px; letter-spacing: .08em;
+  padding: 5px 14px 8px;
+  border-radius: 4px 4px 0 0;
+}
+
+/* A rubber stamp in the corner, not a themed banner. */
+.start--case .start__panel::after {
+  content: 'CONFIDENTIAL';
+  position: absolute; top: 22px; right: 26px;
+  font-family: var(--font-case);
+  font-size: 13px; letter-spacing: .1em; font-weight: 700;
+  color: var(--case-red);
+  border: 3px solid var(--case-red);
+  border-radius: 3px;
+  padding: 4px 10px;
+  transform: rotate(8deg);
+  opacity: .8;
+  mix-blend-mode: multiply;
+}
+
+.start--case .start__kicker {
   display: inline-block;
-  background: var(--nyc-black); color: var(--nyc-yellow);
-  padding: 3px 9px; border-radius: 999px;
-  letter-spacing: .18em;
+  background: none; color: var(--case-red);
+  font-family: var(--font-case);
+  text-transform: uppercase; letter-spacing: .1em; font-size: 11px;
+  border-bottom: 1px dashed var(--case-red);
+  padding-bottom: 2px; border-radius: 0;
 }
 
-.start--retro .start__panel h1 {
-  font-family: 'Bebas Neue', var(--font-display), sans-serif;
+.start--case .start__panel h1 {
+  font-family: var(--font-case);
   font-weight: 400;
-  color: var(--nyc-yellow);
-  text-shadow:
-    2px 0 0 var(--nyc-red),
-    4px 3px 0 var(--nyc-black);
-  transform: skewX(-3deg);
-  letter-spacing: .04em;
+  color: var(--case-ink);
+  text-shadow: 1px 1px 0 rgba(143, 32, 32, .35);
+  transform: none; letter-spacing: 0;
 }
 
-.start--retro .primarybtn {
-  background: var(--nyc-yellow); border-color: var(--nyc-black); color: var(--nyc-black);
+.start--case .start__tag {
+  color: var(--case-ink-dim);
+  font-family: var(--font-mono);
 }
-.start--retro .primarybtn:hover { background: #ffd84a; }
 
-/* The search row, results list and secondary actions only ever got the
-   base dark "dispatch console" look — every other element on this screen
-   went retro, so next to the yellow headline and Search button they read
-   as flat and unfinished. */
-.start--retro .start__field label {
-  color: var(--nyc-yellow);
+.start--case .start__field label {
+  color: var(--case-red);
+  font-family: var(--font-case);
 }
-.start--retro .start__searchrow input {
-  border-color: var(--nyc-black); background: var(--nyc-black);
+
+.start--case .start__searchrow input {
+  background: var(--case-paper-lite); border: 1px solid var(--case-paper-dark);
+  color: var(--case-ink); font-family: var(--font-mono);
+  border-radius: 2px;
 }
-.start--retro .start__searchrow input:focus {
-  border-color: var(--nyc-yellow);
-  box-shadow: 0 0 0 3px rgba(243, 198, 35, .18);
+.start--case .start__searchrow input::placeholder { color: #8a7d5e; }
+.start--case .start__searchrow input:focus {
+  border-color: var(--case-red);
+  box-shadow: 0 0 0 3px rgba(143, 32, 32, .15);
 }
-.start--retro .start__results .result {
-  border-left: 3px solid var(--nyc-yellow);
-  background: var(--nyc-black);
-  border-top-color: var(--line-soft); border-right-color: var(--line-soft); border-bottom-color: var(--line-soft);
+
+.start--case .start__hint { color: var(--case-ink-dim); }
+
+.start--case .start__results .result {
+  background: var(--case-paper-lite); border: 1px solid var(--case-paper-dark);
+  border-left: 3px solid var(--case-red);
+  border-radius: 2px;
 }
-.start--retro .start__results .result:hover {
-  border-left-color: #ffd84a;
-  background: #1b1610;
+.start--case .start__results .result:hover { background: #e6d8ac; border-left-color: var(--case-red); }
+.start--case .result b { color: var(--case-ink); }
+.start--case .result b em { color: var(--case-red); }
+.start--case .result span { color: var(--case-ink-dim); }
+
+.start--case .start__status { color: var(--case-ink-dim); font-family: var(--font-mono); }
+.start--case .start__status.is-bad { color: var(--case-red); }
+
+.start--case .primarybtn {
+  background: var(--case-ink); border-color: var(--case-ink); color: var(--case-paper);
+  font-family: var(--font-case);
+  border-radius: 2px;
 }
-.start--retro .ghostbtn {
-  background: var(--nyc-black); border-color: var(--nyc-yellow); color: var(--nyc-yellow);
+.start--case .primarybtn:hover { background: #322a1e; }
+
+.start--case .ghostbtn {
+  background: transparent; border: 1px dashed var(--case-ink); color: var(--case-ink);
+  font-family: var(--font-mono);
+  border-radius: 2px;
 }
-.start--retro .ghostbtn:hover {
-  background: var(--nyc-yellow); color: var(--nyc-black);
-}
+.start--case .ghostbtn:hover { background: rgba(0, 0, 0, .07); }
 
 /* ── Modal ─────────────────────────────────────────────────────────────── */
 

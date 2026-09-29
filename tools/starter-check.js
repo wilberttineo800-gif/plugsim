@@ -142,7 +142,16 @@ print('  seized             ' + Math.round(S.seized || 0) + ' packs');
 print('  laundered          $' + Math.round(S.laundered || 0).toLocaleString());
 print('  raids/stops        ' + (S.raids || 0) + '/' + (S.stops || 0));
 // What one day actually costs, computed the way the sim charges it.
-const gdef = BUILDINGS.grow_house;
+//
+// Read from the building this scenario actually put up rather than a
+// hardcoded type. This said `BUILDINGS.grow_house` while line 70 builds a
+// `closet_grow`, so every figure below described a building that was not in
+// the run: supplies printed $123,200/day against a real $28,800, and yield
+// 28.0 raw/day against a real 5.3. The verdict below uses net worth, so the
+// gate itself was still correct — but the numbers a designer reads to tune
+// the opening were wrong by 4-5x, in a project whose own balance skill says
+// "quote real numbers, never 'should be fine'."
+const gdef = BUILDINGS[grow.type];
 const ldef = BUILDINGS.lab;
 const supplies = gdef.supplyCostPerSlot * gdef.slots * (grow.scale) * (24 / gdef.cycleHours);
 const rawPerDay = gdef.slots * gdef.rawPerSlot * grow.scale * (24 / gdef.cycleHours);
@@ -175,7 +184,13 @@ print('  the operation ' + (finalWorth >= worth0 ? 'made' : 'lost') + '  $' +
       Math.round(Math.abs(finalWorth - worth0) / 30).toLocaleString() + '/day');
 print('');
 const perDay = (finalWorth - worth0) / 30;
+// The gate was one-sided: it failed under $250/day and said GOOD above $400,
+// with no ceiling at all. It has been reporting ~$137,000/day — 345x its own
+// "good" bar — and passing cleanly, so inflation was invisible to the one
+// harness whose job is the opening's health. A band has two edges.
+const RICH = 20000;
 const verdict = broke ? 'FAILS — the opening starves itself'
+  : perDay >= RICH ? 'RICH — the opening prints money; nothing after it can be a decision'
   : perDay >= 400 ? 'GOOD — you can save for a second grow inside a fortnight'
   : perDay > 0 ? 'THIN — it grows, but too slowly to feel like progress'
   : 'LOSES — the opening cannot pay for itself';
@@ -190,6 +205,15 @@ if (broke) {
 } else if (perDay < 250) {
   print('STARTER CHECK FAILED — too slow to feel like progress ($' +
         Math.round(perDay) + '/day, want $250+)');
+} else if (perDay >= RICH) {
+  // Deliberately loud rather than fatal. The opening currently clears this by
+  // ~7x and the cause is upstream of the opening (see the team review: every
+  // sink except supplies is a rounding error, and enforcement has never once
+  // fired), so failing the build here would block work on the actual cause.
+  // It stops being a warning and starts being a failure once the economy pass
+  // lands.
+  print('STARTER CHECK WARNING — the opening prints money ($' +
+        Math.round(perDay) + '/day, want under $' + RICH.toLocaleString() + ')');
 } else {
   print('starter check passed — $' + Math.round(perDay) + '/day on the opening');
 }

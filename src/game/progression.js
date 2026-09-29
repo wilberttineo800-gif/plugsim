@@ -7,10 +7,29 @@
 
 import { BUILDINGS, BUILDING_IDS, PRODUCTS } from './constants.js';
 import { logEvent } from './state.js';
+import { lotResale } from './lots.js';
 
-/** Money on hand counts both colours — you earned it either way. */
+/**
+ * Everything you have, at what it would actually fetch.
+ *
+ * Both colours of money count — you earned it either way — and so does
+ * property, at resale. Leaving property out inverted this whole ladder:
+ * buying a building turned counted money into uncounted bricks, so the one
+ * act the gate exists to reward *lowered* your progress along it. An
+ * operation holding thirty premises could read as broke, which is why a
+ * measured 1,000-day run peaked around $21M against a ladder topping out at
+ * $220M and never opened its upper half.
+ *
+ * `tools/starter-check.js` has always measured it this way. This is that
+ * version, moved to where the game actually reads it.
+ */
 export function netWorth(state) {
-  return state.cash.clean + state.cash.dirty;
+  let worth = state.cash.clean + state.cash.dirty;
+  for (const lot of state.lots || []) {
+    if (!lot.owned) continue;
+    worth += lotResale(lot, (state.districts || []).find((d) => d.id === lot.districtId));
+  }
+  return worth;
 }
 
 export function propertyCount(state) {

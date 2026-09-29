@@ -448,6 +448,21 @@ function stepCouriers(state, dt, hooks) {
         if (!c.dwellLeft) {
           const loaded = loadCargo(state, c, def, route, source);
           if (loaded <= 0) {
+            // A laden courier that can't take on more has somewhere to be.
+            // Without this it parked forever: a block at glutCap refuses the
+            // load, unloadCargo leaves it aboard, loadCargo then returns 0
+            // because space is capacity-minus-aboard, and advanceCircuit is a
+            // no-op on a single-route circuit — which is every early courier.
+            // The only exit from `loading` was loading something new, so a
+            // full vehicle could never reach it. Measured: one of the two
+            // couriers in a 120-day simtest ends frozen at exactly capacity,
+            // deterministically, every run.
+            if (totalPacks(c.cargo) > 0.0001) {
+              c.dwellLeft = 0;
+              c.phase = 'outbound';
+              c.progress = 0;
+              break;
+            }
             advanceCircuit(state, c);
             break;
           }

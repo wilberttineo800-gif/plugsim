@@ -3810,15 +3810,23 @@ export class GameUI {
    * be looking in the right place to be told where to look. He now sits above
    * whatever tab you are on.
    *
-   * Two things he might have to say, in priority order: a new thing has opened
-   * up, or you are still standing the operation up. He never prescribes WHICH
-   * building — the opening steps check `has(s, 'production')`, so a closet and
-   * a warehouse grow both satisfy it, and the path stays yours.
+   * Two things he might have to say: you are still standing the operation up,
+   * or a new thing has opened up. He never prescribes WHICH building — the
+   * opening steps check `has(s, 'production')`, so a closet and a warehouse
+   * grow both satisfy it, and the path stays yours.
+   *
+   * The ladder wins while it is unfinished. It used to be the other way round,
+   * which meant any unlock tip blanked the seven-step opening entirely — a
+   * fresh save's first screen was rival-taxation advice, delivered to somebody
+   * with no property, no product and no routes. Tips are not lost by this:
+   * `pendingTip` only reports tips that are still unseen, and `markTipSeen`
+   * only fires when one is actually shown, so they queue and surface the
+   * moment `currentStep` runs out.
    */
   helperRail() {
     const s = this.game.state;
-    const tip = pendingTip(s);
-    const step = tip ? null : currentStep(s);
+    const step = currentStep(s);
+    const tip = step ? null : pendingTip(s);
     if (!tip && !step) return '';
 
     const p = onboardingProgress(s);

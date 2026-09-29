@@ -287,6 +287,11 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
   background: rgba(15, 22, 32, .94);
   backdrop-filter: blur(8px);
 }
+/* Same guard every other toggled block in this file already has (.loading,
+   .rail, .rail__tabs, .ticker, .start). Without it `display: flex` beat the
+   hidden attribute and #hudWarning — an empty red error chip — painted in
+   every session the game has ever rendered. */
+.hud__block[hidden] { display: none; }
 .hud__brand { flex-direction: column; align-items: flex-start; gap: 1px; min-width: 168px; }
 .hud__city {
   font-family: var(--font-display); font-weight: 700; font-size: 17px;

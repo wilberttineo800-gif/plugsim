@@ -3700,6 +3700,39 @@ export const TASK_FORCE = {
   cooldownDays: 90,
 };
 
+// A regional-policy drift — but not a national lobbying meter to pull a
+// lever on. This game's own identity is a real city on a real map, so the
+// drift is LOCAL to the one you're playing (resets with every new game like
+// everything else does), and it only applies to the two lines with an
+// actual current real-world decriminalisation trend behind them — cannabis
+// and psilocybin, not a blanket "drugs are legal now" switch that would
+// apply just as well to fentanyl, which nowhere is trending that way.
+//
+// Reactive, not player-directed: there is no campaign to fund. A product
+// drifts toward decrim on its own after the city has moved a lot of it
+// through a genuinely quiet stretch — sustained low heat, checked monthly
+// so a lucky quiet week can't trigger it — and a hot enough month can swing
+// it back. The player shapes this by how they operate, not by spending on
+// it directly.
+export const DECRIM = {
+  eligible: ['weed', 'shrooms'],
+  // Its own cadence, deliberately slower than the daily incidents/audit/
+  // task-force checks — a civic mood shift moves on a much longer clock.
+  checkEveryDays: 30,
+  // Average heat across every district in the city has to sit under this —
+  // genuinely quiet, not just below the raid floor — for decrim to even be
+  // on the table that month.
+  quietHeatCeiling: 9,
+  chancePerCheck: 0.22,
+  // Heat generated per pack sold once decrim — reduced, not zeroed: this is
+  // de-prioritised enforcement, not legalisation. Nothing here changes what
+  // you're charged, what a front can do, or the money split.
+  heatMult: 0.4,
+  // A real crackdown can still happen and reverse it.
+  recrimHeatFloor: 30,
+  recrimChancePerCheck: 0.15,
+};
+
 // How hard a legitimate business leans on the wealth of its block.
 /**
  * What a stalled building still costs per day, as a share of its normal upkeep.

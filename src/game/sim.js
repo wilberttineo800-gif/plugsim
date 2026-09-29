@@ -19,6 +19,7 @@ import {
   ARREARS,
   AUDIT,
   TASK_FORCE,
+  DECRIM,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -727,7 +728,8 @@ function stepStorefronts(state, dt) {
       if (!d.servedDirect) d.servedDirect = {};
       d.servedDirect[pid] = servedToday + reaching;
       const notice = 0.6 + d.policing * 0.8;
-      d.heat = clamp(d.heat + reaching * PRODUCTS[pid].heatPerPackSold * notice, 0, HEAT.max);
+      d.heat = clamp(d.heat + reaching * PRODUCTS[pid].heatPerPackSold * decrimHeatMult(state, pid) * notice,
+        0, HEAT.max);
       d.rep = clamp01(d.rep + reaching * MARKET.repGainPerSale);
 
       b.packs[pid] -= move;
@@ -818,7 +820,8 @@ function stepMarkets(state, dt) {
       d.revenueTotal += revenue;
       // Selling under a heavier patrol draws more attention per pack moved.
       const notice = 0.6 + d.policing * 0.8;
-      d.heat = clamp(d.heat + sold * PRODUCTS[pid].heatPerPackSold * notice, 0, HEAT.max);
+      d.heat = clamp(d.heat + sold * PRODUCTS[pid].heatPerPackSold * decrimHeatMult(state, pid) * notice,
+        0, HEAT.max);
       d.rep = clamp01(d.rep + sold * MARKET.repGainPerSale);
 
       state.cash.dirty += revenue;
@@ -895,6 +898,43 @@ function stepLegit(state, dt) {
     state.stats.laundered += amount;
     b.launderedToday += amount;
     b.launderedTotal = (b.launderedTotal || 0) + amount;
+  }
+}
+
+/** Heat generated per pack sold, adjusted for a product currently decrim in
+ * this city — see DECRIM in constants.js. 1 for anything not eligible or
+ * not currently drifted that way. */
+function decrimHeatMult(state, productId) {
+  return (state.decrimProducts && state.decrimProducts[productId]) ? DECRIM.heatMult : 1;
+}
+
+/**
+ * A slower, quieter civic drift than anything else in this file — checked
+ * monthly, not daily, because public mood is a much longer clock than
+ * enforcement reacting in real time. See DECRIM in constants.js for why
+ * this is local and product-specific rather than a lobbying meter.
+ */
+function stepDecrimDrift(state) {
+  const ds = state.districts || [];
+  if (!ds.length) return;
+  const avgHeat = ds.reduce((sum, d) => sum + (d.heat || 0), 0) / ds.length;
+
+  for (const pid of DECRIM.eligible) {
+    const name = PRODUCTS[pid].name;
+    const decrim = !!(state.decrimProducts && state.decrimProducts[pid]);
+    if (!decrim) {
+      if (avgHeat > DECRIM.quietHeatCeiling || rng() >= DECRIM.chancePerCheck) continue;
+      state.decrimProducts = state.decrimProducts || {};
+      state.decrimProducts[pid] = true;
+      logEvent(state,
+        `${name} enforcement is being deprioritised citywide — a real shift, not a rumour. `
+        + `Still not legal, but it draws a lot less attention per pack now.`,
+        'good');
+    } else {
+      if (avgHeat < DECRIM.recrimHeatFloor || rng() >= DECRIM.recrimChancePerCheck) continue;
+      state.decrimProducts[pid] = false;
+      logEvent(state, `The quiet spell on ${name} is over — enforcement is back to normal citywide.`, 'bad');
+    }
   }
 }
 
@@ -1640,6 +1680,7 @@ function settleDay(state) {
   dailyIncidents(state);
   auditFronts(state);
   stepTaskForce(state);
+  if (clockOf(state.minutes).day % DECRIM.checkEveryDays === 0) stepDecrimDrift(state);
   stepFuneralTrade(state);
 
   // A day on the clock, but only a day spent doing something worth remembering.

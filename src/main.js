@@ -1,6 +1,6 @@
 // Bootstrap: the start screen, the map, and the loop that drives everything.
 
-import { GAME_MINUTES_PER_REAL_SECOND, LOTS, SPEEDS, TICK_MS } from './game/constants.js';
+import { GAME_MINUTES_PER_REAL_SECOND, LOTS, SPEEDS, TICK_MS, YOU_DRIVING } from './game/constants.js';
 import { generateDistricts, districtAt } from './game/districts.js';
 import { generateCrews, applyInitialControl, rehydrateCrews } from './game/crews.js';
 import {
@@ -281,18 +281,26 @@ async function startNewGame(origin, cityName) {
 }
 
 /**
- * Put the "you are here" dot where it belongs: your real position if you've
- * turned following on, otherwise your headquarters, otherwise where you started.
+ * Put the "you are here" dot where it belongs. Three answers, in order: the
+ * vehicle, if you took a run yourself — that's the point of taking it; your
+ * real position, if you turned following on; otherwise headquarters.
+ *
+ * Driving deliberately does NOT reuse `followMe`. That flag means real device
+ * geolocation, and a player with GPS on would otherwise watch their marker
+ * fight the van for the same dot.
  */
 function syncPlayerMarker() {
   const s = game.state;
   if (!s || !game.playerMarker) return;
+  const driven = (s.couriers || []).find((c) => c.driverId === YOU_DRIVING && c.position);
   let at = s.playerAt;
-  if (!s.followMe) {
+  if (driven) {
+    at = driven.position;
+  } else if (!s.followMe) {
     const hq = s.hqBuildingId ? buildingById(s, s.hqBuildingId) : null;
     at = hq ? hq.latlng : (s.playerAt || s.origin);
   }
-  game.playerMarker.set(at, { live: !!s.followMe });
+  game.playerMarker.set(at, { live: !!s.followMe || !!driven });
 }
 
 /**

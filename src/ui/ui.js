@@ -5,7 +5,7 @@
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
   PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
-  UNIT_LADDER, RETAIL_MARKUP, WHOLESALE_FACTOR, HEAT, ARREARS,
+  UNIT_LADDER, RETAIL_MARKUP, WHOLESALE_FACTOR, HEAT, ARREARS, YOU_DRIVING,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
@@ -2555,10 +2555,18 @@ export class GameUI {
     const def = COURIERS[c.type];
     const fitted = vehicleStats(c, def);
     const carried = PRODUCT_IDS.reduce((n, p) => n + c.cargo[p], 0);
-    const driver = c.driverId ? driverById(s, c.driverId) : null;
+    const yours = c.driverId === YOU_DRIVING;
+    const driver = c.driverId && !yours ? driverById(s, c.driverId) : null;
+    const manned = yours || !!driver;
 
     const taken = new Set(s.couriers.filter((v) => v.id !== c.id && v.driverId).map((v) => v.driverId));
+    // You are one person. If you're already behind a wheel somewhere else,
+    // you can't be behind this one — same exclusivity every driver has.
+    const youBusy = taken.has(YOU_DRIVING);
     const driverOpts = ['<option value="">— nobody driving —</option>']
+      .concat(youBusy
+        ? []
+        : [`<option value="${YOU_DRIVING}" ${yours ? 'selected' : ''}>You · no wage</option>`])
       .concat((s.drivers || [])
         .filter((d) => !taken.has(d.id))
         .map((d) => `<option value="${d.id}" ${c.driverId === d.id ? 'selected' : ''}>${esc(d.name)} · ${money(d.wagePerDay)}/d</option>`))
@@ -2596,7 +2604,9 @@ export class GameUI {
         </div>
         <div class="fleetart fleetart--sm">${vehicleArt(c.type, { size: 132 })}</div>
         <div class="card__meta">
-          <span>${driver ? esc(driver.name) : '<span style="color:var(--warn)">parked, no driver</span>'}</span>
+          <span>${yours
+            ? '<span style="color:var(--good)">you, driving</span>'
+            : (driver ? esc(driver.name) : '<span style="color:var(--warn)">parked, no driver</span>')}</span>
           <span>${esc(this.phaseLabel(c))}</span>
           <span>${c.tripsCompleted} runs</span>
         </div>
@@ -2606,8 +2616,12 @@ export class GameUI {
         ${circuitChips}
         <div class="field" style="margin:6px 0 0">
           <select data-field="courierRoute" data-courier="${c.id}"
-            ${driver && circuit.length < max && spare.length ? '' : 'disabled'}>${routeOpts}</select>
+            ${manned && circuit.length < max && spare.length ? '' : 'disabled'}>${routeOpts}</select>
         </div>
+        ${yours
+          ? '<p class="card__blurb" style="margin:4px 0 0">You\'re in the seat. No wage, and a stop is '
+            + 'yours to talk your way out of — or not.</p>'
+          : ''}
         ${circuit.length >= max && max > 1
           ? '<p class="card__blurb" style="margin:4px 0 0">Full circuit. Something bigger would carry more lines.</p>'
           : ''}
@@ -4412,6 +4426,9 @@ export class GameUI {
           <div class="row"><span>Keeps a low profile</span><span>${pct(fitted.stealth)}</span></div>
           <div class="row"><span>Vehicle upkeep</span><span>${money(def.upkeepPerDay)}/day</span></div>
           ${(() => {
+            if (c.driverId === YOU_DRIVING) {
+              return '<div class="row"><span>Driver</span><span class="good">you · no wage</span></div>';
+            }
             const d = c.driverId ? driverById(s, c.driverId) : null;
             return d
               ? `<div class="row"><span>Driver</span><span>${esc(d.name)} · ${money(d.wagePerDay)}/day</span></div>`

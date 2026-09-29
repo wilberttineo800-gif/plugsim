@@ -20,6 +20,7 @@ import {
   AUDIT,
   TASK_FORCE,
   DECRIM,
+  YOU_DRIVING,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -29,8 +30,9 @@ import { LICENCES, classOf, hasLicence, legalPriceFactor, modelEffects } from '.
 import { armouryHeatPerDay, armouryDistrictId } from './armoury.js';
 import { lineEffects, lineKindOf } from './lines.js';
 import { stepBody, infectionStage, BODY_PARTS } from './health.js';
-import { characterOf } from './character.js';
-import { resolveDeath, stepFuneralTrade } from './actions.js';
+import { characterOf, armedWith } from './character.js';
+import { getStat } from './stats.js';
+import { resolveDeath, stepFuneralTrade, takeFire, reportFire } from './actions.js';
 import { cullSpoiled } from './organs.js';
 import { stepCaptives, captivesOf, CAPTIVES, hasColdStorage } from './captives.js';
 import { docUpkeep } from './streetdoc.js';
@@ -430,6 +432,14 @@ function stepCouriers(state, dt, hooks) {
     const source = buildingById(state, route.fromId);
     if (!source) { c.phase = 'idle'; continue; }
 
+    // If it is you driving, you are wherever the vehicle is. That is the
+    // whole difference between a run you take and a run you pay for: the
+    // map shows you out on the road, and what happens on that road happens
+    // to you rather than to somebody on the payroll.
+    if (c.driverId === YOU_DRIVING && c.position) {
+      state.playerAt = { lat: c.position.lat, lng: c.position.lng };
+    }
+
     // Air goes straight over everything; everything else follows the roads at
     // OSRM's own estimated pace, scaled by what this vehicle is.
     const ends = [route.points[0], route.points[route.points.length - 1]];
@@ -654,6 +664,32 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     * (1 - turf.policeSuppression);
   if (rng() < perHour * dt) {
     const fine = Math.round(carried * HEAT.finePerPackSeized);
+    const yours = c.driverId === YOU_DRIVING;
+
+    // You in the seat means there is somebody for them to talk to. An
+    // employee has no standing and no story; you have both, and `deal` is
+    // the stat that measures exactly that. Win the roll and you eat the
+    // fine, keep the load, and drive off carrying the heat you earned.
+    // This is the whole reason to take a run yourself: the loss tail on a
+    // full boxtruck is millions, and the wage you save is $260.
+    if (yours && rng() < 0.35 + getStat(state, 'deal') * 0.35) {
+      paySoft(state, fine);
+      state.stats.stops++;
+      state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
+      state.stats.talkedDown = (state.stats.talkedDown || 0) + 1;
+      d.heat = clamp(d.heat + 6, 0, HEAT.max);
+      raise(state, 'tailed', { latlng: here, districtId: d.id, detail: def.name });
+      c.lastEvent = 'Talked down';
+      logEvent(
+        state,
+        `Pulled over in ${d.name}. You did the talking — $${fine.toLocaleString()} and a `
+          + `long look, but the load stayed on the truck.`,
+        'warn'
+      );
+      hooks.onIncident?.(here, 'stop');
+      return;
+    }
+
     for (const pid of PRODUCT_IDS) c.cargo[pid] = 0;
     paySoft(state, fine);
     state.stats.seized += carried;
@@ -663,9 +699,31 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     c.lastEvent = 'Pulled over';
     logEvent(
       state,
-      `${def.name} stopped in ${d.name} — ${Math.round(carried)} packs seized, $${fine.toLocaleString()} gone.`,
+      yours
+        ? `Pulled over in ${d.name} driving the ${def.name} — ${Math.round(carried)} packs seized, `
+          + `$${fine.toLocaleString()} gone, and they had your name.`
+        : `${def.name} stopped in ${d.name} — ${Math.round(carried)} packs seized, $${fine.toLocaleString()} gone.`,
       'bad'
     );
+    if (yours) {
+      // Talking failed and the search happened. Most of those end with you
+      // on the kerb watching the load go — a bad hour, not a gunfight. It
+      // only reaches the body if you brought something to reach it with,
+      // and then only sometimes. This is the second door into takeFire:
+      // until now the ONLY way the player could be hurt was losing a turf
+      // push (actions.js), which left an entire anatomy, infection and
+      // bionics system hanging off one dice roll on one action.
+      state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
+      if (armedWith(state) > 0 && rng() < 0.25) {
+        // No `threat` override: takeFire reads it off the block's heat, which
+        // is the right answer here — a hotter block is a better-armed one.
+        // Passing a string made it NaN-adjacent and silently wrong.
+        const hurt = takeFire(state, { rounds: 1, heat: d.heat });
+        reportFire(state, hurt);
+        if (hurt.died) resolveDeath(state);
+      }
+      d.heat = clamp(d.heat + 4, 0, HEAT.max);
+    }
     hooks.onIncident?.(here, 'stop');
   }
 }
@@ -1260,9 +1318,17 @@ function maybeShakedown(state, courier, district, hooks) {
   const chance = RIVALS.shakedownChanceAtFullControl * control * crew.aggression;
   if (rng() >= chance) return false;
 
+  // A crew taxing an employee takes what it says it takes. A crew taxing
+  // you is a negotiation with a man who can hurt them back, and `muscle`
+  // is what decides how that conversation goes. Full muscle halves the cut.
+  const yours = courier.driverId === YOU_DRIVING;
+  const rate = yours
+    ? RIVALS.tributeRate * (1 - getStat(state, 'muscle') * 0.5)
+    : RIVALS.tributeRate;
+
   let taken = 0;
   for (const pid of PRODUCT_IDS) {
-    const cut = courier.cargo[pid] * RIVALS.tributeRate;
+    const cut = courier.cargo[pid] * rate;
     courier.cargo[pid] -= cut;
     taken += cut;
   }
@@ -1272,7 +1338,10 @@ function maybeShakedown(state, courier, district, hooks) {
   district.heat = clamp(district.heat + 3, 0, HEAT.max);
   logEvent(
     state,
-    `${crew.name} taxed a drop in ${district.name} — ${Math.round(taken)} packs gone.`,
+    yours
+      ? `${crew.name} tried to tax a drop in ${district.name} with you standing there — `
+        + `${Math.round(taken)} packs, and they knew not to ask for more.`
+      : `${crew.name} taxed a drop in ${district.name} — ${Math.round(taken)} packs gone.`,
     'bad'
   );
   hooks.onIncident?.(district.center, 'shakedown');

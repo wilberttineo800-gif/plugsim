@@ -4,7 +4,7 @@
 import { parkedPosition } from './state.js';
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, DRIVERS, FIXER, RIVALS, MARKET_PROPERTY,
-  WHOLESALE_FACTOR,
+  WHOLESALE_FACTOR, YOU_DRIVING,
 } from './constants.js';
 import {
   lotById, areaScale, areaCapacityScale, lotResale, marketValue, rentPerDay, lotPnL,
@@ -937,25 +937,36 @@ export function fireDriver(state, driverId) {
   return { ok: true };
 }
 
-/** Put a driver in a vehicle, or take them out of it. */
+/**
+ * Who is behind the wheel: nobody, somebody on the payroll, or you.
+ *
+ * `YOU_DRIVING` is a driver id like any other as far as the vehicle is
+ * concerned, which is what keeps this from being a second code path through
+ * the whole courier machine — `stepCouriers` only ever asks whether a
+ * vehicle has a driver, not who. What differs is everything around it: no
+ * wage, and it is your own body in the vehicle when it gets pulled over.
+ */
 export function assignDriver(state, vehicleId, driverId) {
   const v = courierById(state, vehicleId);
   if (!v) return { ok: false, error: 'That vehicle is gone.' };
-  const d = driverId ? driverById(state, driverId) : null;
-  if (driverId && !d) return { ok: false, error: 'That driver is gone.' };
+  const you = driverId === YOU_DRIVING;
+  const d = driverId && !you ? driverById(state, driverId) : null;
+  if (driverId && !you && !d) return { ok: false, error: 'That driver is gone.' };
 
-  // One driver, one vehicle.
-  if (d) {
+  // One driver, one vehicle — and there is only one of you.
+  const takenBy = you ? YOU_DRIVING : (d ? d.id : null);
+  if (takenBy) {
     for (const other of state.couriers) {
-      if (other.id !== v.id && other.driverId === d.id) {
+      if (other.id !== v.id && other.driverId === takenBy) {
         other.driverId = null;
         other.phase = 'idle';
       }
     }
   }
-  v.driverId = d ? d.id : null;
-  if (!d) { v.phase = 'idle'; v.progress = 0; }
+  v.driverId = takenBy;
+  if (!takenBy) { v.phase = 'idle'; v.progress = 0; }
   else if (v.routeId) { v.phase = 'loading'; v.progress = 0; v.dwellLeft = 0; }
+  if (you) logEvent(state, `You're driving the ${COURIERS[v.type].name} yourself.`, 'info');
   return { ok: true };
 }
 

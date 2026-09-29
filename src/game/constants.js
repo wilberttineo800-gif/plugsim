@@ -3627,6 +3627,16 @@ export const RIVALS = {
 // Always available, no building required, and deliberately a bad deal. He
 // exists so a player who sinks everything into production can still claw back
 // enough clean money to buy a real Front instead of dead-ending.
+/**
+ * The driver id that means you, personally, behind the wheel.
+ *
+ * A vehicle only ever asks whether it HAS a driver, never who, so putting
+ * yourself in one costs no second code path through the courier machine.
+ * Everything that differs sits around the edges: nobody is on the payroll
+ * for it, and when it gets pulled over it is your own body in the vehicle.
+ */
+export const YOU_DRIVING = 'you';
+
 export const FIXER = {
   dailyLimit: 250000,
   cut: 0.4,

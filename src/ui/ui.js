@@ -91,8 +91,8 @@ import { crewById } from '../game/crews.js';
 import { summary as diagnosticsSummary, report as diagnosticsReport, clear as diagnosticsClear } from '../game/diagnostics.js';
 import { unlockStatus, regionNote, buildingPreview, productTree, chainFor, feedsInto }
   from '../game/progression.js';
-import { citiesOf, cityOfDistrict, distanceKm, foundingCost, openableFrom, quoteShipment,
-  homeCity } from '../game/cities.js';
+import { citiesOf, cityOfDistrict, cityOfBuilding, distanceKm, foundingCost, openableFrom,
+  quoteShipment, homeCity } from '../game/cities.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgrades,
@@ -111,6 +111,10 @@ export class GameUI {
     this.game = game;
     this.tab = 'build';
     this.routeDraft = { fromId: '', toKey: '', cargo: 'packs', product: 'any' };
+    // What the inter-city shipment form is currently set to. Same shape and
+    // same reason as routeDraft: panels are rebuilt on a timer, so a half-made
+    // choice has to live outside the markup or it resets under the player.
+    this.shipDraft = { productId: '', toId: '' };
 
     this.dom = {
       hud: document.getElementById('hud'),
@@ -357,6 +361,14 @@ export class GameUI {
       this.renderRail();
       return;
     }
+    if (name.startsWith('ship.')) {
+      // The form lives in the inspector, not the rail, so re-render the panel
+      // the player is actually looking at — the quote below it has to move
+      // when the product or the destination does.
+      this.shipDraft[name.slice(5)] = value;
+      this.render();
+      return;
+    }
     if (name.startsWith('edit.')) {
       this.game.editRoute(field.dataset.route, { [name.slice(5)]: value });
       return;
@@ -472,6 +484,12 @@ export class GameUI {
       }
       case 'accept-offer': g.resolveIncidentOffer(id, true); break;
       case 'decline-offer': g.resolveIncidentOffer(id, false); break;
+      case 'goto-city': g.goToCity(id); break;
+      case 'send-shipment': {
+        const [pid, toId] = String(type).split(':');
+        g.sendShipment(id, toId, pid);
+        break;
+      }
       case 'dismiss-helper': g.dismissHelper(type); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -706,7 +724,11 @@ export class GameUI {
       const best = blocks.slice().sort((a, b) =>
         (b.demandPerHour.weed || 0) - (a.demandPerHour.weed || 0))[0];
       const km = c.home ? 0 : distanceKm(home, c);
-      return `<div class="card">
+      // A button, not a div. Buildings stream by viewport, so a city the
+      // camera has never been to is empty however much it cost — and this
+      // list was the only place a founded city was ever mentioned, with no
+      // way to go and stand in it.
+      return `<button class="card" data-action="goto-city" data-id="${esc(c.id)}">
         <div class="card__head">
           <span class="card__name">${esc(c.name)}${c.home ? ' <span style="color:var(--text-faint)">· home</span>' : ''}</span>
           <span class="card__cost">${mine} ${mine === 1 ? 'place' : 'places'}</span>
@@ -716,8 +738,9 @@ export class GameUI {
           ${km ? `<span>${Math.round(km).toLocaleString()} km out</span>` : ''}
           ${best ? `<span style="color:var(--money)">${money(streetPrice(best, 'weed'))}/lb</span>` : ''}
           ${c.countryCode ? `<span style="color:var(--text-faint)">${esc(String(c.countryCode).toUpperCase())}</span>` : ''}
+          <span style="color:var(--sodium)">go there</span>
         </div>
-      </div>`;
+      </button>`;
     }).join('');
 
     const flights = (s.shipments || []).map((sh) => {
@@ -3650,6 +3673,82 @@ export class GameUI {
     </div>`;
   }
 
+  /**
+   * Hand a load to a smuggler, bound for another city.
+   *
+   * `sendShipment` in actions.js has existed, complete, with no way to call
+   * it: the SMUGGLING constants, the risk/time/fee maths in cities.js,
+   * `stepShipments` in the sim and the "In the wind" panel below were all
+   * live, and the panel could never populate because nothing in the game
+   * could create a shipment. Ray coaches the verb in his smuggling tip and
+   * the Cities blurb advises splitting a load across runs — advice for
+   * something a player could not do. Founding a second city costs $2.5m and
+   * its stated purpose was unperformable.
+   */
+  shipBlock(b) {
+    const s = this.game.state;
+    if (!b.packs) return '';
+    const stocked = PRODUCT_IDS.filter((pid) => (b.packs[pid] || 0) > 0.01);
+    if (!stocked.length) return '';
+
+    const fromCity = cityOfBuilding(s, b);
+    if (!fromCity) return '';
+    // Only buildings that can actually receive: somewhere else, and yours.
+    const targets = (s.buildings || []).filter((t) => {
+      if (t.id === b.id || !t.packs) return false;
+      const c = cityOfBuilding(s, t);
+      return c && c.id !== fromCity.id;
+    });
+    if (!targets.length) return '';
+
+    const pid = stocked.includes(this.shipDraft.productId) ? this.shipDraft.productId : stocked[0];
+    const to = targets.find((t) => t.id === this.shipDraft.toId) || targets[0];
+    const have = b.packs[pid] || 0;
+    const toCity = cityOfBuilding(s, to);
+    const d = districtById(s, b.districtId);
+    const q = quoteShipment(s, fromCity, toCity, have, d ? d.heat : 0);
+    const broke = s.cash.clean + s.cash.dirty < q.fee;
+
+    return `<div class="sect">
+      <div class="sect__title"><span>Send out of ${esc(fromCity.name)}</span>
+        <span style="color:var(--text-faint)">${units(have)} on hand</span></div>
+      <div class="field">
+        <label>What</label>
+        <select data-field="ship.productId">
+          ${stocked.map((id) => `<option value="${id}" ${id === pid ? 'selected' : ''}>
+            ${esc(PRODUCTS[id].name)} · ${units(b.packs[id])}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field">
+        <label>Where to</label>
+        <select data-field="ship.toId">
+          ${targets.map((t) => {
+    const c = cityOfBuilding(s, t);
+    return `<option value="${t.id}" ${t.id === to.id ? 'selected' : ''}>
+              ${esc(c ? c.name : '?')} · ${esc(buildingLabel(t))}</option>`;
+  }).join('')}
+        </select>
+      </div>
+      <div class="rows" style="margin-top:8px">
+        <div class="row"><span>Carry</span><span class="${broke ? 'bad' : 'money'}">${money(q.fee)}</span></div>
+        <div class="row"><span>On the road</span><span>${(q.hours / 24).toFixed(1)} days</span></div>
+        <div class="row"><span>Doesn't arrive</span>
+          <span class="${q.risk > 0.3 ? 'warn' : ''}">${Math.round(q.risk * 100)}%</span></div>
+        ${q.crossesBorder ? '<div class="row"><span>Crosses a border</span><span class="warn">yes</span></div>' : ''}
+      </div>
+      <p class="card__blurb" style="margin:7px 0 0">
+        Handed over and gone — nothing to watch, and no courier of yours on the
+        road. Splitting a load across runs risks less of it at once.
+      </p>
+      <div class="btnrow">
+        <button class="primarybtn" data-action="send-shipment" data-id="${b.id}"
+          data-type="${esc(pid)}:${esc(to.id)}" ${broke ? 'disabled' : ''}>
+          ${broke ? `Need ${moneyShort(q.fee)} for the carry` : `Send ${units(have)} to ${esc(toCity ? toCity.name : '?')}`}
+        </button>
+      </div>
+    </div>`;
+  }
+
   buildingPanel(b) {
     const s = this.game.state;
     const def = BUILDINGS[b.type];
@@ -3781,6 +3880,7 @@ export class GameUI {
         <input type="text" data-field="buildingName" data-building="${b.id}"
           value="${esc(buildingLabel(b))}" maxlength="32" placeholder="${esc(typeLabel(b))}">
       </div>
+      ${this.shipBlock(b)}
       ${this.firearmLineBlock(b)}
       ${this.armourLineBlock(b)}
       ${this.upgradeBlock(b)}

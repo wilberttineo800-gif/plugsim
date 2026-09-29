@@ -8,7 +8,7 @@ import {
   overpassCoolingDown, overpassCooldownSeconds,
 } from './game/geo.js';
 import { tilesForBounds, loadTiles, lotById } from './game/lots.js';
-import { DESTINATIONS } from './game/cities.js';
+import { DESTINATIONS, citiesOf } from './game/cities.js';
 import { markTipSeen } from './game/guide.js';
 import { devToolsOn } from './game/dev.js';
 import { premiumOn, redeemLicenseKey } from './game/premium.js';
@@ -640,6 +640,16 @@ game.openIncident = (inc) => {
   game.incidentLayer.sync(s);
 };
 
+game.sendShipment = (fromBuildingId, toBuildingId, productId) => {
+  diag.trace('send shipment');
+  const r = A.sendShipment(game.state, fromBuildingId, toBuildingId, productId);
+  if (!r.ok) return toast(r.error, 'bad');
+  toast(`${Math.round(r.shipment.amount)} packs handed over — ${(r.quote.hours / 24).toFixed(1)} days out.`,
+    'good', 4200);
+  game.buildingLayer.sync(game.state);
+  game.ui.render();
+};
+
 game.resolveIncidentOffer = (incidentId, accept) => {
   diag.trace('incident offer');
   const r = A.resolveIncidentOffer(game.state, incidentId, accept);
@@ -1254,12 +1264,37 @@ game.editRoute = (routeId, changes) => {
  * city with no property in it is a map you cannot do anything on, so the survey
  * is part of founding rather than something to discover is missing later.
  */
+/**
+ * Stand on a city you work. The map goes there and the survey follows.
+ *
+ * Buildings stream by viewport (`runTileSweep`), so a city the camera has
+ * never visited has nothing in it no matter how much it cost to open. This
+ * is the only way to reach one.
+ */
+game.goToCity = (cityId) => {
+  const c = citiesOf(game.state).find((x) => x.id === cityId);
+  if (!c || !c.origin) return toast('Nowhere by that name.', 'bad');
+  // Past minZoomForFetch, or the sweep that loads buildings never runs.
+  game.map.setView([c.origin.lat, c.origin.lng],
+    Math.max(LOTS.minZoomForFetch, game.map.getZoom()));
+  toast(`${c.name}.`, 'info', 1600);
+};
+
 game.foundCity = async (name) => {
   const dest = DESTINATIONS.find((d) => d.name === name);
   if (!dest) { toast('Nowhere by that name.', 'bad'); return; }
 
   const res = A.foundCity(game.state, dest);
   if (!res.ok) { toast(res.error, 'bad'); return; }
+
+  // Go and stand in it. Without this the camera stayed on the city you were
+  // already in, the survey below ran against coordinates nobody was looking
+  // at, and the viewport tile sweep — the thing that actually populates a
+  // city with buildings — kept streaming the OLD one. You paid millions for
+  // a place that reported "surveying" forever and never filled in, with no
+  // way to travel to it and look.
+  game.map.setView([dest.origin.lat, dest.origin.lng],
+    Math.max(LOTS.minZoomForFetch, 16));
 
   game.ui.render();
   toast(`Opening up in ${dest.name} — surveying.`, 'info');

@@ -132,9 +132,13 @@ export class LotLayer {
     return window.matchMedia('(hover: none)').matches;
   }
 
-  constructor(map, { onSelect } = {}) {
+  constructor(map, { onSelect, budget = null } = {}) {
     this.map = map;
     this.onSelect = onSelect;
+    // A function, not a value: the layer restyles from a dozen call sites and
+    // any one of them forgetting to pass the balance would put the map quietly
+    // out of step with the wallet.
+    this.budget = budget;
     this.group = L.layerGroup().addTo(map);
     this.shapes = new Map();
     this.selectedId = null;
@@ -231,9 +235,28 @@ export class LotLayer {
     // so demand, price and rival turf still read geographically.
     const district = this.districts.get(lot.districtId);
     const fill = district ? overlayColor(district, this.overlay) : '#9fb8d0';
-    return { color: selected ? '#c2560c' : fill, weight: selected ? 3 : 1.1,
-             opacity: selected ? 1 : 0.85, fillColor: fill,
-             fillOpacity: selected ? 0.55 : 0.34 };
+    if (selected) {
+      return { color: '#c2560c', weight: 3, opacity: 1,
+               fillColor: fill, fillOpacity: 0.55 };
+    }
+
+    // Affordability is the first thing a player needs from a building they do
+    // not own, and it was the one thing the map never said. Every unowned lot
+    // was painted in its district's own overlay colour with a stroke of the
+    // same colour, so a screen of 344 of them read as one undifferentiated
+    // field — nothing looked clickable, and the most obvious building on
+    // screen was routinely six times the opening balance.
+    //
+    // The overlay tint stays on the fill, so demand and turf still read
+    // geographically. Affordability rides on the outline instead: what you
+    // can buy is drawn, what you can't recedes.
+    const budget = typeof this.budget === 'function' ? this.budget() : this.budget;
+    const reach = budget == null || (lot.price || 0) <= budget;
+    return reach
+      ? { color: '#efe7d2', weight: 1.4, opacity: 0.92,
+          fillColor: fill, fillOpacity: 0.42 }
+      : { color: fill, weight: 0.6, opacity: 0.3,
+          fillColor: fill, fillOpacity: 0.12 };
   }
 
   /** Repaint what's drawn without rebuilding it. */

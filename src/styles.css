@@ -97,9 +97,22 @@ button, input, select { font-family: inherit; color: inherit; }
    alone just gives flat grey. The exposure is driven from the clock at
    runtime; this is the daytime value and the starting point before the first
    tick. */
+/* The basemap is a designed dark style now (Esri World Dark Gray Canvas), so
+   it needs exposure, not inversion. Only the OSM fallback — used if that
+   provider ever stops answering — still gets inverted, because it is a
+   daylight raster. */
+/* `none`, not an identity filter. `brightness(1) contrast(1) saturate(1)`
+   changes nothing visually but still promotes this pane to its own
+   compositing layer, and Safari then never paints into it: the map goes
+   blank while the tiles sit in the DOM, decoded, positioned and at full
+   opacity. Cost an hour to find. Only ever set a filter here that actually
+   does something — see syncDaylight in main.js, which skips it at noon. */
 .leaflet-tile-pane {
-  filter: invert(1) hue-rotate(180deg) brightness(1.02) contrast(.78) saturate(.78);
+  filter: none;
   transition: filter 1.4s linear;
+}
+body.basemap-needs-invert .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(1.02) contrast(.78) saturate(.78);
 }
 
 /* Overnight, the streetlights are the only thing on. */

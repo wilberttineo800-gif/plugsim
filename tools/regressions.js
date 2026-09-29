@@ -460,22 +460,30 @@ print('=== 13. property has depth: storeys, flats, work and crime ===');
   const st = world();
   const d = st.districts[4];
 
+  // These used the kind name 'apartment', which `classify()` in lots.js has
+  // never emitted — it produces 'apartments'. So every assertion below was
+  // exercising a key that cannot occur in a real game, and passed, while the
+  // kind real OSM data actually produces fell through every lookup:
+  // dwellingsIn() returned 0 front doors for a block of flats and RENT_UPGRADES
+  // offered it no work at all. Same for 'warehouse', where classify() emits
+  // 'industrial'. Testing the real vocabulary is the whole point of the check.
+
   // Height is worth money, but not linearly.
-  const one = lotPrice('apartment', 400, d, 1);
-  const four = lotPrice('apartment', 400, d, 4);
+  const one = lotPrice('apartments', 400, d, 1);
+  const four = lotPrice('apartments', 400, d, 4);
   check('storeys are worth money', four > one, '1 storey $' + one + ' vs 4 storeys $' + four);
   check('but not four times as much', four < one * 4,
         (four / one).toFixed(2) + 'x for 4x the floors');
 
   // A block of flats is many front doors.
-  check('a block of flats has many lettings', dwellingsIn('apartment', 600, 5) > 5,
-        dwellingsIn('apartment', 600, 5) + ' flats in 600 m2 x5');
+  check('a block of flats has many lettings', dwellingsIn('apartments', 600, 5) > 5,
+        dwellingsIn('apartments', 600, 5) + ' flats in 600 m2 x5');
   check('a house is one letting', dwellingsIn('house', 600, 2) === 1);
-  check('a warehouse is not a home', dwellingsIn('warehouse', 600, 1) === 0);
+  check('a warehouse is not a home', dwellingsIn('industrial', 600, 1) === 0);
 
   // Multi-let earns more than a single tenancy of the same value.
-  const flats = { kind: 'apartment', areaM2: 600, levels: 5, price: 400000,
-                  units: dwellingsIn('apartment', 600, 5), rentUpgrades: [], owned: true };
+  const flats = { kind: 'apartments', areaM2: 600, levels: 5, price: 400000,
+                  units: dwellingsIn('apartments', 600, 5), rentUpgrades: [], owned: true };
   const single = { ...flats, units: 1 };
   check('many lettings beat one', rentPerDay(flats, d) > rentPerDay(single, d),
         '$' + rentPerDay(flats, d) + ' vs $' + rentPerDay(single, d));

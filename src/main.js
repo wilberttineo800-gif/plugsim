@@ -702,6 +702,10 @@ function bootGame(state) {
   });
   game.lotLayer = new LotLayer(game.map, {
     onSelect: (lot) => game.select('lot', lot.id),
+    // Read live rather than pushed: the layer restyles from a dozen call
+    // sites and any one of them forgetting to pass the balance would put the
+    // map quietly out of step with the wallet.
+    budget: () => (game.state ? game.state.cash.clean : null),
   });
   game.incidentLayer = new IncidentLayer(game.map, {
     onSelect: (inc) => game.openIncident(inc),
@@ -945,15 +949,30 @@ function syncDaylight() {
   lastDark = d;
   const pane = document.querySelector('.leaflet-tile-pane');
   if (!pane) return;
-  // The map is inverted throughout — that's what turns a light OSM raster into
-  // something that belongs in a dark console, with the greens still green. Only
-  // the exposure moves with the clock, so day and night share one visual
-  // language and the transition never passes through a muddy grey.
-  const brightness = (1.02 - d * 0.24).toFixed(3);
-  const contrast = (0.78 + d * 0.08).toFixed(3);
-  const saturate = (0.78 - d * 0.23).toFixed(3);
-  pane.style.filter =
-    `invert(1) hue-rotate(180deg) brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
+  // The basemap is a designed dark style, so the clock moves exposure only —
+  // day and night share one visual language and the transition never passes
+  // through a muddy grey. It used to invert a daylight OSM raster instead,
+  // which is what made motorways pink; that path survives only as the
+  // fallback if the tile provider ever stops answering.
+  if (document.body.classList.contains('basemap-needs-invert')) {
+    const b = (1.02 - d * 0.24).toFixed(3);
+    const c = (0.78 + d * 0.08).toFixed(3);
+    const s2 = (0.78 - d * 0.23).toFixed(3);
+    pane.style.filter =
+      `invert(1) hue-rotate(180deg) brightness(${b}) contrast(${c}) saturate(${s2})`;
+  } else if (d < 0.03) {
+    // `none`, never an identity filter: an all-1s filter still promotes the
+    // tile pane to its own compositing layer, and Safari then never paints
+    // into it — the map goes blank with the tiles present and fully opaque.
+    pane.style.filter = 'none';
+  } else {
+    // Already dark at noon; night only pulls the lights down on it.
+    const brightness = (1.0 - d * 0.40).toFixed(3);
+    const contrast = (1.0 + d * 0.10).toFixed(3);
+    const saturate = (1.0 - d * 0.35).toFixed(3);
+    pane.style.filter =
+      `brightness(${brightness}) contrast(${contrast}) saturate(${saturate})`;
+  }
   document.body.classList.toggle('is-night', d > 0.62);
 }
 

@@ -5,12 +5,30 @@ import { PRODUCTS } from '../game/constants.js';
 import { streetPrice, saturation } from '../game/economy.js';
 import { clamp01 } from '../game/rng.js';
 
-// Standard OSM tiles: genuinely keyless and unmetered for light use. CARTO's
-// dark basemap now stamps "API KEY REQUIRED" across every tile, so instead the
-// tile pane is darkened in CSS (see .leaflet-tile-pane in styles.css) — the
-// game keeps its night look without anyone needing an account.
-const TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+// The basemap is 80% of the screen, so it is worth being exact about.
+//
+// Standard OSM under a CSS invert was the old answer, and it fought the game
+// at every pixel: inverting a raster designed for daylight turns motorways
+// pink, and every POI icon, house number and street label stays in the
+// picture arguing with the game's own labels and overlays.
+//
+// CARTO's dark basemap is the obvious replacement and it is NOT usable — it
+// answers 200 with "API KEY REQUIRED" stamped across the image, so a status
+// check passes and the map ships broken. That is recorded here because it is
+// the kind of thing that gets tried twice.
+//
+// Esri's World Dark Gray Canvas is keyless, genuinely dark, and deliberately
+// label-light: roads in two greys, water darker, no POI furniture. It needs
+// no invert, which is why the day/night exposure in main.js no longer applies
+// one. Tile providers change their terms, though — see CARTO above — so if it
+// starts failing we fall back to the old OSM path and put the invert back.
+const TILE_URL =
+  'https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}';
 const TILE_ATTRIB =
+  'Esri, HERE, Garmin, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+
+const FALLBACK_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const FALLBACK_ATTRIB =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
 export const OVERLAYS = [
@@ -37,19 +55,43 @@ export function createMap(elementId, center, zoom = 14) {
     // and building footprints are small.
     renderer: L.canvas({ tolerance: 8 }),
     tap: true,
+    // Tiles appear at full opacity rather than fading in.
+    //
+    // Leaflet's fade drives tile opacity from requestAnimationFrame, which
+    // browsers throttle to nothing when the window is occluded or
+    // backgrounded. The tiles then sit in the DOM — loaded, decoded,
+    // correctly positioned — at opacity 0, and the map is simply blank until
+    // something forces a repaint. Content visibility should not depend on
+    // animation frames running; the 200ms fade is not worth that.
+    fadeAnimation: false,
   });
 
-  L.tileLayer(TILE_URL, {
+  const base = L.tileLayer(TILE_URL, {
     attribution: TILE_ATTRIB,
     maxZoom: 21,
-    maxNativeZoom: 18, // detectRetina asks for 19, which is OSM's limit
-
-    // OSM only serves 256px tiles, which get upscaled on a HiDPI screen and
-    // turn street names to mush. This pulls the next zoom level down and draws
-    // it at half size instead, so labels render at native pixel density.
-    detectRetina: true,
+    maxNativeZoom: 16, // Esri's Dark Gray Canvas stops here
     crossOrigin: true,
   }).addTo(map);
+
+  // If the dark basemap ever stops answering — a provider changing its terms
+  // is exactly how the previous one was lost — drop back to plain OSM and
+  // tell the document, so the CSS/runtime filter puts the invert back and the
+  // map stays dark instead of suddenly going daylight-white under a dark UI.
+  let swapped = false;
+  let failures = 0;
+  base.on('tileerror', () => {
+    if (swapped || ++failures < 4) return;
+    swapped = true;
+    map.removeLayer(base);
+    document.body.classList.add('basemap-needs-invert');
+    L.tileLayer(FALLBACK_TILE_URL, {
+      attribution: FALLBACK_ATTRIB,
+      maxZoom: 21,
+      maxNativeZoom: 18,
+      detectRetina: true,
+      crossOrigin: true,
+    }).addTo(map);
+  });
 
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   return map;

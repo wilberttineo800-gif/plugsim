@@ -165,7 +165,12 @@ export function floorArea(lot) {
 // An average flat, once halls and stairs are taken out. Used to turn a real
 // footprint into a believable number of front doors.
 const M2_PER_FLAT = 85;
-const RESIDENTIAL = new Set(['apartment', 'tower', 'house', 'rowhouse']);
+// classify() emits 'apartments'; this set said 'apartment', and 'tower' is a
+// kind it has never produced at all. So dwellingsIn() returned 0 front doors
+// for the one kind the whole feature exists to model — a block of flats — and
+// its rent was priced as if it were a single unit. See the docstring below,
+// which describes exactly the case that was excluded.
+const RESIDENTIAL = new Set(['apartments', 'house', 'rowhouse']);
 
 /**
  * How many separate homes are in this building. The design note asked for

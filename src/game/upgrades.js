@@ -406,18 +406,29 @@ const YARD_WORK = [
     rentMult: 1.17 },
 ];
 
+// Keyed by the kinds classify() in lots.js actually emits, which are the only
+// eight there are: parking, industrial, retail, commercial, garage,
+// apartments, house, rowhouse.
+//
+// This table was keyed off a different vocabulary. Six of its eleven entries
+// — apartment, tower, office, kiosk, warehouse, shed — are names classify()
+// has never produced, and two kinds it does produce had no entry at all. A
+// rented apartment block or commercial block therefore offered no work of any
+// kind: rentUpgrades() returned [] and every improveRental call came back
+// "that work does not apply to this building", with the money in the bank.
+// Apartment blocks are the kind most likely to be let, which is how this
+// stayed invisible.
+//
+// Parking is deliberately absent: classify() treats a car park as its own
+// thing — it houses a fleet, not a tenancy.
 export const RENT_UPGRADES = {
-  apartment: RESIDENTIAL_WORK,
-  tower: RESIDENTIAL_WORK,
+  apartments: RESIDENTIAL_WORK,
   house: RESIDENTIAL_WORK,
   rowhouse: RESIDENTIAL_WORK,
   retail: COMMERCIAL_WORK,
-  office: COMMERCIAL_WORK,
-  kiosk: COMMERCIAL_WORK,
-  warehouse: YARD_WORK,
+  commercial: COMMERCIAL_WORK,
   industrial: YARD_WORK,
   garage: YARD_WORK,
-  shed: YARD_WORK,
 };
 
 /** What could still be done to this property, with what is already done marked. */

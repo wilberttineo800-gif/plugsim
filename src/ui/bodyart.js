@@ -52,11 +52,21 @@ export const BODY_DEFS = `
  * The two arms and two legs are the same geometry mirrored about the midline,
  * which keeps them honestly symmetrical and halves what there is to get wrong.
  */
+// Each limb carries its own terminal — a hand, a foot — as a second subpath
+// in the same shape, so the part count stays at eight and the wound mapping,
+// the X-ray and the prosthetic fitments all keep working off the same keys.
+//
+// They were missing entirely. Both limbs ended in a rounded stump, which is
+// the literal definition of a shop dummy rather than a figure, and
+// `endFitment()` drew a hand or a foot ONLY when one had been replaced by a
+// prosthetic — so an intact character was worse drawn than an amputee.
 const ARM = `M46 92 c-11 3 -17 10 -18 21 l-6 76
   c-1 15 -3 29 -6 41 c-2 9 2 15 11 16 s14 -3 16 -12
-  c5 -19 8 -36 9 -50 l7 -72 z`;
+  c5 -19 8 -36 9 -50 l7 -72 z
+  M22 243 c-4 5 -5 15 0 20 c5 5 13 5 17 0 c4 -5 4 -15 0 -20 z`;
 const LEG = `M54 268 h44 l-3 70 c-1 23 -3 45 -6 63 c-2 12 -3 21 -4 27
-  c-1 9 -6 14 -16 14 s-15 -5 -14 -15 c2 -31 3 -60 3 -89 z`;
+  c-1 9 -6 14 -16 14 s-15 -5 -14 -15 c2 -31 3 -60 3 -89 z
+  M55 434 c-4 9 -3 17 4 19 h22 c7 -2 8 -10 4 -19 z`;
 
 /**
  * Which way each part stretches when a build is applied.
@@ -68,8 +78,13 @@ const LEG = `M54 268 h44 l-3 70 c-1 23 -3 45 -6 63 c-2 12 -3 21 -4 27
  */
 export const BODY_ART = {
   head: {
-    path: 'M100 8 c18 0 30 14 30 32 c0 12 -4 22 -11 28 l0 10 h-38 l0 -10 '
-      + 'c-7 -6 -11 -16 -11 -28 c0 -18 12 -32 30 -32 z',
+    // Half-width 22, not 30. The head spanned x70-130 against a thorax of
+    // x42-158, a head-to-shoulder ratio of 0.52; a real adult is about 0.37.
+    // The HEIGHT was always right — 1/7.5 of stature, as the file's own note
+    // says — so it was the width alone, 1.55x oversized, doing all the work
+    // of making this read as a pictogram instead of a person.
+    path: 'M100 8 c13 0 22 14 22 32 c0 12 -3 22 -8 28 l0 10 h-28 l0 -10 '
+      + 'c-5 -6 -8 -16 -8 -28 c0 -18 9 -32 22 -32 z',
     at: [100, 38], about: 100, trait: null,
   },
   neck: { path: 'M84 70 h32 v14 h-32 z', at: [100, 78], about: 100, trait: null },
@@ -180,6 +195,23 @@ function faceShapes(skin) {
 
 /** The skull, roughly: what hair has to sit on. */
 const SKULL_TOP = 'M100 8 c18 0 30 14 30 32 c0 6 -1 11 -3 16 h-54 c-2 -5 -3 -10 -3 -16 c0 -18 12 -32 30 -32 z';
+
+/**
+ * Everything that sits on the skull — face, hair, facial hair — narrowed to
+ * match it.
+ *
+ * All of it was drawn against a head half-width of 30: `fade` spans 62 wide,
+ * `locs` 68, `afro` 74. The skull is 44 wide now (half-width 22), so left as
+ * they were, every hairstyle overhangs the face like a wig two sizes up.
+ * Scaling horizontally about the centreline by the same ratio the head
+ * changed by keeps a dozen hand-drawn styles correct without redrawing any of
+ * them, and keeps them correct if the skull is ever retuned again.
+ */
+const HEAD_NARROW = (22 / 30).toFixed(4);
+function headFurniture(svg) {
+  if (!svg) return '';
+  return `<g transform="translate(100 0) scale(${HEAD_NARROW} 1) translate(-100 0)">${svg}</g>`;
+}
 
 function hairShape(style, hex) {
   const dark = hex;
@@ -724,22 +756,46 @@ export function figureFor(appearance, {
   const cloth = CLOTH_COLOURS[a.cloth];
   const wearing = CLOTHING[a.clothing];
 
+  // One light, across the whole figure.
+  //
+  // Every part was filled with flat `skin.base`, and SKINS has carried `lit`
+  // and `dark` for every tone this whole time with nothing reading them —
+  // `bfSkinLit` in BODY_DEFS is defined and never referenced either. A
+  // shading model was designed and then never wired up.
+  //
+  // It has to be `userSpaceOnUse`. The existing `bfSkin` gradient uses the
+  // default objectBoundingBox units, which means every part re-runs the full
+  // light-to-dark ramp inside its OWN box — the head, the torso and each arm
+  // each going bright-to-shadow independently, with no shared light
+  // direction. That is why an earlier attempt at gradient shading came out
+  // flatter and brighter rather than rounder: adding more of it lifts every
+  // part's midtone together. In user space the ramp runs once, diagonally,
+  // across the whole 200x456 field, so the figure is lit from one place.
+  const gid = `bfSkin_${a.skin}`;
+  const lightDefs = `<defs><linearGradient id="${gid}" gradientUnits="userSpaceOnUse"
+      x1="46" y1="16" x2="168" y2="424">
+    <stop offset="0" stop-color="${skin.lit}"/>
+    <stop offset=".42" stop-color="${skin.base}"/>
+    <stop offset="1" stop-color="${skin.dark}"/>
+  </linearGradient></defs>`;
+
   // No outlines on a dressed figure. The parts are only separate so wounds can
   // land on them — drawn with a stroke each, the neck reads as a collar box
   // sitting on top of whatever the person is actually wearing.
   const body = figure({
     build,
-    fillFor: (id) => (lostParts[id] ? '#1a1e24' : skin.base),
+    fillFor: (id) => (lostParts[id] ? '#1a1e24' : `url(#${gid})`),
     stroke: 'none',
     extra: () => '',
   });
 
   return `<g transform="translate(100 0) scale(1 ${build.height}) translate(-100 0)">
+    ${lightDefs}
     ${body}
-    ${back ? backOfHead(skin) : faceShapes(skin)}
+    ${headFurniture(back ? backOfHead(skin) : faceShapes(skin))}
     ${clothingShapes(wearing, cloth.hex, build, back)}
-    ${back ? hairBackShape(a.hair, hair.hex) : hairShape(a.hair, hair.hex)}
-    ${back ? '' : facialShape(a.facial, hair.hex)}
+    ${headFurniture(back ? hairBackShape(a.hair, hair.hex) : hairShape(a.hair, hair.hex))}
+    ${headFurniture(back ? '' : facialShape(a.facial, hair.hex))}
     ${fitmentShapes(fittings, { build, view })}
     ${Object.keys(BODY_ART).map(overlay).join('')}
   </g>`;

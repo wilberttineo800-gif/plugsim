@@ -3632,6 +3632,27 @@ export const FIXER = {
   cut: 0.4,
 };
 
+// A Front's own risk, entirely separate from block heat — a corner store
+// never gets raided (sim.js explicitly skips b.kind === 'front'), so without
+// this, washing money through one was the single risk-free action in the
+// whole game. Exposure is normalised to the building's OWN capacity — a
+// corner store and a casino front reach the same risk at the same
+// *proportional* volume, not the same dollar figure, same reasoning as HEAT
+// being normalised per-block rather than flat.
+export const AUDIT = {
+  // Lifetime laundered through a front, in multiples of its own daily
+  // capacity, before risk hits the ceiling below.
+  daysOfCapacityToMaxExposure: 60,
+  maxChancePerDay: 0.12,
+  // Of lifetime laundered through that front, on a hit — capped so a front
+  // that's been washing for a very long time doesn't take a fine bigger than
+  // a few weeks of its own capacity in one shot.
+  finePct: 0.35,
+  fineCapDaysOfCapacity: 6,
+  // Days the front's washing capacity (not its legal takings) is frozen for.
+  freezeDays: 4,
+};
+
 // How hard a legitimate business leans on the wealth of its block.
 /**
  * What a stalled building still costs per day, as a share of its normal upkeep.

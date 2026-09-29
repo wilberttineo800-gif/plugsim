@@ -9,6 +9,7 @@
 // Some are warnings, some are opportunities, and a few want an answer.
 
 import { clamp01 } from './rng.js';
+import { AUDIT } from './constants.js';
 
 export const INCIDENTS = {
   eyes: {
@@ -74,6 +75,14 @@ export const INCIDENTS = {
     tone: 'bad',
     hours: 20,
     glyph: '✖',
+  },
+  audit: {
+    id: 'audit',
+    name: 'The books got pulled',
+    blurb: 'Somebody wanted to see where the money on this front actually came from.',
+    tone: 'bad',
+    hours: AUDIT.freezeDays * 24,
+    glyph: '§',
   },
 };
 

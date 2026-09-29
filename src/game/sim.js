@@ -17,6 +17,7 @@ import {
   BACKLOG_PAUSE_AT,
   RETAIL_MARKUP,
   ARREARS,
+  AUDIT,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -879,17 +880,54 @@ function stepLegit(state, dt) {
     b.earnedToday = (b.earnedToday || 0) + takings;
     state.stats.legalRevenue = (state.stats.legalRevenue || 0) + takings;
 
-    // Then wash what the books can absorb.
-    const capacity = def.launderPerDay * fx.launderMult * sizeScale(b) * (dt / 24);
+    // Then wash what the books can absorb — nothing, if this front is under
+    // audit. Legal takings above still land; only the washing is frozen.
+    const underAudit = (b.auditedUntil || 0) > state.minutes;
+    const capacity = underAudit ? 0 : def.launderPerDay * fx.launderMult * sizeScale(b) * (dt / 24);
     const amount = Math.min(state.cash.dirty, capacity);
     if (amount <= 0) {
-      b.stalledReason = 'Trading legally — no street cash to wash';
+      b.stalledReason = underAudit ? 'Under audit — the books are frozen' : 'Trading legally — no street cash to wash';
       continue;
     }
     state.cash.dirty -= amount;
     state.cash.clean += amount * (1 - def.cut);
     state.stats.laundered += amount;
     b.launderedToday += amount;
+    b.launderedTotal = (b.launderedTotal || 0) + amount;
+  }
+}
+
+/**
+ * A front's own risk, separate from block heat entirely — see AUDIT in
+ * constants.js. Exposure is lifetime laundered through THAT front against
+ * its own capacity, so it can't be diluted by spreading volume across many
+ * fronts the way block heat can be spread across many blocks.
+ */
+function auditFronts(state) {
+  for (const b of state.buildings || []) {
+    if (b.kind !== 'front' || !b.active) continue;
+    if ((b.auditedUntil || 0) > state.minutes) continue;
+    const total = b.launderedTotal || 0;
+    if (total <= 0) continue;
+
+    const def = buildingDef(b);
+    const cap = def.launderPerDay * AUDIT.daysOfCapacityToMaxExposure;
+    const exposure = cap > 0 ? total / cap : 0;
+    const chance = AUDIT.maxChancePerDay * Math.min(1, exposure);
+    if (rng() >= chance) continue;
+
+    const fine = Math.min(
+      total * AUDIT.finePct,
+      def.launderPerDay * AUDIT.fineCapDaysOfCapacity,
+      state.cash.clean
+    );
+    state.cash.clean -= fine;
+    b.auditedUntil = state.minutes + AUDIT.freezeDays * 24 * 60;
+    b.launderedTotal = 0;
+    raise(state, 'audit', { latlng: b.latlng, districtId: b.districtId, buildingId: b.id, detail: b.name });
+    logEvent(state,
+      `${b.name} got audited. $${Math.round(fine).toLocaleString()} frozen, books stay hot for ${AUDIT.freezeDays} days.`,
+      'bad');
   }
 }
 
@@ -1531,6 +1569,7 @@ function settleDay(state) {
   stepLicences(state);
   rollResearchDiscoveries(state);
   dailyIncidents(state);
+  auditFronts(state);
   stepFuneralTrade(state);
 
   // A day on the clock, but only a day spent doing something worth remembering.

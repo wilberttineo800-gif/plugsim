@@ -3653,6 +3653,53 @@ export const AUDIT = {
   freezeDays: 4,
 };
 
+// The climax raids.js/notorietyOf never had: every raid in stepEnforcement is
+// an independent per-building roll, so nothing ever coordinates. Notoriety
+// already has the "you do not finish, you last" arc (see its own comment
+// above) but nothing marked the arc's actual pressure point.
+//
+// Measured against real notorietyOf() output before picking these, not
+// guessed — and measured TWICE, because the first pass (threshold 70,
+// 5-day streak) turned out to be checking a number that had already eaten
+// itself: a 30-building empire at ~71 notoriety loses 6 buildings to
+// ORDINARY stepEnforcement raids inside a single day, which drops notoriety
+// to ~50 before this check (settleDay, end of day) ever sees it — the same
+// pressure that makes an empire task-force-worthy also tears it down before
+// a multi-day streak can accumulate. A "sustained" gate was fighting the
+// mechanic it sits on top of.
+//
+// Re-run against the same 30-building (10 meth_cook + 10 rock_house + 10
+// cut_house) operation: a 6+6+4 operation (the regressions.js "sixteen hot
+// lines" case) tops out around 39 notoriety even at full 12-year tenure, and
+// stays there even accounting for its own raid attrition — it structurally
+// cannot cross 45. The 30-building operation's post-attrition, end-of-day
+// notoriety still clears it at 10 years' tenure. So 45 is the real dividing
+// line between "big operation, some years in" and "an empire, aging" — not
+// 70, which nothing survives long enough to be checked at.
+export const TASK_FORCE = {
+  threshold: 45,
+  // Not a sustained-siege requirement — verified live, not assumed, that a
+  // multi-day one doesn't survive contact with stepEnforcement's own raids:
+  // the same pressure that crosses 45 also immediately starts tearing the
+  // empire down independently, and a static test empire (no rebuilding
+  // modelled) never got a second day back above threshold once attrition
+  // started. Notoriety is derived fresh each day by design anyway (shutting
+  // a line down drops it the same day) — a single day crossing the line, at
+  // this scale, already means something.
+  daysAboveToTrigger: 1,
+  // Ticker warns, then it lands — same "no hidden gauge, pressure reaches
+  // you as news" rule HEAT itself follows, just on a longer, named clock.
+  warningDays: 4,
+  // Share of active, non-front buildings hit in one day — several at once
+  // is the whole point; no independent raid roll can ever produce that.
+  shareOfBuildingsHit: 0.5,
+  minBuildingsHit: 2,
+  // What surviving it buys you: not lower notoriety inputs, but the
+  // operation itself is spent for a long stretch, so it isn't a monthly
+  // event once you're big enough to trigger it at all.
+  cooldownDays: 90,
+};
+
 // How hard a legitimate business leans on the wealth of its block.
 /**
  * What a stalled building still costs per day, as a share of its normal upkeep.

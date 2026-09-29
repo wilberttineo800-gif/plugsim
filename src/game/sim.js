@@ -18,6 +18,7 @@ import {
   RETAIL_MARKUP,
   ARREARS,
   AUDIT,
+  TASK_FORCE,
 } from './constants.js';
 import { clamp, clamp01, makeRng } from './rng.js';
 import { blendQuality, sellRatePerHour, streetPrice } from './economy.js';
@@ -1416,6 +1417,49 @@ function reportHeatShifts(state) {
   }
 }
 
+/**
+ * Resolve one raid actually landing on a building: seize what's on site,
+ * burn the block's own heat down, and roll whether the site is condemned
+ * outright. Split out so a coordinated multi-site hit (runTaskForce) and an
+ * ordinary independent one (stepEnforcement) mean exactly the same thing
+ * happening to a building, rather than two versions of "raided" that could
+ * quietly drift apart. Returns whether it was condemned.
+ */
+function resolveRaidOn(state, b) {
+  const d = districtById(state, b.districtId);
+  const lostRaw = totalPacks(b.raw);
+  const lostPacks = totalPacks(b.packs);
+  for (const pid of PRODUCT_IDS) { b.raw[pid] = 0; b.packs[pid] = 0; }
+  state.stats.raids++;
+  state.stats.seized += lostPacks;
+  if (d) d.heat = clamp(d.heat - 18, 0, HEAT.max); // the raid itself burns off pressure
+
+  const condemned = rng() < 0.3;
+  if (condemned) {
+    const idx = state.buildings.indexOf(b);
+    if (idx >= 0) state.buildings.splice(idx, 1);
+    state.routes = state.routes.filter((r) => r.fromId !== b.id && r.toId !== b.id);
+    for (const c of state.couriers) {
+      // Drop the dead lines from the circuit, keep whatever survives.
+      c.routeIds = (c.routeIds || []).filter((id) => routeById(state, id));
+      if (!routeById(state, c.routeId)) {
+        c.routeIndex = 0;
+        c.routeId = c.routeIds[0] || null;
+        if (!c.routeId) c.phase = 'idle';
+      }
+    }
+    raise(state, 'raid_scene', { latlng: b.latlng, districtId: b.districtId, detail: b.name });
+    logEvent(state, `RAID — ${b.name} in ${d ? d.name : 'the city'} was seized and shut down.`, 'bad');
+  } else {
+    logEvent(
+      state,
+      `RAID — ${b.name} in ${d ? d.name : 'the city'} hit. Lost ${Math.round(lostRaw)} raw and ${Math.round(lostPacks)} packs.`,
+      'bad'
+    );
+  }
+  return condemned;
+}
+
 function stepEnforcement(state, dt, hooks = {}) {
   for (let i = state.buildings.length - 1; i >= 0; i--) {
     const b = state.buildings[i];
@@ -1434,36 +1478,61 @@ function stepEnforcement(state, dt, hooks = {}) {
       * (1 - turf.policeSuppression);
     if (rng() >= perHour * dt) continue;
 
-    const lostRaw = totalPacks(b.raw);
-    const lostPacks = totalPacks(b.packs);
-    for (const pid of PRODUCT_IDS) { b.raw[pid] = 0; b.packs[pid] = 0; }
-    state.stats.raids++;
-    state.stats.seized += lostPacks;
-    d.heat = clamp(d.heat - 18, 0, HEAT.max); // the raid itself burns off pressure
-
-    const condemned = rng() < 0.3;
-    if (condemned) {
-      state.buildings.splice(i, 1);
-      state.routes = state.routes.filter((r) => r.fromId !== b.id && r.toId !== b.id);
-      for (const c of state.couriers) {
-        // Drop the dead lines from the circuit, keep whatever survives.
-        c.routeIds = (c.routeIds || []).filter((id) => routeById(state, id));
-        if (!routeById(state, c.routeId)) {
-          c.routeIndex = 0;
-          c.routeId = c.routeIds[0] || null;
-          if (!c.routeId) c.phase = 'idle';
-        }
-      }
-      raise(state, 'raid_scene', { latlng: b.latlng, districtId: d.id, detail: b.name });
-      logEvent(state, `RAID — ${b.name} in ${d.name} was seized and shut down.`, 'bad');
-    } else {
-      logEvent(
-        state,
-        `RAID — ${b.name} in ${d.name} hit. Lost ${Math.round(lostRaw)} raw and ${Math.round(lostPacks)} packs.`,
-        'bad'
-      );
-    }
+    resolveRaidOn(state, b);
   }
+}
+
+/**
+ * The climax stepEnforcement's independent per-building rolls can never
+ * produce on their own: several sites hit the same day, once notoriety has
+ * sat high for a while. Telegraphed days ahead — see TASK_FORCE in
+ * constants.js for the actual thresholds and why they're what they are.
+ */
+function stepTaskForce(state) {
+  const now = state.minutes;
+  if ((state.taskForceCooldownUntil || 0) > now) { state.taskForceStreak = 0; return; }
+
+  if (state.taskForceWarnedAt) {
+    if (now >= state.taskForceWarnedAt + TASK_FORCE.warningDays * 24 * 60) runTaskForce(state);
+    return;
+  }
+
+  const n = notorietyOf(state);
+  state.taskForceStreak = n >= TASK_FORCE.threshold ? (state.taskForceStreak || 0) + 1 : 0;
+  if (state.taskForceStreak < TASK_FORCE.daysAboveToTrigger) return;
+
+  state.taskForceWarnedAt = now;
+  logEvent(state,
+    `Word is a task force is being put together, for you specifically. `
+    + `Whatever you can't afford to lose, move it — you have about ${TASK_FORCE.warningDays} days.`,
+    'bad');
+}
+
+function runTaskForce(state) {
+  state.taskForceWarnedAt = null;
+  state.taskForceStreak = 0;
+  state.taskForceCooldownUntil = state.minutes + TASK_FORCE.cooldownDays * 24 * 60;
+
+  const targets = (state.buildings || []).filter((b) => b.active && b.kind !== 'front');
+  if (!targets.length) {
+    logEvent(state, "The task force came for you and found nothing standing to hit.", 'good');
+    return;
+  }
+
+  const n = Math.min(targets.length,
+    Math.max(TASK_FORCE.minBuildingsHit, Math.round(targets.length * TASK_FORCE.shareOfBuildingsHit)));
+  const pool = targets.slice();
+  const hitNames = [];
+  let condemnedCount = 0;
+  for (let i = 0; i < n && pool.length; i++) {
+    const b = pool.splice(Math.floor(rng() * pool.length), 1)[0];
+    hitNames.push(b.name);
+    if (resolveRaidOn(state, b)) condemnedCount++;
+  }
+  logEvent(state,
+    `The task force moved — ${n} sites in one day`
+    + `${condemnedCount ? `, ${condemnedCount} shut down for good` : ''}: ${hitNames.join(', ')}.`,
+    'bad');
 }
 
 /**
@@ -1570,6 +1639,7 @@ function settleDay(state) {
   rollResearchDiscoveries(state);
   dailyIncidents(state);
   auditFronts(state);
+  stepTaskForce(state);
   stepFuneralTrade(state);
 
   // A day on the clock, but only a day spent doing something worth remembering.

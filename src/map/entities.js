@@ -1,8 +1,8 @@
 // Everything the player owns, drawn on the map: property markers, standing
 // routes, and couriers moving along them in real time.
 
-import { BUILDINGS, COURIERS, PRODUCTS } from '../game/constants.js';
-import { gunWithAttachments, modelWithAttachments } from '../ui/art.js';
+import { BUILDINGS, PRODUCTS } from '../game/constants.js';
+import { gunWithAttachments, modelWithAttachments, vehicleArt } from '../ui/art.js';
 import { buildingById, districtById, buildingLabel } from '../game/state.js';
 import { INCIDENTS, activeIncidents, freshness } from '../game/incidents.js';
 import { escapeHtml, overlayColor } from './mapView.js';
@@ -27,12 +27,9 @@ const ICONS = {
   note: '<path d="M2 6h20v12H2Z" opacity="0.5"/><circle cx="12" cy="12" r="3.2"/><path d="M4.5 8.5h2v7h-2Zm13 0h2v7h-2Z"/>',
 };
 
-// The catalogue outgrew per-model glyphs; a marker reads by class instead.
-const CLASS_GLYPH = { foot: '✦', twowheel: '◈', car: '▰', van: '▮', truck: '▭', air: '▲' };
-function glyphFor(type) {
-  const def = COURIERS[type];
-  return (def && CLASS_GLYPH[def.class]) || '▰';
-}
+// Couriers used to read by class from a six-glyph table here. They carry
+// their own drawn vehicle now (see CourierLayer), which is 1:1 per model, so
+// the table and its lookup are gone rather than left sitting unused.
 
 function svgIcon(name) {
   return `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[name] || ICONS.box}</svg>`;
@@ -338,6 +335,10 @@ export class CourierLayer {
     this.onSelect = onSelect;
     this.group = L.layerGroup().addTo(map);
     this.markers = new Map();
+    // Last longitude per courier, to tell which way it is pointing. There is
+    // no heading in state — the sim only knows where a vehicle IS — so it
+    // comes from comparing successive positions.
+    this.lastLng = new Map();
   }
 
   sync(state) {
@@ -347,10 +348,26 @@ export class CourierLayer {
       seen.add(c.id);
       let marker = this.markers.get(c.id);
       const laden = Object.values(c.cargo).some((v) => v > 0.01);
+
+      // The actual vehicle, not a glyph.
+      //
+      // `vehicleart.js` holds 25 drawn models — every one of them detailed,
+      // and not one of them ever appeared on the map. A courier was a single
+      // character from a six-entry table (CLASS_GLYPH), so a bike, a van and
+      // an articulated truck were three shapes between twenty-five vehicles,
+      // in the one place a player watches them work. They are keyed 1:1 by
+      // courier type, so this is the same lookup the Fleet panel already does.
+      const prev = this.lastLng.get(c.id);
+      const facing = prev != null && Math.abs(c.position.lng - prev) > 1e-9
+        ? (c.position.lng < prev ? 'is-westbound' : '')
+        : (marker && marker._facing) || '';
+      this.lastLng.set(c.id, c.position.lng);
+
       const html =
-        `<div class="cmark ${laden ? 'is-laden' : ''} ${c.phase === 'idle' ? 'is-idle' : ''}">` +
-        `<span>${glyphFor(c.type)}</span></div>`;
-      const icon = L.divIcon({ className: '', html, iconSize: [20, 20], iconAnchor: [10, 10] });
+        `<div class="cmark cmark--art ${laden ? 'is-laden' : ''} `
+        + `${c.phase === 'idle' ? 'is-idle' : ''} ${facing}">`
+        + `${vehicleArt(c.type, { size: 34 })}</div>`;
+      const icon = L.divIcon({ className: '', html, iconSize: [34, 22], iconAnchor: [17, 11] });
 
       if (!marker) {
         marker = L.marker([c.position.lat, c.position.lng], { icon, zIndexOffset: 600 });
@@ -364,11 +381,15 @@ export class CourierLayer {
         marker.setLatLng([c.position.lat, c.position.lng]);
         marker.setIcon(icon);
       }
+      // Remembered so a vehicle stopped at a door keeps pointing the way it
+      // was going, instead of snapping back to facing right.
+      marker._facing = facing;
     }
     for (const [id, marker] of this.markers) {
       if (!seen.has(id)) {
         this.group.removeLayer(marker);
         this.markers.delete(id);
+        this.lastLng.delete(id);
       }
     }
   }

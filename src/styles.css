@@ -267,6 +267,20 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 .cmark.is-laden { border-color: var(--sodium); color: var(--sodium); box-shadow: 0 0 9px rgba(255, 138, 61, .4); }
 .cmark.is-idle { opacity: .45; }
 
+/* A courier carrying its real drawn vehicle rather than a glyph: no disc to
+   sit in, and it points the way it is travelling. */
+.cmark--art {
+  width: 34px; height: 22px;
+  background: none; border: 0; border-radius: 0;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .75));
+}
+.cmark--art svg { width: 34px; height: auto; display: block; }
+.cmark--art.is-westbound svg { transform: scaleX(-1); }
+.cmark--art.is-laden {
+  box-shadow: none;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, .75)) drop-shadow(0 0 7px rgba(255, 138, 61, .65));
+}
+
 /* Incident ping */
 .ping {
   width: 16px; height: 16px; border-radius: 50%;

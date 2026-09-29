@@ -93,6 +93,7 @@ import { unlockStatus, regionNote, buildingPreview, productTree, chainFor, feeds
   from '../game/progression.js';
 import { citiesOf, cityOfDistrict, cityOfBuilding, distanceKm, foundingCost, openableFrom,
   quoteShipment, homeCity } from '../game/cities.js';
+import { districtAt } from '../game/districts.js';
 import {
   availableUpgrades, describeEffects, effectsFor, upkeepFor, vehicleUpgrades, vehicleStats,
   maxRoutesFor, rentUpgrades,
@@ -361,6 +362,12 @@ export class GameUI {
       this.renderRail();
       return;
     }
+    if (name === 'cityFind') {
+      // Held on the instance, not read off the input at click time: the rail
+      // is rebuilt on a timer and would otherwise wipe what was typed.
+      this.cityFind = value;
+      return;
+    }
     if (name.startsWith('ship.')) {
       // The form lives in the inspector, not the rail, so re-render the panel
       // the player is actually looking at — the quote below it has to move
@@ -485,6 +492,11 @@ export class GameUI {
       case 'accept-offer': g.resolveIncidentOffer(id, true); break;
       case 'decline-offer': g.resolveIncidentOffer(id, false); break;
       case 'goto-city': g.goToCity(id); break;
+      case 'found-anywhere': {
+        const q = (this.cityFind || '').trim();
+        if (q) { this.cityFind = ''; g.foundCityAt(q); }
+        break;
+      }
       case 'send-shipment': {
         const [pid, toId] = String(type).split(':');
         g.sendShipment(id, toId, pid);
@@ -586,8 +598,16 @@ export class GameUI {
   renderHud() {
     const s = this.game.state;
     const clock = clockOf(s.minutes);
-    this.dom.city.textContent = s.cityName;
-    this.dom.city.title = s.cityName;
+    // Where you are standing, not where you started. Once a run spans cities
+    // the home name is just wrong: you can be looking at Hong Kong with the
+    // HUD insisting you are in Waterbury.
+    const here = this.game.map
+      ? districtAt(s.districts || [], this.game.map.getCenter())
+      : null;
+    const standing = here ? cityOfDistrict(s, here.id) : null;
+    const label = standing ? standing.name : s.cityName;
+    this.dom.city.textContent = label;
+    this.dom.city.title = label === s.cityName ? label : `${label} · home is ${s.cityName}`;
     this.dom.day.textContent = `Day ${clock.day}`;
     this.dom.time.textContent = clock.label;
     this.dom.clean.textContent = money(s.cash.clean);
@@ -798,6 +818,18 @@ export class GameUI {
           Not more room — a different market. Another country prices every
           product differently, which is the whole reason to move weight there
           rather than sell it at home.
+        </p>
+        <div class="field">
+          <label>Anywhere on Earth</label>
+          <div class="start__searchrow">
+            <input type="text" data-field="cityFind" placeholder="Hong Kong, Lagos, your own street…"
+              value="${esc(this.cityFind || '')}" autocomplete="off">
+            <button class="primarybtn" data-action="found-anywhere">Open up</button>
+          </div>
+        </div>
+        <p class="card__blurb" style="margin:6px 0 10px; color:var(--text-faint)">
+          The suggestions below are the short way. Anything you can name works
+          the same — cost is by distance from home.
         </p>
         ${options || '<div class="empty">Nowhere left on the list.</div>'}
       </div>`;

@@ -1280,10 +1280,13 @@ game.goToCity = (cityId) => {
   toast(`${c.name}.`, 'info', 1600);
 };
 
-game.foundCity = async (name) => {
-  const dest = DESTINATIONS.find((d) => d.name === name);
-  if (!dest) { toast('Nowhere by that name.', 'bad'); return; }
-
+/**
+ * Open up in a place, wherever it is.
+ *
+ * Takes a `{ name, origin, countryCode }` rather than a name to look up, so
+ * the same path serves the suggested destinations and anywhere else on Earth.
+ */
+async function openCityAt(dest) {
   const res = A.foundCity(game.state, dest);
   if (!res.ok) { toast(res.error, 'bad'); return; }
 
@@ -1321,6 +1324,48 @@ game.foundCity = async (name) => {
     ? `${dest.name} is open — ${here.toLocaleString()} buildings surveyed.`
     : `${dest.name} is open, but the survey came back empty. Try again shortly.`,
     here ? 'good' : 'bad');
+}
+
+/** One of the suggested destinations, by name. */
+game.foundCity = async (name) => {
+  const dest = DESTINATIONS.find((d) => d.name === name);
+  if (!dest) { toast('Nowhere by that name.', 'bad'); return; }
+  return openCityAt(dest);
+};
+
+/**
+ * Open up anywhere on Earth.
+ *
+ * The start screen has always let you begin in any real city — it geocodes
+ * whatever you type. Expansion did not: `openableFrom` filters a hardcoded
+ * list of fifteen DESTINATIONS, so a player who wanted Hong Kong, or the
+ * town they actually live in, simply could not have it. The world was open
+ * for your first city and closed for every one after it, which is backwards.
+ *
+ * Same geocoder, same survey, same founding cost by distance.
+ */
+game.foundCityAt = async (query) => {
+  const q = String(query || '').trim();
+  if (!q) return;
+  toast(`Looking for ${q}…`, 'info', 1800);
+
+  let found;
+  try {
+    found = (await geocode(q))[0];
+  } catch (err) {
+    console.warn('[cities] geocode failed', err);
+  }
+  if (!found) { toast(`Can't find ${q}.`, 'bad'); return; }
+
+  const origin = { lat: found.lat, lng: found.lng };
+  let countryCode = null;
+  try {
+    countryCode = await fetchCountryCode(origin.lat, origin.lng);
+  } catch (err) {
+    // A missing country code only costs the regional price modifier.
+    console.warn('[cities] country lookup failed', err);
+  }
+  return openCityAt({ name: found.short || found.name, origin, countryCode });
 };
 
 

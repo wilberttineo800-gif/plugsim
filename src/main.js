@@ -640,6 +640,21 @@ game.openIncident = (inc) => {
   game.incidentLayer.sync(s);
 };
 
+game.resolveIncidentOffer = (incidentId, accept) => {
+  diag.trace('incident offer');
+  const r = A.resolveIncidentOffer(game.state, incidentId, accept);
+  if (!r.ok) return toast(r.error || "That offer's gone.", 'bad');
+  if (!r.accepted) {
+    toast('Passed. Somebody else will get the call.', 'info', 2400);
+  } else {
+    toast(`${r.buyer.name} took ${Math.round(r.moved)} packs off you for $${Math.round(r.gross).toLocaleString()}.`,
+      'good', 4200);
+  }
+  game.buildingLayer.sync(game.state);
+  game.incidentLayer.sync(game.state);
+  game.ui.render();
+};
+
 game.setModel = (buildingId, modelId) => {
   diag.trace('set pattern');
   const r = A.setModel(game.state, buildingId, modelId);

@@ -963,8 +963,25 @@ function dailyIncidents(state) {
   if (met.length && stocked && rng() < 0.18) {
     const who = met[Math.floor(rng() * met.length) % met.length];
     const where = (state.districts || []).find((d) => (who.blocks || []).includes(d.id));
-    if (where) {
-      raise(state, 'approached', { latlng: where.center, districtId: where.id, detail: who.name });
+    // What the approach is actually for: whichever of your buildings is
+    // sitting on the most packaged stock of something they'll take. Without
+    // this the incident was flavour only — a name and a place, nothing to
+    // actually say yes or no to.
+    let best = null;
+    for (const b of state.buildings || []) {
+      for (const pid of PRODUCT_IDS) {
+        const have = b.packs[pid] || 0;
+        if (have > 20 && (!best || have > best.have)) best = { buildingId: b.id, productId: pid, have };
+      }
+    }
+    if (where && best) {
+      const inc = raise(state, 'approached', {
+        latlng: where.center, districtId: where.id, buildingId: best.buildingId, detail: who.name,
+      });
+      // Extra fields beyond raise()'s fixed shape — fine, this incident just
+      // won't be actionable (falls back to flavour-only) if they're ever
+      // missing, e.g. on an old save from before this existed.
+      if (inc) { inc.playerId = who.id; inc.productId = best.productId; }
     }
   }
 }

@@ -5,7 +5,7 @@
 import {
   BUILDINGS, BUILDING_IDS, COURIERS, COURIER_IDS, COURIER_CLASSES,
   PRODUCTS, PRODUCT_IDS, SPEEDS, SPEED_NOTES,
-  UNIT_LADDER, RETAIL_MARKUP, HEAT, ARREARS,
+  UNIT_LADDER, RETAIL_MARKUP, WHOLESALE_FACTOR, HEAT, ARREARS,
 } from '../game/constants.js';
 import { streetPrice, baselinePrice, saturation, sellRatePerHour, rivalShare } from '../game/economy.js';
 import { cityPrice, PRICE_SAMPLE_HOURS } from '../game/sim.js';
@@ -56,7 +56,7 @@ import {
   TREATMENT, TREATMENT_IDS, treatmentPrice, treatmentRisk, reportableWounds,
   hushCost, livesLeft, nextLifeCost,
 } from '../game/actions.js';
-import { activePenalties } from '../game/stats.js';
+import { activePenalties, getStat } from '../game/stats.js';
 import {
   CAPTIVES, captivesOf, holdingCapacity, takeableFrom, symptomsOf,
 } from '../game/captives.js';
@@ -79,8 +79,9 @@ import {
 } from './art.js';
 import {
   leaderboard, trendOf, knownOperations, operationsIn, turfWarning,
-  offerForItem, offerForProduct,
+  offerForItem, offerForProduct, appetiteFor,
 } from '../game/players.js';
+import { activeIncidents } from '../game/incidents.js';
 import { connection } from '../game/net.js';
 import {
   KIND_LABEL, lotById, lotResale, priceBreakdown, sqft, marketValue, rentPerDay, lotPnL,
@@ -469,6 +470,8 @@ export class GameUI {
         g.sellProductTo(id, pid, product);
         break;
       }
+      case 'accept-offer': g.resolveIncidentOffer(id, true); break;
+      case 'decline-offer': g.resolveIncidentOffer(id, false); break;
       case 'dismiss-helper': g.dismissHelper(type); break;
       case 'toggle': g.toggleBuilding(id); break;
       case 'toggle-selling': g.toggleSelling(id); break;
@@ -3613,6 +3616,40 @@ export class GameUI {
     </details>`;
   }
 
+  /**
+   * A bulk offer sitting on this specific building, raised by an 'approached'
+   * incident on the map — that told you somebody was asking; this is the
+   * actual deal, with a real accept/decline rather than just a toast.
+   */
+  pendingOfferBlock(b) {
+    const s = this.game.state;
+    const inc = activeIncidents(s).find(
+      (i) => i.type === 'approached' && i.buildingId === b.id && i.playerId && i.productId
+    );
+    if (!inc) return '';
+    const buyer = (s.players || []).find((p) => p.id === inc.playerId);
+    const have = (b.packs && b.packs[inc.productId]) || 0;
+    if (!buyer || have <= 0.01) return '';
+
+    const d = districtById(s, b.districtId);
+    const room = appetiteFor(buyer, inc.productId);
+    const move = Math.min(have, room);
+    const unit = offerForProduct(buyer, inc.productId,
+      streetPrice(d, inc.productId) * WHOLESALE_FACTOR) * getStat(s, 'deal');
+
+    return `<div class="sect sect--helper">
+      <div class="sect__title"><span>${esc(buyer.name)} wants ${esc(PRODUCTS[inc.productId].name.toLowerCase())}</span></div>
+      <div class="card" style="margin-top:4px">
+        <div class="card__blurb">Bulk offer, off the books — ${units(move)} packs at
+          ${money(unit)}/pack, about ${money(move * unit)} total.</div>
+      </div>
+      <div class="btnrow">
+        <button class="primarybtn" data-action="accept-offer" data-id="${inc.id}">Deal</button>
+        <button class="ghostbtn" data-action="decline-offer" data-id="${inc.id}">Pass</button>
+      </div>
+    </div>`;
+  }
+
   buildingPanel(b) {
     const s = this.game.state;
     const def = BUILDINGS[b.type];
@@ -3729,6 +3766,7 @@ export class GameUI {
       <p class="subttl">${esc(d ? d.name : '—')}</p>
       ${b.stalledReason ? `<div class="chips" style="margin-bottom:12px"><span class="chip chip--warn">${esc(b.stalledReason)}</span></div>` : ''}
       ${!b.active ? '<div class="chips" style="margin-bottom:12px"><span class="chip chip--bad">Shut down</span></div>' : ''}
+      ${this.pendingOfferBlock(b)}
       ${body}
       <div class="sect">
         <div class="sect__title"><span>Running costs</span></div>

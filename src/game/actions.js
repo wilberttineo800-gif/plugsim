@@ -755,6 +755,23 @@ export function sellProductTo(state, buildingId, playerId, productId, amount) {
   return { ok: true, buyer, moved: move, unit, gross };
 }
 
+/**
+ * Take or pass on a bulk offer raised by an 'approached' incident. Accepting
+ * runs the exact same sellProductTo any known operation already supports —
+ * this is just the incident's way of pointing at a specific one. Declining
+ * has no penalty; they'll ask somebody else, or ask you again another day.
+ */
+export function resolveIncidentOffer(state, incidentId, accept) {
+  const inc = (state.incidents || []).find((i) => i.id === incidentId);
+  if (!inc || inc.type !== 'approached' || !inc.playerId || !inc.productId) {
+    return { ok: false, error: "That offer's gone." };
+  }
+  state.incidents = state.incidents.filter((i) => i.id !== incidentId);
+  if (!accept) return { ok: true, accepted: false };
+  const sale = sellProductTo(state, inc.buildingId, inc.playerId, inc.productId);
+  return { ...sale, accepted: true };
+}
+
 /** Call a place whatever you like. Blank puts its given name back. */
 export function renameBuilding(state, buildingId, name) {
   const b = buildingById(state, buildingId);

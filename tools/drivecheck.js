@@ -130,7 +130,7 @@ for (const [label, mode] of [['hired driver', 'hired'], ['you, unarmed', 'you'],
     t.stops += st.stops || 0;
     t.inPerson += st.stoppedInPerson || 0;
     t.talked += st.talkedDown || 0;
-    t.seized += st.seized || 0;
+    t.seized += st.seizedOnRoad || 0;
     t.tribute += st.tributePaid || 0;
     t.gross += st.grossRevenue || 0;
     t.trips += s._sale.tripsCompleted || 0;
@@ -141,8 +141,8 @@ for (const [label, mode] of [['hired driver', 'hired'], ['you, unarmed', 'you'],
   log(`  trips by that vehicle  ${t.trips}`);
   log(`  police stops           ${t.stops}`);
   log(`    of those, in person  ${t.inPerson}`);
-  log(`    talked out of it     ${t.talked}` + (t.stops ? ` (${Math.round(t.talked / t.stops * 100)}%)` : ''));
-  log(`  packs seized           ${t.seized.toFixed(1)}`);
+  log(`    talked out of it     ${t.talked}` + (t.inPerson ? ` (${Math.round(t.talked / t.inPerson * 100)}% of in-person)` : ''));
+  log(`  packs seized ON ROAD   ${t.seized.toFixed(1)}`);
   log(`  tribute paid           ${t.tribute.toFixed(1)} packs`);
   log(`  gross                  ${money(t.gross)}`);
   log(`  wounds taken           ${t.wounds}`);

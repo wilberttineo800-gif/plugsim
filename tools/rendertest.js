@@ -180,6 +180,12 @@ const cases = [
   // panels change and both have to survive it.
   ['tabCharacter (bionic, front and back)', () => {
     const ch = require_character();
+    // Pin the rest of the body first. The character this state generated is
+    // not fixed between runs, so any OTHER part that happened to come up
+    // missing painted the void colour too and failed the check below for a
+    // reason that had nothing to do with fitments — a gate that fails two
+    // runs in five teaches people to ignore it.
+    for (const p of Object.keys(ch.body.parts)) ch.body.parts[p].lost = false;
     ch.body.parts.armR.lost = true;
     ch.body.installed = { armR: { tier: 'bionic', efficiency: 1.2 }, legL: { tier: 'crude' },
       eye: { tier: 'prosthetic' } };

@@ -29,7 +29,10 @@ export const SPEED_NOTES = {
 };
 
 export const START_CASH_DIRTY = 0;
-export const START_CASH_CLEAN = 600000;
+// A million to open with. The opening squeeze in this game is property, not
+// staff — LOTS.minPrice is 120,000 and a grow wants a building before it wants
+// anything else — so this is the difference between three premises and five.
+export const START_CASH_CLEAN = 1000000;
 
 // --- Products ---------------------------------------------------------------
 // Each product moves through the chain as RAW units (harvested, unsellable)

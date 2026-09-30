@@ -15,7 +15,7 @@ import { streetPrice } from './economy.js';
 import { citiesOf, homeCity, cityOfBuilding, foundingCost, quoteShipment } from './cities.js';
 import { generateDistricts } from './districts.js';
 import { haversineKm } from './geo.js';
-import { paySoft } from './sim.js';
+import { paySoft, worldRandom } from './sim.js';
 import { unlockStatus } from './progression.js';
 import {
   LICENCES, FIREARM_CLASSES, canApply, hasLicence, licenceRecord, MODELS, classOf,
@@ -1496,6 +1496,9 @@ export function takeFire(state, { rounds = 1, threat = null, heat = 0 } = {}) {
       threat: incoming,
       protection: protectionOf(state, part),
       atHour,
+      // The world's seeded randomness, not Math.random: being shot can now
+      // happen to you inside stepSim, so it has to be reproducible.
+      rand: worldRandom,
     });
     if (w) taken.push(w);
   }
@@ -1503,7 +1506,7 @@ export function takeFire(state, { rounds = 1, threat = null, heat = 0 } = {}) {
 }
 
 function rollPartFor() {
-  let r = Math.random();
+  let r = worldRandom();
   for (const id of Object.keys(BODY_PARTS)) {
     r -= BODY_PARTS[id].hitShare;
     if (r <= 0) return id;

@@ -271,6 +271,15 @@ export class GameUI {
     this.dom.railTabs.addEventListener('click', (e) => {
       const btn = e.target.closest('button[data-tab]');
       if (!btn) return;
+      // Pressing the panel you are already on rolls the whole thing up, so a
+      // double-tap on a tab clears the column off the map and a third press
+      // brings it back. The minimise button still works; this just means you
+      // don't have to go looking for it to get at what's underneath.
+      if (btn.dataset.tab === this.tab && !this.dom.rail.classList.contains('is-min')) {
+        this.toggleRail(true);
+        this.toggleMenu(false);
+        return;
+      }
       this.goTab(btn.dataset.tab);
       this.toggleMenu(false);
     });

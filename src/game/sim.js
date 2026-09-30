@@ -65,6 +65,21 @@ export function seedWorld(seed) {
   rng = makeRng(seed >>> 0);
 }
 
+/**
+ * The world's randomness, for the few things outside this module that happen
+ * *to* the player during a tick rather than because they pressed something.
+ *
+ * Injury was the hole. `takeFire` rolled on raw `Math.random()`, which was
+ * harmless while the only way to be shot was a button you chose to press, and
+ * stopped being harmless the moment a police stop could shoot you from inside
+ * `stepSim`. It made `seedWorld` a half-truth, put a flake into
+ * `tools/rendertest.js` — two runs in five reporting a panel broken on
+ * identical code — and quietly falsified any harness claiming paired seeds.
+ */
+export function worldRandom() {
+  return rng();
+}
+
 /** Pay an operating cost: street money first, clean money only if it must. */
 export function paySoft(state, amount) {
   if (amount <= 0) return true;
@@ -648,9 +663,17 @@ function maybeGetStopped(state, c, def, dt, hooks) {
   if (!here) return;
 
   const d = nearestDistrict(state, here);
-  if (!d || d.heat < HEAT.stopHeatFloor) return;
+  // `pressureOn` is block heat plus how well known you are, and its own
+  // docstring says everything that reads heat to DECIDE something reads this
+  // instead. Stops were the one decision never wired into it, which is why
+  // police had never pulled anybody over in this game: measured over 17.7
+  // game-years of unforced play, peak block heat was 21.4 against a floor of
+  // 20, so the gate was shut about 99.4% of the time and shut completely for
+  // any operation too small to be notorious.
+  const pressure = pressureOn(state, d);
+  if (!d || pressure < HEAT.stopHeatFloor) return;
 
-  const heatFactor = (d.heat - HEAT.stopHeatFloor) / (HEAT.max - HEAT.stopHeatFloor);
+  const heatFactor = (pressure - HEAT.stopHeatFloor) / (HEAT.max - HEAT.stopHeatFloor);
   const stats = vehicleStats(c, COURIERS[c.type]);
   // Driving through a block you've arranged is safer than driving through one
   // you haven't.
@@ -670,9 +693,19 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     // employee has no standing and no story; you have both, and `deal` is
     // the stat that measures exactly that. Win the roll and you eat the
     // fine, keep the load, and drive off carrying the heat you earned.
-    // This is the whole reason to take a run yourself: the loss tail on a
-    // full boxtruck is millions, and the wage you save is $260.
-    if (yours && rng() < 0.35 + getStat(state, 'deal') * 0.35) {
+    //
+    // It scales against the load, and that is what stops driving from being
+    // a free win. At a flat 70% the arithmetic never argued for hiring
+    // anybody: a talked-down semi saved $5.88M a stop against a wage of
+    // $260 a day. Nobody talks their way past four thousand packs in the
+    // back. A courier bag, though, is a conversation.
+    //
+    // Rolled unconditionally so the two arms of a paired-seed harness stay
+    // on the same rng stream whether or not you are driving.
+    const talkRoll = rng();
+    const talkOdds = clamp(
+      0.35 + getStat(state, 'deal') * 0.35 - carried / 3000, 0.05, 0.80);
+    if (yours && talkRoll < talkOdds) {
       paySoft(state, fine);
       state.stats.stops++;
       state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
@@ -693,6 +726,10 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     for (const pid of PRODUCT_IDS) c.cargo[pid] = 0;
     paySoft(state, fine);
     state.stats.seized += carried;
+    // Kept apart from `seized`, which building raids also write to: when the
+    // two share a counter, most of what looks like a courier being stopped is
+    // actually a house going down, and any comparison built on it is noise.
+    state.stats.seizedOnRoad = (state.stats.seizedOnRoad || 0) + carried;
     state.stats.stops++;
     d.heat = clamp(d.heat + 6, 0, HEAT.max);
     raise(state, 'tailed', { latlng: here, districtId: d.id, detail: def.name });
@@ -714,7 +751,10 @@ function maybeGetStopped(state, c, def, dt, hooks) {
       // push (actions.js), which left an entire anatomy, infection and
       // bionics system hanging off one dice roll on one action.
       state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
-      if (armedWith(state) > 0 && rng() < 0.25) {
+      // Not elective. Gating this purely on being armed made the whole risk
+      // side of the feature optional — unequipping a sidearm is free and
+      // instant, so a player could take the upside and decline the downside.
+      if (rng() < (armedWith(state) > 0 ? 0.25 : 0.08)) {
         // No `threat` override: takeFire reads it off the block's heat, which
         // is the right answer here — a hotter block is a better-armed one.
         // Passing a string made it NaN-adjacent and silently wrong.

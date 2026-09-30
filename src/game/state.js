@@ -510,8 +510,13 @@ function migrate(data) {
  * dozen keys long.
  */
 export function backfillProducts(data) {
+  // Only ever fill a real per-product map. Handed a number — and `stats.seized`
+  // is a running total, not a map — assigning a property to a primitive throws
+  // in strict mode, loadGame() catches it, returns null, and the player's whole
+  // save silently becomes a new game. Guarding the type here costs one check
+  // and makes that impossible to reintroduce from any call site.
   const fill = (m, v) => {
-    if (!m) return;
+    if (!m || typeof m !== 'object') return;
     for (const pid of PRODUCT_IDS) if (m[pid] === undefined) m[pid] = v;
   };
   for (const d of data.districts || []) {
@@ -528,7 +533,9 @@ export function backfillProducts(data) {
     fill(b.rawQuality, 0.5); fill(b.packQuality, 0.5);
   }
   for (const c of data.couriers || []) { fill(c.cargo, 0); fill(c.cargoQuality, 0.5); }
-  if (data.stats) { fill(data.stats.packsSold, 0); fill(data.stats.seized, 0); }
+  // packsSold is per product; seized is a single running total. It was in this
+  // list, which is what made a save unloadable the moment anything was seized.
+  if (data.stats) fill(data.stats.packsSold, 0);
   if (data.priceHistory) for (const pid of PRODUCT_IDS) {
     if (!data.priceHistory[pid]) data.priceHistory[pid] = [];
   }

@@ -436,8 +436,10 @@ body.has-inspector .leaflet-control-zoom { margin-right: 344px !important; }
 }
 .rail__min:hover { background: rgba(255, 255, 255, .03); color: var(--text-dim); }
 
-/* Rolled up: the title bar and nothing else, so the map is the map. */
-.rail.is-min .rail__tabs,
+/* Rolled up: the title bar and nothing else, so the map is the map.
+   The tab strip stays, because pressing the tab you are on is what rolled the
+   panel up — hiding the tabs would leave no way to press it again, and a
+   toggle you can only undo somewhere else is not a toggle. */
 .rail.is-min .rail__body { display: none; }
 .rail.is-min { max-height: none; }
 .rail__chev { transition: transform .14s ease; color: var(--text-faint); }

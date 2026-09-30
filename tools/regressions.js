@@ -1792,6 +1792,22 @@ print('=== 27. a save that predates a product still loads ===');
   const bMissing = PRODUCT_IDS.filter((p) => (back.buildings[0].packs || {})[p] === undefined);
   check('and so does every building', bMissing.length === 0, bMissing.join(', ') || 'all present');
   check('and what was already there is untouched', back.stats.packsSold.weed === 12);
+
+  // A save where anything had ever been seized refused to load, so the player
+  // silently started a new game and lost everything they had. `stats.seized`
+  // is a running total, not a per-product map, and it was being handed to the
+  // backfill alongside `packsSold`: assigning a property to a number throws in
+  // strict mode, loadGame() swallowed the throw, and main.js saw "no save".
+  //
+  // The longer a game ran, the more certain it was to be destroyed.
+  st.stats.seized = 137.5;
+  saveGame(st);
+  const afterSeizure = loadGame();
+  check('a save survives having lost a load', !!afterSeizure,
+        afterSeizure ? 'loaded' : 'REFUSED — the player just lost their game');
+  check('and the seized total is still a number',
+        !!afterSeizure && afterSeizure.stats.seized === 137.5,
+        afterSeizure ? String(afterSeizure.stats.seized) : 'n/a');
 }
 
 print(fail ? fail + ' FAILURE(S), ' + pass + ' passed' : 'all ' + pass + ' checks passed');

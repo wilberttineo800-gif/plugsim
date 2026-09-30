@@ -122,9 +122,20 @@ export function pricedArea(areaM2) {
  * of building is a decent guess — a rowhouse is not a tower and a warehouse is
  * one tall space.
  */
+// Keyed off exactly what classify() emits, and nothing else. It previously
+// said `apartment` and `office` — two spellings classify() has never produced
+// — while `apartments` and `commercial`, which it produces constantly, were
+// absent and fell through to the `|| 2` below. So every untagged block of
+// flats stood two storeys instead of four, and every untagged commercial
+// building two instead of five. Same defect the RESIDENTIAL set had: a lookup
+// table drifting away from the vocabulary it is meant to mirror.
+//
+// Levels drive floor area, and floor area drives rent and price, so this
+// moves the economy. It is also where any extruded view of the city gets its
+// heights when OSM states none.
 const DEFAULT_LEVELS = {
-  tower: 12, apartment: 4, office: 5, retail: 2, house: 2, rowhouse: 2,
-  warehouse: 1, industrial: 1, garage: 1, shed: 1, parking: 1, kiosk: 1,
+  parking: 1, industrial: 1, retail: 2, commercial: 5,
+  garage: 1, apartments: 4, house: 2, rowhouse: 2,
 };
 
 export function levelsOf(tags, kind) {

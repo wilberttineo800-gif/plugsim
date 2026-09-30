@@ -683,7 +683,7 @@ function maybeGetStopped(state, c, def, dt, hooks) {
       logEvent(
         state,
         `Pulled over in ${d.name}. You did the talking — $${fine.toLocaleString()} and a `
-          + `long look, but the load stayed on the truck.`,
+          + `long look. The load stayed on the truck.`,
         'warn'
       );
       hooks.onIncident?.(here, 'stop');
@@ -700,8 +700,8 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     logEvent(
       state,
       yours
-        ? `Pulled over in ${d.name} driving the ${def.name} — ${Math.round(carried)} packs seized, `
-          + `$${fine.toLocaleString()} gone, and they had your name.`
+        ? `Pulled over in ${d.name}. They searched it — ${Math.round(carried)} packs, `
+          + `$${fine.toLocaleString()}, and now they have your name.`
         : `${def.name} stopped in ${d.name} — ${Math.round(carried)} packs seized, $${fine.toLocaleString()} gone.`,
       'bad'
     );
@@ -1339,8 +1339,8 @@ function maybeShakedown(state, courier, district, hooks) {
   logEvent(
     state,
     yours
-      ? `${crew.name} tried to tax a drop in ${district.name} with you standing there — `
-        + `${Math.round(taken)} packs, and they knew not to ask for more.`
+      ? `${crew.name} taxed a drop in ${district.name} with you standing there — `
+        + `${Math.round(taken)} packs. Less than they'd have taken off an employee.`
       : `${crew.name} taxed a drop in ${district.name} — ${Math.round(taken)} packs gone.`,
     'bad'
   );

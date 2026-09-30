@@ -63,11 +63,11 @@ export const STEPS = [
     id: 'vehicle',
     title: 'Get something that moves',
     brief:
-      "Buy a motor. Then either hire somebody, or take the wheel yourself — the " +
-      "van is yours either way, a driver is staff and staff want paying. Doing " +
-      "the first few runs yourself is how you learn which blocks are worth the " +
-      "drive, and every hand you take on after is harder to find than the last.",
-    hint: 'Fleet tab → Dealership, then pick a driver — or pick yourself.',
+      "Buy a motor. Then either hire somebody or take the wheel yourself — the " +
+      "van is yours either way, a driver is staff, and staff want paying. Do " +
+      "the first few runs yourself; it's how you learn which blocks are worth " +
+      "the drive.",
+    hint: 'Fleet tab → Dealership. Then put a driver in it, or put yourself in it.',
     check: (s) => (s.couriers || []).some((c) => c.driverId),
   },
   {

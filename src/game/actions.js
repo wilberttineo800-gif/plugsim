@@ -2046,6 +2046,17 @@ export function buyLife(state) {
 export function resolveDeath(state) {
   const ch = characterOf(state);
   const how = ch.body ? causeOfDeath(ch.body) : 'died';
+
+  // Whatever you were driving, you are not driving it now. Without this the
+  // van rolls on with your name on it while you are being put back together
+  // in a back room, and the map goes on insisting you are in the cab.
+  for (const c of state.couriers || []) {
+    if (c.driverId !== YOU_DRIVING) continue;
+    c.driverId = null;
+    c.phase = 'idle';
+    logEvent(state, `The ${COURIERS[c.type].name} is where they left it.`, 'warn');
+  }
+
   if (livesLeft(state) <= 0) {
     state.gameOver = { at: state.minutes || 0, how };
     logEvent(state, `You ${how}. That was the last one.`, 'bad');

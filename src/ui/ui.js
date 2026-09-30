@@ -337,7 +337,12 @@ export class GameUI {
       const g = this.game;
       const s = g.state;
       const hq = s.hqBuildingId ? s.buildings.find((b) => b.id === s.hqBuildingId) : null;
-      const at = s.followMe ? s.playerAt : (hq ? hq.latlng : s.playerAt || s.origin);
+      // Same precedence as syncPlayerMarker: the van first, because the one
+      // button whose whole job is "show me where I am" should not drive you
+      // home while you are out on a run.
+      const driven = (s.couriers || []).find((c) => c.driverId === YOU_DRIVING && c.position);
+      const at = driven ? driven.position
+        : (s.followMe ? s.playerAt : (hq ? hq.latlng : s.playerAt || s.origin));
       const alreadyThere = at && g.map.getZoom() >= 17
         && g.map.distance([at.lat, at.lng], g.map.getCenter()) < 120;
       if (alreadyThere) { g.toggleFollowMe(); return; }
@@ -2566,7 +2571,7 @@ export class GameUI {
     const driverOpts = ['<option value="">— nobody driving —</option>']
       .concat(youBusy
         ? []
-        : [`<option value="${YOU_DRIVING}" ${yours ? 'selected' : ''}>You · no wage</option>`])
+        : [`<option value="${YOU_DRIVING}" ${yours ? 'selected' : ''}>You · free</option>`])
       .concat((s.drivers || [])
         .filter((d) => !taken.has(d.id))
         .map((d) => `<option value="${d.id}" ${c.driverId === d.id ? 'selected' : ''}>${esc(d.name)} · ${money(d.wagePerDay)}/d</option>`))
@@ -2605,7 +2610,7 @@ export class GameUI {
         <div class="fleetart fleetart--sm">${vehicleArt(c.type, { size: 132 })}</div>
         <div class="card__meta">
           <span>${yours
-            ? '<span style="color:var(--good)">you, driving</span>'
+            ? '<span style="color:var(--good)">you\'re driving it</span>'
             : (driver ? esc(driver.name) : '<span style="color:var(--warn)">parked, no driver</span>')}</span>
           <span>${esc(this.phaseLabel(c))}</span>
           <span>${c.tripsCompleted} runs</span>
@@ -2619,8 +2624,8 @@ export class GameUI {
             ${manned && circuit.length < max && spare.length ? '' : 'disabled'}>${routeOpts}</select>
         </div>
         ${yours
-          ? '<p class="card__blurb" style="margin:4px 0 0">You\'re in the seat. No wage, and a stop is '
-            + 'yours to talk your way out of — or not.</p>'
+          ? '<p class="card__blurb" style="margin:4px 0 0">You\'re in the seat. When they pull '
+            + 'this over, there\'s somebody in it who can talk.</p>'
           : ''}
         ${circuit.length >= max && max > 1
           ? '<p class="card__blurb" style="margin:4px 0 0">Full circuit. Something bigger would carry more lines.</p>'

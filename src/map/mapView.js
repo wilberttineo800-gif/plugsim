@@ -31,6 +31,23 @@ const FALLBACK_TILE_URL = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const FALLBACK_ATTRIB =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
+// Zoomed right in, the dark canvas has nothing left to say: it stops drawing
+// at z16 and everything past that is one tile stretched over thirty-two, which
+// is exactly the mush you see at full zoom. Esri's World Imagery is keyless
+// like the canvas and serves real photography down to z20 — at that range you
+// are looking at the actual roof of the actual building you are about to buy.
+//
+// So the basemap becomes two layers and a crossfade rather than one
+// compromise: the canvas owns the wide view, where dark and label-light is
+// the whole point, and the photography owns the close view, where seeing the
+// real place is the whole point.
+const IMAGERY_TILE_URL =
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+const IMAGERY_ATTRIB = 'Esri, Maxar, Earthstar Geographics';
+/** Below this the photography is invisible; above IMAGERY_FULL it is all you see. */
+const IMAGERY_FADE_IN = 16.4;
+const IMAGERY_FULL = 18;
+
 export const OVERLAYS = [
   { id: 'demand_weed', label: 'Weed demand' },
   { id: 'demand_shrooms', label: 'Shroom demand' },
@@ -93,8 +110,54 @@ export function createMap(elementId, center, zoom = 14) {
     }).addTo(map);
   });
 
+  attachImagery(map);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   return map;
+}
+
+/**
+ * Fade real aerial photography in as the player zooms to street level.
+ *
+ * Its own pane, above the canvas basemap and below every vector the game
+ * draws, so districts, lots and vehicles keep sitting on top of it.
+ *
+ * The opacity ramp is driven from `zoomend` and `zoom` rather than CSS,
+ * because this codebase has been bitten twice by leaning on the compositor
+ * for tile visibility: Leaflet's own fade drives opacity from
+ * requestAnimationFrame and leaves tiles at opacity 0 when the window is
+ * occluded (hence `fadeAnimation: false` above), and an identity CSS filter
+ * on the tile pane promoted it to a layer Safari never painted into. So the
+ * ramp is a plain number set on a Leaflet layer, and the pane filter below is
+ * only ever applied when it is genuinely not the identity.
+ */
+function attachImagery(map) {
+  const pane = map.createPane('imagery');
+  pane.style.zIndex = 250; // tilePane is 200, overlayPane 400
+  pane.style.pointerEvents = 'none';
+  // Photography is daylight-bright and the rest of the game is not. Knock it
+  // back far enough to sit under a dark UI, not so far that the thing the
+  // player zoomed in to see is lost again.
+  const dim = 'brightness(0.74) saturate(0.82) contrast(1.04)';
+  if (dim && dim !== 'none') pane.style.filter = dim;
+
+  const imagery = L.tileLayer(IMAGERY_TILE_URL, {
+    attribution: IMAGERY_ATTRIB,
+    pane: 'imagery',
+    maxZoom: 21,
+    maxNativeZoom: 20, // Esri's World Imagery stops here
+    opacity: 0,
+    crossOrigin: true,
+  }).addTo(map);
+
+  const ramp = () => {
+    const z = map.getZoom();
+    const t = (z - IMAGERY_FADE_IN) / (IMAGERY_FULL - IMAGERY_FADE_IN);
+    imagery.setOpacity(clamp01(t));
+  };
+  map.on('zoomend', ramp);
+  map.on('zoom', ramp);
+  ramp();
+  return imagery;
 }
 
 /** Frame the play area so the whole territory is on screen at the start. */

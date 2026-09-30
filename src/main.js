@@ -889,6 +889,11 @@ function startLoop() {
     game.courierLayer.sync(game.state);
     game.routeLayer.sync(game.state);
     game.incidentLayer.sync(game.state);
+    // You move too, when you're the one driving. This was the missing half of
+    // the drive-it-yourself marker work: the sim wrote state.playerAt every
+    // tick and nothing read it back onto the map, so the dot sat at the origin
+    // for the whole run.
+    syncPlayerMarker();
     game.ui.renderHud();
 
     sincePanelRender += realSeconds;

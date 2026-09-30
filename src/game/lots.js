@@ -10,6 +10,7 @@ import { LOTS, MARKET_PROPERTY } from './constants.js';
 import { rentEffects } from './upgrades.js';
 import { haversineKm } from './geo.js';
 import { clamp, clamp01, lerp, hashUnit } from './rng.js';
+import { cachedTile, cacheTile } from './tilecache.js';
 
 const EARTH = { latM: 110540, lngM: 111320 };
 
@@ -376,11 +377,24 @@ export async function loadTiles(state, keys, fetchBuildings, onProgress) {
   for (const key of todo) {
     const b = tileBounds(key);
     let ways = [];
-    try {
-      ways = await fetchBuildings(b.south, b.west, b.north, b.east, LOTS.tileFetchCap);
-    } catch (err) {
-      console.warn('[lots] tile fetch failed', key, err);
-      continue; // leave it unmarked so it retries later
+    // A block surveyed once is a block surveyed. Overpass is the least
+    // reliable dependency this game has — a live session measured 504s from
+    // one mirror and aborts from another, and produced a city containing
+    // three buildings — so going back to it for geography we already hold is
+    // the single most avoidable way to lose a city.
+    const kept = cachedTile(key);
+    if (kept) {
+      ways = kept;
+    } else {
+      try {
+        ways = await fetchBuildings(b.south, b.west, b.north, b.east, LOTS.tileFetchCap);
+        // Cache the empty answer too: open country and water are real results,
+        // and re-asking about them forever is the behaviour worth stopping.
+        cacheTile(key, ways);
+      } catch (err) {
+        console.warn('[lots] tile fetch failed', key, err);
+        continue; // leave it unmarked so it retries later
+      }
     }
     state.loadedTiles.push(key);
 

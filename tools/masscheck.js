@@ -204,6 +204,30 @@ const scratch = makeScratch();
 
 
 // ===========================================================================
+section('0. The module is DOM-free, and stays that way');
+// ===========================================================================
+//
+// This file shims nothing — no `document`, no `window`, no `L`. The imports at
+// the top of it have already run by the time this executes, so the geometry
+// half of the renderer importing cleanly is proved by the fact that anything
+// below prints at all. What is asserted here is that it STAYS true: the moment
+// a `document.createElement` or an `L.something` creeps above the seam, this
+// tool stops running and `tools/loadcheck.js` — which shims a DOM — would not
+// notice.
+{
+  check('no DOM was shimmed to make this run',
+    typeof globalThis.document === 'undefined'
+    && typeof globalThis.window === 'undefined'
+    && typeof globalThis.L === 'undefined');
+  check('and the pure half imported anyway',
+    typeof projectWorld === 'function' && typeof drawScene === 'function'
+    && typeof makeCamera === 'function');
+  check('and importing the module created no pane, canvas or listener',
+    typeof globalThis.requestAnimationFrame === 'undefined');
+}
+
+
+// ===========================================================================
 section('1. NaN containment — one bad vertex blanks a whole path, silently');
 // ===========================================================================
 //

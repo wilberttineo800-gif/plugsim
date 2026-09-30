@@ -440,6 +440,70 @@ function growScratch(s, need) {
  * will a courtyard building enclosing another. Each is one wrong region and
  * neither is worth a depth buffer here.
  */
+/**
+ * Sort `a[0..n)` so that `key[a[i]]` runs from largest to smallest, in place
+ * and without allocating a byte.
+ *
+ * An introsort-shaped quicksort: median-of-three pivot, recurse into the
+ * smaller side and loop on the larger so the call depth stays O(log n), and
+ * hand anything under sixteen elements to insertion sort, which beats
+ * quicksort at that size and is what makes the whole thing fast rather than
+ * merely tidy.
+ *
+ * There is no comparator parameter. A comparator is a closure, a closure over
+ * `key` is an allocation, and the entire point of this function is that it
+ * makes none.
+ */
+export function sortByKeyDesc(a, n, key) {
+  let lo = 0;
+  let hi = n - 1;
+  // An explicit stack of pending ranges, sized for the worst case of the
+  // recurse-into-smaller-half rule: 2 * log2(2^31) is comfortably under 64.
+  const stack = SORT_STACK;
+  let sp = 0;
+  for (;;) {
+    if (hi - lo < 16) {
+      for (let i = lo + 1; i <= hi; i++) {
+        const v = a[i];
+        const kv = key[v];
+        let j = i - 1;
+        while (j >= lo && key[a[j]] < kv) { a[j + 1] = a[j]; j--; }
+        a[j + 1] = v;
+      }
+      if (sp === 0) return a;
+      hi = stack[--sp];
+      lo = stack[--sp];
+      continue;
+    }
+    // Median of three, moved to lo+1, which also sentinels both ends.
+    const mid = (lo + hi) >> 1;
+    if (key[a[mid]] > key[a[lo]]) { const t = a[mid]; a[mid] = a[lo]; a[lo] = t; }
+    if (key[a[lo]] < key[a[hi]]) { const t = a[lo]; a[lo] = a[hi]; a[hi] = t; }
+    if (key[a[mid]] > key[a[lo]]) { const t = a[mid]; a[mid] = a[lo]; a[lo] = t; }
+    const pivot = key[a[lo]];
+    let i = lo;
+    let j = hi + 1;
+    for (;;) {
+      do { i++; } while (i <= hi && key[a[i]] > pivot);
+      do { j--; } while (key[a[j]] < pivot);
+      if (i >= j) break;
+      const t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    const t = a[lo]; a[lo] = a[j]; a[j] = t;
+    // Push the larger half, loop on the smaller.
+    if (j - lo > hi - j) {
+      stack[sp++] = lo; stack[sp++] = j - 1;
+      lo = j + 1;
+    } else {
+      stack[sp++] = j + 1; stack[sp++] = hi;
+      hi = j - 1;
+    }
+  }
+}
+// Module-level and reused: one 64-slot stack for the life of the page, shared
+// because the sort is never re-entered (it calls nothing).
+const SORT_STACK = new Int32Array(64);
+
 export function orderVisible(prepared, cam, scratch, { pad = 64 } = {}) {
   const order = scratch.order;
   order.length = 0;
@@ -475,8 +539,18 @@ export function orderVisible(prepared, cam, scratch, { pad = 64 } = {}) {
     key[i] = dx * dx + dy * dy;
     order.push(i);
   }
-  // Furthest first.
-  order.sort((a, b) => key[b] - key[a]);
+  // Furthest first — and sorted by hand, because `Array.prototype.sort` with a
+  // comparator is the single largest allocation in this renderer.
+  //
+  // Measured, not assumed: before this change a 1700-building redraw grew the
+  // JS heap by 13981 bytes, of which ~600 was the per-redraw camera and sun
+  // records and the rest was 7.9 bytes per building — a 1700-element temporary
+  // that V8's sort allocates to hold the run it is merging. Afterwards the
+  // same redraw is flat. It never mattered for smoothness, because the layer
+  // redraws once per gesture and not once per frame; it mattered because the
+  // budget says zero and a number that is nearly zero invites the next person
+  // to add "just a small array" to a hot path.
+  sortByKeyDesc(order, order.length, key);
   return order;
 }
 

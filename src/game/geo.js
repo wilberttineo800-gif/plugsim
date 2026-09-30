@@ -290,10 +290,20 @@ export async function fetchPlaceNames(south, west, north, east, onRetry) {
  * was timing out completely rather than refusing, which is worse than a refusal
  * because it costs the full timeout before moving on.
  */
+// Five attempts, five DIFFERENT hosts. The old list named overpass-api.de and
+// maps.mail.ru twice each, so a sweep that opened with a 504 from
+// overpass-api.de went on to ask overpass-api.de again — two of the five
+// attempts were spent re-asking a server that had already refused, which is
+// the failure already written down in this project's notes ("the tile survey
+// retried straight back into a rate-limited Overpass") wearing a new hat.
+//
+// Measured before changing it: overpass-api.de was answering 504 and
+// maps.mail.ru was aborting, which is exactly how a city comes up with three
+// buildings in it. A duplicate in a fallback list is not a fallback.
 export const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
-  'https://overpass-api.de/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
+  'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
 ];

@@ -94,9 +94,9 @@
     </div>
     <hr>
     <div class="btns">
-      <button id="b700">Bench 700</button>
+      <button id="b700">Bench 400</button>
       <button id="b1700">Bench 1700</button>
-      <button id="ball">Bench both</button>
+      <button id="ball">Sweep z17-20</button>
     </div>
     <canvas id="strip" width="560" height="68"></canvas>
     <div class="hud" id="hud">loading the survey…</div>
@@ -129,6 +129,7 @@ import { createMap } from '../src/map/mapView.js';
 import { classify, polygonAreaM2, heightMetresOf, levelsOf } from '../src/game/lots.js';
 import {
   Buildings3DLayer, projectWorld, pxPerMetreAt, sunFromHour, massingHeightM,
+  drawScene,
 } from '../src/map/buildings3d.js';
 
 const $ = (id) => document.getElementById(id);
@@ -221,7 +222,7 @@ async function boot() {
 
   if (new URLSearchParams(location.search).has('bench')) {
     // Give the tiles and the first paint a moment, then run unattended.
-    setTimeout(() => runBench([700, 1700]), 1500);
+    setTimeout(() => runBench([400, 1700]), 1500);
   }
 }
 
@@ -360,26 +361,22 @@ function sampleFrames(ms, during) {
 
 const settle = (ms) => new Promise((r) => setTimeout(r, ms));
 
-async function benchOne(count) {
-  const wasEnabled = layer.enabled;
-  // Three times the target, so there is enough city to choose from.
+/**
+ * Load `count` real buildings, centred on the view, and keep exactly those.
+ *
+ * Without the trim the cull quietly does its job and the benchmark measures
+ * 491 buildings while the label says 700 — a fine result for the renderer and
+ * a useless one for the question "what does 700 cost". Trimming to the N
+ * NEAREST the middle of the screen means the working set is a real, contiguous
+ * piece of city rather than a scatter, which is what the cull sees in the game.
+ */
+function loadWorkingSet(count, zoom) {
   lots = densify(count * 3);
   layer.table.clear();
   layer.prepared = [];
   layer.sync({ lots });
-
-  map.setView([MIDTOWN.lat, MIDTOWN.lng], 17, { animate: false });
-  await settle(400);
+  map.setView([MIDTOWN.lat, MIDTOWN.lng], zoom, { animate: false });
   layer.redraw();
-
-  // Keep exactly the `count` buildings NEAREST the middle of the screen.
-  //
-  // Without this the cull quietly does its job and the benchmark measures 491
-  // buildings while claiming 700 — which is a fine result for the renderer and
-  // a useless one for the question "what does 700 cost". Trimming to the
-  // nearest N means every one of them is inside the cull box, so `drawn`
-  // comes back equal to `count` and the millisecond figure is the figure for
-  // that many buildings actually on screen.
   const cam = layer.cam;
   const cx = cam.width / 2;
   const cy = cam.height / 2;
@@ -392,89 +389,247 @@ async function benchOne(count) {
     .sort((a, b) => a.d - b.d)
     .slice(0, count)
     .map((e) => e.p);
+  layer.redraw();
+}
 
-  // 1. Redraw cost. Warm up first: the first call grows the scratch arrays and
-  //    fills the shade cache, and timing a cold cache is timing the wrong
-  //    thing.
-  for (let i = 0; i < 4; i++) layer.redraw();
-  const redraws = [];
-  let drawn = 0;
-  for (let i = 0; i < 24; i++) {
+/**
+ * Time N redraws and return the distribution.
+ *
+ * Warmed up first, because the first call grows the scratch arrays and fills
+ * the shade cache, and timing a cold cache is timing the wrong thing.
+ */
+function timeRedraws(fn, n = 24) {
+  for (let i = 0; i < 4; i++) fn();
+  const out = [];
+  let last = 0;
+  for (let i = 0; i < n; i++) {
     const t = performance.now();
-    drawn = layer.redraw();
-    redraws.push(performance.now() - t);
+    last = fn();
+    out.push(performance.now() - t);
+  }
+  return { stats: stats(out), drawn: last };
+}
+
+/**
+ * A scripted pan and a scripted zoom, sampling every animation frame.
+ *
+ * This is the number that decides whether the feature ships. The redraw cost
+ * above is a hitch at the END of a gesture and one frame of it is invisible;
+ * a frame time during the gesture is felt on every single frame.
+ *
+ * Redraws are counted separately for the pan window and the zoom window,
+ * rather than across the whole routine, because the setView calls that frame
+ * each pass legitimately fire their own `moveend` and would otherwise be
+ * counted as gesture redraws.
+ */
+async function gestureAt(zoom) {
+  map.setView([MIDTOWN.lat, MIDTOWN.lng], zoom, { animate: false });
+  await settle(280);
+
+  let redraws = 0;
+  const orig = layer.redraw.bind(layer);
+  layer.redraw = (...a) => { redraws++; return orig(...a); };
+
+  redraws = 0;
+  const pan = await sampleFrames(1100, () => {
+    map.panBy([260, 180], { animate: true, duration: 0.9, easeLinearity: 1 });
+  });
+  const redrawsInPan = redraws;
+  await settle(260);
+
+  redraws = 0;
+  const zoomGaps = await sampleFrames(900, () => {
+    map.setZoom(Math.min(20, zoom + 1), { animate: true });
+  });
+  const redrawsInZoom = redraws;
+
+  layer.redraw = orig;
+  await settle(200);
+  map.setView([MIDTOWN.lat, MIDTOWN.lng], zoom, { animate: false });
+  await settle(150);
+  // Drop the first two of each: the first rAF after a timeout measures the
+  // timeout, not the gesture.
+  return {
+    pan: stats(pan.slice(2)), zoom: stats(zoomGaps.slice(2)),
+    redrawsInPan, redrawsInZoom,
+  };
+}
+
+/**
+ * Bytes allocated per redraw.
+ *
+ * The design's hard rule is zero steady-state allocation, because GC pauses on
+ * a phone present as exactly the stutter people complain about. Claiming zero
+ * is cheap; measuring it needs `--enable-precise-memory-info` for a truthful
+ * `usedJSHeapSize` and `--js-flags=--expose-gc` so the heap can be settled
+ * before and after. Without those flags this reports what it could not do
+ * rather than guessing.
+ */
+function allocProbe(n = 400) {
+  if (!performance.memory) return { ok: false, why: 'performance.memory unavailable' };
+  const gc = window.gc;
+  if (gc) { gc(); gc(); }
+  const before = performance.memory.usedJSHeapSize;
+  for (let i = 0; i < n; i++) layer.redraw();
+  const afterRaw = performance.memory.usedJSHeapSize;
+  if (gc) { gc(); gc(); }
+  const afterGc = performance.memory.usedJSHeapSize;
+  return {
+    ok: true,
+    gcAvailable: !!gc,
+    n,
+    grewBytes: afterRaw - before,
+    perRedraw: (afterRaw - before) / n,
+    retainedBytes: afterGc - before,
+  };
+}
+
+const ZOOMS = [17, 18, 19, 20];
+
+async function runBench(counts) {
+  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = true;
+  const wasEnabled = layer.enabled;
+
+  // The control first, once per zoom: the same gestures with the massing off.
+  // A frame time with no control is not a measurement — if the map alone
+  // cannot hold 60 fps on this hardware then neither can the map plus
+  // anything, and the massing would be blamed for it.
+  benchOut.textContent = 'benching: control pass (massing off)…';
+  layer.setEnabled(false);
+  const control = {};
+  for (const z of ZOOMS) control[z] = await gestureAt(z);
+  layer.setEnabled(true);
+
+  const rows = [];
+  for (const count of counts) {
+    for (const z of ZOOMS) {
+      benchOut.textContent = `benching ${count} @ z${z}…`;
+      loadWorkingSet(count, z);
+
+      // What the cull actually keeps at this zoom — the realistic figure.
+      const culled = timeRedraws(() => layer.redraw());
+
+      // And the same working set with the cull opened right up, so every one
+      // of the N is projected and painted. This separates "the renderer is
+      // fast" from "the cull threw most of them away", which at z20 it does.
+      const sun = layer.sun;
+      const forced = timeRedraws(() => {
+        const ctx = layer.ctx;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, layer.canvas.width, layer.canvas.height);
+        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+        return drawScene(ctx, layer.prepared, layer.cam, layer.scratch, {
+          sun, shadows: z >= layer.shadowMinZoom, pad: 1e7,
+        });
+      });
+
+      const g = await gestureAt(z);
+      rows.push({
+        count, zoom: z,
+        drawn: culled.drawn, redrawMs: culled.stats,
+        forcedDrawn: forced.drawn, forcedMs: forced.stats,
+        pan: g.pan, zoomG: g.zoom,
+        redrawsInPan: g.redrawsInPan, redrawsInZoom: g.redrawsInZoom,
+        panControl: control[z].pan, zoomControl: control[z].zoom,
+      });
+    }
   }
 
-  // 2 + 3. Gesture frame times, with and without the massing.
-  const gesture = async () => {
-    layer.map.setView([MIDTOWN.lat, MIDTOWN.lng], 17, { animate: false });
-    await settle(250);
-    const pan = await sampleFrames(1100, () => {
-      map.panBy([260, 180], { animate: true, duration: 0.9, easeLinearity: 1 });
-    });
-    await settle(250);
-    const zoom = await sampleFrames(900, () => {
-      map.setZoom(18, { animate: true });
-    });
-    await settle(250);
-    map.setZoom(17, { animate: false });
-    await settle(150);
-    // Drop the first two frames of each: the first rAF after a timeout is
-    // measuring the timeout, not the gesture.
-    return { pan: pan.slice(2), zoom: zoom.slice(2) };
-  };
+  // Allocation, measured at two very different building counts.
+  //
+  // One number cannot answer the question. What matters is not "how many
+  // bytes" but "does it grow with the number of buildings": a fixed cost per
+  // redraw is a handful of Leaflet Points and one camera record, and the layer
+  // redraws once per gesture, so it is irrelevant. A cost per BUILDING is the
+  // thing the design forbids, because that is what turns into a GC pause.
+  benchOut.textContent = 'benching: allocation probe…';
+  loadWorkingSet(1700, 17);
+  const allocBig = allocProbe(400);
+  loadWorkingSet(50, 17);
+  const allocSmall = allocProbe(400);
+  const alloc = Object.assign({}, allocBig, {
+    big: allocBig, small: allocSmall,
+    perBuilding: (allocBig.perRedraw - allocSmall.perRedraw) / (1700 - 50),
+  });
 
-  layer.setEnabled(true);
-  let redrawsDuringGesture = 0;
-  const countRedraws = () => { redrawsDuringGesture++; };
-  const origRedraw = layer.redraw.bind(layer);
-  layer.redraw = (...a) => { countRedraws(); return origRedraw(...a); };
-  const withMassing = await gesture();
-  layer.redraw = origRedraw;
-
-  layer.setEnabled(false);
-  const withoutMassing = await gesture();
+  // Put the honest sample back.
+  lots = adopt(raw);
+  layer.table.clear();
+  layer.prepared = [];
+  layer.sync({ lots });
   layer.setEnabled(wasEnabled);
   layer.redraw();
 
-  return {
-    count,
-    drawn,
-    redrawMs: stats(redraws),
-    panOn: stats(withMassing.pan),
-    panOff: stats(withoutMassing.pan),
-    zoomOn: stats(withMassing.zoom),
-    zoomOff: stats(withoutMassing.zoom),
-    redrawsDuringGesture,
-    frames: withMassing.pan,
-  };
+  const text = report(rows, alloc);
+  window.__b3d.results = rows;
+  window.__b3d.alloc = alloc;
+  window.__b3d.text = text;
+  document.title = 'BENCH DONE';
+  const post = new URLSearchParams(location.search).get('post');
+  if (post) {
+    try {
+      await fetch(post, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: text + '\n\nRAW ' + JSON.stringify({ rows, alloc }),
+      });
+    } catch (e) { /* the numbers are on screen either way */ }
+  }
+  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = false;
+  return rows;
 }
 
 function fmt(s) {
-  return `med ${s.med.toFixed(1)}  p95 ${s.p95.toFixed(1)}  max ${s.max.toFixed(1)}`;
+  return `${s.med.toFixed(1).padStart(5)} ${s.p95.toFixed(1).padStart(5)} `
+    + `${s.max.toFixed(1).padStart(6)}`;
 }
 
-function report(rs) {
+function report(rows, alloc) {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const size = map.getSize();
-  const lines = [
-    `viewport ${size.x}x${size.y} css, dpr ${dpr} (capped at 2)`,
-    `${navigator.userAgent.slice(0, 78)}`,
-    '',
-  ];
-  for (const r of rs) {
-    lines.push(`--- ${r.count} buildings (${r.drawn} actually drawn at z17) ---`);
-    lines.push(`  redraw        ${fmt(r.redrawMs)}  ms`);
-    lines.push(`  pan   massing ${fmt(r.panOn)}  ms/frame`);
-    lines.push(`  pan   control ${fmt(r.panOff)}  ms/frame`);
-    lines.push(`  zoom  massing ${fmt(r.zoomOn)}  ms/frame`);
-    lines.push(`  zoom  control ${fmt(r.zoomOff)}  ms/frame`);
-    lines.push(`  redraws fired during the two gestures: ${r.redrawsDuringGesture}`);
-    lines.push('');
+  const L = [];
+  L.push(`viewport ${size.x}x${size.y} css · dpr ${dpr} (capped at 2) · `
+    + `backing store ${Math.round(size.x * dpr)}x${Math.round(size.y * dpr)}`);
+  L.push(navigator.userAgent);
+  L.push('');
+  L.push('REDRAW COST (one redraw, fired at the end of a gesture)');
+  L.push('  set    z   drawn   med   p95    max |  forced   med   p95    max');
+  for (const r of rows) {
+    L.push(`  ${String(r.count).padStart(4)} z${r.zoom}  `
+      + `${String(r.drawn).padStart(5)} ${fmt(r.redrawMs)} | `
+      + `${String(r.forcedDrawn).padStart(6)} ${fmt(r.forcedMs)}`);
   }
-  benchOut.textContent = lines.join('\n');
-  drawStrip(rs[rs.length - 1].frames);
-  return lines.join('\n');
+  L.push('');
+  L.push('FRAME TIME DURING THE GESTURE (ms/frame; control = massing off)');
+  L.push('  set    z   pan:med   p95    max | ctrl:med   max | redraws pan/zoom');
+  for (const r of rows) {
+    L.push(`  ${String(r.count).padStart(4)} z${r.zoom}  ${fmt(r.pan)} | `
+      + `${r.panControl.med.toFixed(1).padStart(8)} ${r.panControl.max.toFixed(1).padStart(5)} | `
+      + `${r.redrawsInPan}/${r.redrawsInZoom}`);
+  }
+  L.push('');
+  L.push('  set    z  zoom:med   p95    max | ctrl:med   max');
+  for (const r of rows) {
+    L.push(`  ${String(r.count).padStart(4)} z${r.zoom}  ${fmt(r.zoomG)} | `
+      + `${r.zoomControl.med.toFixed(1).padStart(8)} ${r.zoomControl.max.toFixed(1).padStart(5)}`);
+  }
+  L.push('');
+  L.push('ALLOCATION PER REDRAW');
+  if (!alloc.ok) {
+    L.push(`  not measured: ${alloc.why}`);
+  } else {
+    for (const [name, a] of [['1700 buildings', alloc.big], ['  50 buildings', alloc.small]]) {
+      L.push(`  ${name}: ${a.n} redraws grew the heap ${a.grewBytes} B `
+        + `= ${a.perRedraw.toFixed(0)} B/redraw, ${a.retainedBytes} B retained after gc`);
+    }
+    L.push(`  slope: ${alloc.perBuilding.toFixed(3)} bytes per building per redraw `
+      + `(gc ${alloc.gcAvailable ? 'available' : 'NOT available'})`);
+  }
+  benchOut.textContent = L.join('\n');
+  const last = rows[rows.length - 1];
+  drawStrip([last.pan.med, last.pan.p95, last.pan.max]);
+  return L.join('\n');
 }
 
 /** Frame intervals as a strip, because a p95 hides the one spike that hurts. */
@@ -493,46 +648,6 @@ function drawStrip(gaps) {
     ctx.fillStyle = gaps[i] > 33 ? '#c2560c' : (gaps[i] > 20 ? '#a08e4d' : '#5f8f6c');
     ctx.fillRect(i * w, cv.height - h, Math.max(1, w - 0.5), h);
   }
-}
-
-async function runBench(counts) {
-  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = true;
-  benchOut.textContent = 'benching… the map will move on its own.';
-  const rs = [];
-  for (const c of counts) {
-    benchOut.textContent = `benching ${c}…`;
-    rs.push(await benchOne(c));
-  }
-  // Put the honest sample back.
-  lots = adopt(raw);
-  layer.table.clear();
-  layer.prepared = [];
-  layer.sync({ lots });
-  layer.redraw();
-  const text = report(rs);
-  window.__b3d.results = rs;
-  window.__b3d.text = text;
-  document.title = 'BENCH DONE';
-  // A driver cannot read this page's variables without a debugging protocol,
-  // so when `?post=<url>` is given the numbers are posted back as plain text.
-  // `text/plain` keeps it a simple request with no CORS preflight, and
-  // `no-cors` means the collector needs no headers at all.
-  const post = new URLSearchParams(location.search).get('post');
-  if (post) {
-    try {
-      await fetch(post, {
-        method: 'POST', mode: 'no-cors',
-        headers: { 'Content-Type': 'text/plain' },
-        body: text + '\n\nRAW ' + JSON.stringify(rs.map((r) => ({
-          count: r.count, drawn: r.drawn, redrawMs: r.redrawMs,
-          panOn: r.panOn, panOff: r.panOff, zoomOn: r.zoomOn, zoomOff: r.zoomOff,
-          redrawsDuringGesture: r.redrawsDuringGesture,
-        }))),
-      });
-    } catch (e) { /* the numbers are on screen either way */ }
-  }
-  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = false;
-  return rs;
 }
 
 // --- controls ---------------------------------------------------------------
@@ -594,9 +709,9 @@ toggle('tiles', (on) => {
 $('esb').onclick = () => map.setView([40.74844, -73.98565], 19, { animate: true });
 $('z17').onclick = () => map.setZoom(17);
 $('z19').onclick = () => map.setZoom(19);
-$('b700').onclick = () => runBench([700]);
+$('b700').onclick = () => runBench([400]);
 $('b1700').onclick = () => runBench([1700]);
-$('ball').onclick = () => runBench([700, 1700]);
+$('ball').onclick = () => runBench([400, 1700]);
 
 // Tapping a building says what it is, which is the only way to check that the
 // height being drawn is the height that was surveyed.

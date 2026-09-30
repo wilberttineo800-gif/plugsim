@@ -114,7 +114,14 @@ globalThis.L = {
 globalThis.fetch = () => Promise.reject(new Error('no network in check'));
 globalThis.AbortController = class { constructor(){ this.signal = null; } abort(){} };
 
-import('../src/main.js').then(async () => {
+// Top-level await, deliberately, rather than a .then() chain.
+//
+// Measured in this jsc: a synchronous throw exits 3, a throw after a
+// top-level await exits 3, but `quit(n)` exits 0 and an unhandled promise
+// rejection exits 0. So a failure reported from inside a .then() callback
+// could never set the exit code, which is how this gate spent its whole life
+// printing BOOTGAME FAILED and returning success.
+await import('../src/main.js').then(async () => {
   print('main.js evaluated OK');
   print('listeners wired: ' + listeners.length);
   const api = Object.keys(globalThis.plugsim).filter(k => typeof globalThis.plugsim[k] === 'function');
@@ -142,7 +149,13 @@ import('../src/main.js').then(async () => {
   } catch (e) {
     print('BOOTGAME FAILED: ' + e);
     print(e && e.stack ? String(e.stack).split('\n').slice(0, 5).join('\n') : '');
-    return;
+    // Loudly, not quietly. This printed and returned 0 for its whole life, so
+    // a boot failure looked exactly like a pass to anything reading the exit
+    // code — which is the entire job of a gate. It caught a real null
+    // dereference on the massing fallback path and still exited clean.
+    // jsc's quit(n) always exits 0, so throwing is the only way out that a
+    // shell or CI step can actually test.
+    throw new Error('loadcheck: bootGame failed');
   }
 
   // And render every tab and panel through the real UI, which is where an
@@ -153,7 +166,10 @@ import('../src/main.js').then(async () => {
     catch (e) { broke++; print('  tab ' + tab + ' threw: ' + e); }
   }
   print(broke ? broke + ' TAB(S) BROKEN' : 'every tab renders through the real UI');
+  if (broke) throw new Error('loadcheck: ' + broke + ' tab(s) broken');
 }).catch((e) => {
   print('MAIN.JS FAILED: ' + e);
   print(e && e.stack ? e.stack : '');
+  throw e;
 });
+

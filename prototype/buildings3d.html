@@ -1,0 +1,654 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Plugsim · extruded buildings over Leaflet</title>
+
+<!-- Leaflet, pinned exactly, from cdnjs. Same 1.9.4 the game runs on
+     (index.html loads it from unpkg); this page uses cdnjs because that is the
+     allowed CDN for prototypes. Nothing else is loaded from anywhere — the
+     renderer is this repo's own code and has no dependencies at all. -->
+<link rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"
+  integrity="sha512-h9FcoyWjHcOcmEVkxOfTLnmZFWIH0iZhZT1H2TbOq55xssQGEJHEaIm+PgoUaZbRvQTNTluNOEfb1ZRy6D3BOw=="
+  crossorigin="anonymous" referrerpolicy="no-referrer">
+<script
+  src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"
+  integrity="sha512-puJW3E/qXDqYp9IfhAI54BJEaWIfloJ7JWs7OeD5i6ruC9JZL1gERT1wjtwXFlh7CjE7ZJ+/vcRZRkIYIb6p4g=="
+  crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<style>
+  :root { color-scheme: dark; --pad: 10px; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0e13;
+    font: 13px/1.4 ui-monospace, Menlo, Consolas, monospace; color: #c8d2de;
+    -webkit-text-size-adjust: 100%; }
+  #map { position: absolute; inset: 0; background: #0b0e13; }
+
+  /* Everything floats over the map and hugs the safe area, because on a phone
+     the top of the screen is a notch and the bottom is a home indicator. */
+  .panel { position: fixed; z-index: 800;
+    left: max(var(--pad), env(safe-area-inset-left));
+    top: calc(var(--pad) + env(safe-area-inset-top));
+    width: min(300px, calc(100vw - var(--pad) * 2));
+    background: rgba(13,18,25,.93); border: 1px solid #222c38; border-radius: 12px;
+    padding: 10px 11px; max-height: calc(100vh - 24px); overflow: auto; }
+  .panel.min > .body { display: none; }
+  .panel h1 { font-size: 12px; margin: 0; letter-spacing: .04em; text-transform: uppercase;
+    color: #8fa3b8; display: flex; align-items: center; gap: 8px; }
+  .panel h1 button { margin-left: auto; }
+  .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .row label { flex: 0 0 74px; color: #7f91a5; font-size: 11px; }
+  .row input[type=range] { flex: 1 1 auto; min-width: 0; accent-color: #7e9e6c; }
+  .row .val { flex: 0 0 52px; text-align: right; color: #dbe4ee; }
+  button { font: inherit; color: #dbe4ee; background: #151c25; border: 1px solid #2c3743;
+    border-radius: 9px; min-height: 30px; padding: 0 10px; cursor: pointer; }
+  button:active { background: #232d3a; }
+  button.on { border-color: #5f8f6c; color: #a9d8b6; }
+  button:disabled { opacity: .45; cursor: default; }
+  .btns { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
+  hr { border: 0; border-top: 1px solid #1d2733; margin: 10px 0 0; }
+  .hud { margin-top: 8px; font-size: 11px; color: #8fa3b8; white-space: pre-wrap; }
+  .hud b { color: #dbe4ee; font-weight: 600; }
+  .hud .warn { color: #e0a45c; }
+  .hud .good { color: #a9d8b6; }
+  pre#bench { margin: 8px 0 0; font-size: 10.5px; line-height: 1.5; color: #b9c7d6;
+    white-space: pre-wrap; word-break: break-word; }
+
+  /* Frame-time strip: the only honest way to look at a pan. */
+  #strip { display: block; width: 100%; height: 34px; margin-top: 8px;
+    background: #0a0e14; border: 1px solid #1d2733; border-radius: 6px; }
+
+  .leaflet-container { background: #0b0e13; }
+  .leaflet-control-attribution { font-size: 9px; }
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="panel" id="panel">
+  <h1>Buildings 3D <button id="fold">–</button></h1>
+  <div class="body">
+    <div class="row">
+      <label for="hour">Hour</label>
+      <input type="range" id="hour" min="0" max="24" step="0.25" value="15.5">
+      <span class="val" id="hourV">15:30</span>
+    </div>
+    <div class="row">
+      <label for="alt">Cam alt</label>
+      <input type="range" id="alt" min="1.2" max="6" step="0.1" value="0">
+      <span class="val" id="altV">auto</span>
+    </div>
+    <div class="btns">
+      <button id="onoff" class="on">Massing</button>
+      <button id="shadows" class="on">Shadows</button>
+      <button id="lift" class="on">Lift</button>
+      <button id="tiles" class="on">Basemap</button>
+    </div>
+    <div class="btns">
+      <button id="esb">Empire State</button>
+      <button id="z17">z17</button>
+      <button id="z19">z19</button>
+    </div>
+    <hr>
+    <div class="btns">
+      <button id="b700">Bench 700</button>
+      <button id="b1700">Bench 1700</button>
+      <button id="ball">Bench both</button>
+    </div>
+    <canvas id="strip" width="560" height="68"></canvas>
+    <div class="hud" id="hud">loading the survey…</div>
+    <pre id="bench"></pre>
+  </div>
+</div>
+
+<script type="module">
+// The extruded-massing prototype.
+//
+// Real OSM footprints with real surveyed heights, extruded over the real
+// Leaflet basemap the game ships — including the Esri World Imagery crossfade
+// that `attachImagery()` fades in from z16.4, so from z17 up the buildings are
+// standing on actual aerial photography of the ground they occupy.
+//
+// Nothing here is mocked. `createMap()` is the game's own, `classify()` and
+// `heightMetresOf()` are the game's own, the sample is the survey already
+// committed at `prototype/sample/midtown.json` (400 real midtown Manhattan
+// footprints, 378 of them carrying a surveyed `height` tag, the Empire State
+// among them), and the renderer is `src/map/buildings3d.js` unmodified.
+//
+// Open it with the repo's dev server, which is the only way ES modules load:
+//   python3 tools/devserver.py 5173
+//   open http://127.0.0.1:5173/prototype/buildings3d.html
+//
+// Append ?bench=1 to run the performance harness on load and print the
+// numbers into the panel (and into `window.__b3d.results`, for a driver).
+
+import { createMap } from '../src/map/mapView.js';
+import { classify, polygonAreaM2, heightMetresOf, levelsOf } from '../src/game/lots.js';
+import {
+  Buildings3DLayer, projectWorld, pxPerMetreAt, sunFromHour, massingHeightM,
+} from '../src/map/buildings3d.js';
+
+const $ = (id) => document.getElementById(id);
+const hud = $('hud');
+const benchOut = $('bench');
+
+// --- the survey -------------------------------------------------------------
+
+/**
+ * The saved sample, turned into the exact lot shape `buildLots()` emits.
+ *
+ * Deliberately not a bespoke structure: if this prototype reads a different
+ * shape from the game, the thing you looked at and the thing that ships will
+ * drift apart, which is the failure `isoart.js` was split to avoid.
+ *
+ * Overpass is not touched. It has been answering 504 all session, and a black
+ * page is a poor way to find out whether your renderer works.
+ */
+function adopt(elements, { latOff = 0, lngOff = 0, tag = '' } = {}) {
+  const lots = [];
+  for (const w of elements) {
+    const g = w.geometry;
+    if (!g || g.length < 3) continue;
+    const polygon = g.map((p) => ({ lat: p.lat + latOff, lng: p.lon + lngOff }));
+    const areaM2 = polygonAreaM2(polygon);
+    if (areaM2 < 12) continue;
+    const tags = w.tags || {};
+    const kind = tags.amenity === 'parking' ? 'parking' : classify(tags, areaM2);
+    lots.push({
+      id: 'W' + w.id + tag,
+      polygon,
+      tags,
+      areaM2,
+      kind,
+      levels: levelsOf(tags, kind),
+      // The surveyed number, parsed exactly as the game parses it — feet and
+      // all. 378 of these 400 buildings carry one.
+      heightM: heightMetresOf(tags),
+      center: polygon.reduce((a, p, i, arr) => ({
+        lat: a.lat + p.lat / arr.length, lng: a.lng + p.lng / arr.length,
+      }), { lat: 0, lng: 0 }),
+      owned: false,
+    });
+  }
+  return lots;
+}
+
+let raw = [];
+let lots = [];
+let map = null;
+let layer = null;
+let hour = 15.5;
+
+// --- the map ----------------------------------------------------------------
+
+const MIDTOWN = { lat: 40.74854, lng: -73.98607 };
+
+async function boot() {
+  const res = await fetch('./sample/midtown.json');
+  const json = await res.json();
+  raw = json.elements;
+  lots = adopt(raw);
+
+  // `?lat=&lng=&z=&hour=` so a screenshot can be aimed without clicking.
+  const q = new URLSearchParams(location.search);
+  const at = {
+    lat: parseFloat(q.get('lat')) || MIDTOWN.lat,
+    lng: parseFloat(q.get('lng')) || MIDTOWN.lng,
+  };
+  if (q.has('hour')) hour = parseFloat(q.get('hour'));
+  map = createMap('map', at, parseFloat(q.get('z')) || 17);
+  // The game caps at 21 and upscales; this prototype has no reason to go past
+  // Esri World Imagery's last native zoom, where the photography is sharp.
+  map.setMaxZoom(20);
+
+  layer = new Buildings3DLayer(map, {
+    enabled: true,
+    // Lower than the game's intended z17 so the transition itself is visible:
+    // you can watch flat outlines become volume as you zoom through it.
+    minZoom: 15,
+    shadowMinZoom: 16,
+    sun: sunFromHour(hour),
+    onStats: paintHud,
+  });
+  layer.sync({ lots });
+  layer.redraw();
+
+  verifyProjection();
+  paintHud({ ms: layer.lastMs, drawn: layer.lastCount, zoom: map.getZoom() });
+
+  if (new URLSearchParams(location.search).has('bench')) {
+    // Give the tiles and the first paint a moment, then run unattended.
+    setTimeout(() => runBench([700, 1700]), 1500);
+  }
+}
+
+/**
+ * Prove the hand-written projection against the live Leaflet, rather than
+ * asserting it in a comment.
+ *
+ * `projectWorld()` exists so the geometry can be precomputed once in zoom-0
+ * pixels and so the maths is testable under `jsc`, which has never seen a map.
+ * The cost of writing it out is that it could drift from what Leaflet actually
+ * does. So: check, at load, against `map.project(ll, 0)`, and say the number.
+ */
+function verifyProjection() {
+  let worst = 0;
+  const probes = [
+    [40.7484, -73.9857], [0, 0], [51.5074, -0.1278], [-33.8688, 151.2093],
+    [64.1466, -21.9426], [-54.8019, -68.3030],
+  ];
+  for (const [lat, lng] of probes) {
+    const mine = projectWorld(lat, lng);
+    const theirs = map.project(L.latLng(lat, lng), 0);
+    worst = Math.max(worst, Math.abs(mine.x - theirs.x), Math.abs(mine.y - theirs.y));
+  }
+  // And the metres-per-pixel scalar against Leaflet's own distance measure.
+  const c = map.getCenter();
+  const z = map.getZoom();
+  const a = map.project(c, z);
+  const b = a.add(L.point(100, 0));
+  const metresPer100px = map.distance(c, map.unproject(b, z));
+  const mine100 = 100 / pxPerMetreAt(c.lat, z);
+  const scaleErr = Math.abs(metresPer100px - mine100) / metresPer100px;
+  window.__b3d.projectionError = { worstPx: worst, scaleRelErr: scaleErr };
+  return { worst, scaleErr };
+}
+
+// --- the HUD ----------------------------------------------------------------
+
+function paintHud({ ms = 0, drawn = 0, zoom = 0 } = {}) {
+  const pe = window.__b3d.projectionError;
+  const mpp = map ? (1 / pxPerMetreAt(map.getCenter().lat, zoom || map.getZoom())) : 0;
+  const surveyed = lots.filter((l) => l.heightM != null).length;
+  const tallest = lots.reduce((m, l) => Math.max(m, massingHeightM(l)), 0);
+  const cls = ms > 33 ? 'warn' : (ms > 16 ? '' : 'good');
+  hud.innerHTML =
+    `<b>${lots.length}</b> footprints · <b>${surveyed}</b> surveyed heights · `
+    + `tallest <b>${Math.round(tallest)} m</b>\n`
+    + `z<b>${(zoom || 0).toFixed(2)}</b> · <b>${mpp.toFixed(3)}</b> m/px · `
+    + `drawn <b>${drawn}</b> · redraw <b class="${cls}">${ms.toFixed(1)} ms</b>\n`
+    + (pe
+      ? `projection vs Leaflet: <b>${pe.worstPx.toExponential(1)}</b> px worst, `
+        + `scale err <b>${(pe.scaleRelErr * 100).toExponential(1)}%</b>`
+      : '');
+}
+
+// --- performance ------------------------------------------------------------
+//
+// The question is not "how fast is one redraw", it is "does a pan stutter".
+// Those are different measurements and conflating them is how a renderer ships
+// feeling bad while its benchmark looks fine. So this measures three things:
+//
+//   1. REDRAW COST. How long `drawScene` takes for N buildings, at the moment
+//      a gesture ends. A single hitch here is invisible; it only matters that
+//      it stays under a frame or two.
+//   2. FRAME TIME DURING A PAN. Sampled from requestAnimationFrame across a
+//      scripted `panBy`. This is the number that decides whether it ships.
+//   3. FRAME TIME DURING A ZOOM. Same, across a scripted `setZoom`, which is
+//      the harder case because Leaflet is transforming panes and loading tiles
+//      at the same time.
+//
+// 2 and 3 are run TWICE, with the massing on and with it off, because a frame
+// time with no control is not a measurement — if the map alone cannot hold 60
+// fps on this hardware then neither can the map plus anything.
+
+/**
+ * Stamp the real sample out into a lattice, to reach counts the game really
+ * loads.
+ *
+ * Honest about what this is: the same 400 real Manhattan footprints, with
+ * their real heights, repeated on a grid. The lattice pitch is a fraction of
+ * the sample's own bounding box, so the copies interleave and the on-screen
+ * density rises to the 3-6k buildings/km² the design budgets for at z17.
+ * Buildings therefore overlap, which makes this a slightly PESSIMISTIC fill
+ * test rather than an optimistic one — there is more paint per pixel here than
+ * in a real city, not less.
+ */
+function densify(target) {
+  const pitchLat = 0.0068 * 0.42;
+  const pitchLng = 0.0101 * 0.42;
+  const out = adopt(raw).slice();
+  let ring = 1;
+  while (out.length < target) {
+    for (let dy = -ring; dy <= ring && out.length < target; dy++) {
+      for (let dx = -ring; dx <= ring && out.length < target; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== ring) continue;
+        const copy = adopt(raw, {
+          latOff: dy * pitchLat, lngOff: dx * pitchLng, tag: `#${dx},${dy}`,
+        });
+        for (const l of copy) { if (out.length < target) out.push(l); }
+      }
+    }
+    ring++;
+    if (ring > 12) break;
+  }
+  return out;
+}
+
+/** Median and 95th percentile of a sample, which is what a frame budget is. */
+function stats(xs) {
+  if (!xs.length) return { n: 0, med: 0, p95: 0, max: 0, mean: 0 };
+  const s = [...xs].sort((a, b) => a - b);
+  const at = (q) => s[Math.min(s.length - 1, Math.floor(q * s.length))];
+  return {
+    n: s.length,
+    med: at(0.5),
+    p95: at(0.95),
+    max: s[s.length - 1],
+    mean: s.reduce((a, b) => a + b, 0) / s.length,
+  };
+}
+
+/** Sample every animation frame for `ms`, returning the intervals. */
+function sampleFrames(ms, during) {
+  return new Promise((resolve) => {
+    const gaps = [];
+    let last = performance.now();
+    const t0 = last;
+    let raf = requestAnimationFrame(function step(now) {
+      gaps.push(now - last);
+      last = now;
+      if (now - t0 < ms) raf = requestAnimationFrame(step);
+      else { cancelAnimationFrame(raf); resolve(gaps); }
+    });
+    if (during) during();
+  });
+}
+
+const settle = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function benchOne(count) {
+  const wasEnabled = layer.enabled;
+  // Three times the target, so there is enough city to choose from.
+  lots = densify(count * 3);
+  layer.table.clear();
+  layer.prepared = [];
+  layer.sync({ lots });
+
+  map.setView([MIDTOWN.lat, MIDTOWN.lng], 17, { animate: false });
+  await settle(400);
+  layer.redraw();
+
+  // Keep exactly the `count` buildings NEAREST the middle of the screen.
+  //
+  // Without this the cull quietly does its job and the benchmark measures 491
+  // buildings while claiming 700 — which is a fine result for the renderer and
+  // a useless one for the question "what does 700 cost". Trimming to the
+  // nearest N means every one of them is inside the cull box, so `drawn`
+  // comes back equal to `count` and the millisecond figure is the figure for
+  // that many buildings actually on screen.
+  const cam = layer.cam;
+  const cx = cam.width / 2;
+  const cy = cam.height / 2;
+  layer.prepared = layer.prepared
+    .map((p) => {
+      const dx = p.cx * cam.scale - cam.offX - cx;
+      const dy = p.cy * cam.scale - cam.offY - cy;
+      return { p, d: dx * dx + dy * dy };
+    })
+    .sort((a, b) => a.d - b.d)
+    .slice(0, count)
+    .map((e) => e.p);
+
+  // 1. Redraw cost. Warm up first: the first call grows the scratch arrays and
+  //    fills the shade cache, and timing a cold cache is timing the wrong
+  //    thing.
+  for (let i = 0; i < 4; i++) layer.redraw();
+  const redraws = [];
+  let drawn = 0;
+  for (let i = 0; i < 24; i++) {
+    const t = performance.now();
+    drawn = layer.redraw();
+    redraws.push(performance.now() - t);
+  }
+
+  // 2 + 3. Gesture frame times, with and without the massing.
+  const gesture = async () => {
+    layer.map.setView([MIDTOWN.lat, MIDTOWN.lng], 17, { animate: false });
+    await settle(250);
+    const pan = await sampleFrames(1100, () => {
+      map.panBy([260, 180], { animate: true, duration: 0.9, easeLinearity: 1 });
+    });
+    await settle(250);
+    const zoom = await sampleFrames(900, () => {
+      map.setZoom(18, { animate: true });
+    });
+    await settle(250);
+    map.setZoom(17, { animate: false });
+    await settle(150);
+    // Drop the first two frames of each: the first rAF after a timeout is
+    // measuring the timeout, not the gesture.
+    return { pan: pan.slice(2), zoom: zoom.slice(2) };
+  };
+
+  layer.setEnabled(true);
+  let redrawsDuringGesture = 0;
+  const countRedraws = () => { redrawsDuringGesture++; };
+  const origRedraw = layer.redraw.bind(layer);
+  layer.redraw = (...a) => { countRedraws(); return origRedraw(...a); };
+  const withMassing = await gesture();
+  layer.redraw = origRedraw;
+
+  layer.setEnabled(false);
+  const withoutMassing = await gesture();
+  layer.setEnabled(wasEnabled);
+  layer.redraw();
+
+  return {
+    count,
+    drawn,
+    redrawMs: stats(redraws),
+    panOn: stats(withMassing.pan),
+    panOff: stats(withoutMassing.pan),
+    zoomOn: stats(withMassing.zoom),
+    zoomOff: stats(withoutMassing.zoom),
+    redrawsDuringGesture,
+    frames: withMassing.pan,
+  };
+}
+
+function fmt(s) {
+  return `med ${s.med.toFixed(1)}  p95 ${s.p95.toFixed(1)}  max ${s.max.toFixed(1)}`;
+}
+
+function report(rs) {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const size = map.getSize();
+  const lines = [
+    `viewport ${size.x}x${size.y} css, dpr ${dpr} (capped at 2)`,
+    `${navigator.userAgent.slice(0, 78)}`,
+    '',
+  ];
+  for (const r of rs) {
+    lines.push(`--- ${r.count} buildings (${r.drawn} actually drawn at z17) ---`);
+    lines.push(`  redraw        ${fmt(r.redrawMs)}  ms`);
+    lines.push(`  pan   massing ${fmt(r.panOn)}  ms/frame`);
+    lines.push(`  pan   control ${fmt(r.panOff)}  ms/frame`);
+    lines.push(`  zoom  massing ${fmt(r.zoomOn)}  ms/frame`);
+    lines.push(`  zoom  control ${fmt(r.zoomOff)}  ms/frame`);
+    lines.push(`  redraws fired during the two gestures: ${r.redrawsDuringGesture}`);
+    lines.push('');
+  }
+  benchOut.textContent = lines.join('\n');
+  drawStrip(rs[rs.length - 1].frames);
+  return lines.join('\n');
+}
+
+/** Frame intervals as a strip, because a p95 hides the one spike that hurts. */
+function drawStrip(gaps) {
+  const cv = $('strip');
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, cv.width, cv.height);
+  const top = 50; // ms full scale
+  ctx.strokeStyle = '#2a3a2c';
+  ctx.beginPath();
+  const y60 = cv.height - (16.7 / top) * cv.height;
+  ctx.moveTo(0, y60); ctx.lineTo(cv.width, y60); ctx.stroke();
+  const w = cv.width / Math.max(1, gaps.length);
+  for (let i = 0; i < gaps.length; i++) {
+    const h = Math.min(1, gaps[i] / top) * cv.height;
+    ctx.fillStyle = gaps[i] > 33 ? '#c2560c' : (gaps[i] > 20 ? '#a08e4d' : '#5f8f6c');
+    ctx.fillRect(i * w, cv.height - h, Math.max(1, w - 0.5), h);
+  }
+}
+
+async function runBench(counts) {
+  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = true;
+  benchOut.textContent = 'benching… the map will move on its own.';
+  const rs = [];
+  for (const c of counts) {
+    benchOut.textContent = `benching ${c}…`;
+    rs.push(await benchOne(c));
+  }
+  // Put the honest sample back.
+  lots = adopt(raw);
+  layer.table.clear();
+  layer.prepared = [];
+  layer.sync({ lots });
+  layer.redraw();
+  const text = report(rs);
+  window.__b3d.results = rs;
+  window.__b3d.text = text;
+  document.title = 'BENCH DONE';
+  // A driver cannot read this page's variables without a debugging protocol,
+  // so when `?post=<url>` is given the numbers are posted back as plain text.
+  // `text/plain` keeps it a simple request with no CORS preflight, and
+  // `no-cors` means the collector needs no headers at all.
+  const post = new URLSearchParams(location.search).get('post');
+  if (post) {
+    try {
+      await fetch(post, {
+        method: 'POST', mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: text + '\n\nRAW ' + JSON.stringify(rs.map((r) => ({
+          count: r.count, drawn: r.drawn, redrawMs: r.redrawMs,
+          panOn: r.panOn, panOff: r.panOff, zoomOn: r.zoomOn, zoomOff: r.zoomOff,
+          redrawsDuringGesture: r.redrawsDuringGesture,
+        }))),
+      });
+    } catch (e) { /* the numbers are on screen either way */ }
+  }
+  for (const b of ['b700', 'b1700', 'ball']) $(b).disabled = false;
+  return rs;
+}
+
+// --- controls ---------------------------------------------------------------
+
+$('fold').onclick = () => {
+  const p = $('panel');
+  p.classList.toggle('min');
+  $('fold').textContent = p.classList.contains('min') ? '+' : '–';
+};
+
+$('hour').oninput = (e) => {
+  hour = parseFloat(e.target.value);
+  const hh = Math.floor(hour) % 24;
+  const mm = Math.round((hour - Math.floor(hour)) * 60);
+  $('hourV').textContent = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  // Exactly the hook the game clock plugs into: `rhythm.js` owns the in-game
+  // hour and `darkness`, and this is the one line that connects them.
+  layer.setSun(sunFromHour(hour));
+};
+
+$('alt').oninput = (e) => {
+  const v = parseFloat(e.target.value);
+  if (v < 1.3) {
+    layer.camAlt = null;
+    $('altV').textContent = 'auto';
+  } else {
+    layer.camAlt = v;
+    $('altV').textContent = v.toFixed(1) + 'H';
+  }
+  // The layer builds its camera per redraw, so overriding means patching the
+  // record it just built. Kept in the prototype rather than the module: it is
+  // an art-direction dial, not a feature.
+  layer.redraw();
+};
+
+const toggle = (id, fn) => {
+  $(id).onclick = (e) => {
+    const on = !e.target.classList.contains('on');
+    e.target.classList.toggle('on', on);
+    fn(on);
+  };
+};
+toggle('onoff', (on) => layer.setEnabled(on));
+toggle('shadows', (on) => { layer.shadowMinZoom = on ? 16 : 99; layer.redraw(); });
+toggle('lift', (on) => {
+  layer.lift = on;
+  layer.table.clear();
+  layer.prepared = [];
+  layer.sync({ lots });
+  layer.redraw();
+});
+toggle('tiles', (on) => {
+  for (const name of ['tilePane', 'imagery']) {
+    const p = map.getPane(name);
+    if (p) p.style.display = on ? '' : 'none';
+  }
+});
+
+$('esb').onclick = () => map.setView([40.74844, -73.98565], 19, { animate: true });
+$('z17').onclick = () => map.setZoom(17);
+$('z19').onclick = () => map.setZoom(19);
+$('b700').onclick = () => runBench([700]);
+$('b1700').onclick = () => runBench([1700]);
+$('ball').onclick = () => runBench([700, 1700]);
+
+// Tapping a building says what it is, which is the only way to check that the
+// height being drawn is the height that was surveyed.
+document.getElementById('map').addEventListener('click', (ev) => {
+  if (!layer || !layer.enabled) return;
+  const rect = layer.canvas.getBoundingClientRect();
+  const lot = layer.pick(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (!lot) return;
+  const h = massingHeightM(lot, { lift: false });
+  benchOut.textContent =
+    `${lot.tags.name || lot.kind}\n`
+    + `  ${Math.round(lot.areaM2)} m² · ${lot.levels} levels\n`
+    + `  ${h.toFixed(1)} m ${lot.heightM != null ? '(surveyed)' : '(from levels)'}\n`
+    + `  drawn at ${massingHeightM(lot).toFixed(1)} m with the lift`;
+});
+
+// Exposed so a driver can run this page the way the repo's checks drive the
+// game, rather than by clicking.
+window.__b3d = {
+  get map() { return map; },
+  get layer() { return layer; },
+  get lots() { return lots; },
+  bench: runBench,
+  densify,
+  results: null,
+  text: '',
+  projectionError: null,
+};
+
+// Anything that goes wrong has to be visible to a driver too, not just to
+// somebody looking at the screen — a bench that never reports is otherwise
+// indistinguishable from a page that never booted.
+function shout(what) {
+  const post = new URLSearchParams(location.search).get('post');
+  if (!post) return;
+  try {
+    fetch(post, { method: 'POST', mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain' }, body: what });
+  } catch (e) { /* nothing left to try */ }
+}
+window.addEventListener('error', (e) => shout('PAGE ERROR: ' + e.message));
+window.addEventListener('unhandledrejection', (e) => shout('REJECTED: ' + e.reason));
+
+boot().then(() => {
+  if (!new URLSearchParams(location.search).has('bench')) {
+    shout('BOOTED OK\n' + hud.textContent);
+  }
+}).catch((e) => {
+  hud.innerHTML = `<span class="warn">boot failed:</span> ${e}`;
+  benchOut.textContent = (e && e.stack) || '';
+  shout('BOOT FAILED: ' + e + '\n' + ((e && e.stack) || ''));
+});
+</script>
+</body>
+</html>

@@ -356,13 +356,28 @@ export function sunVectors(sun) {
  * present as exactly the stutter people complain about. So: no objects, no
  * arrays, no template literals inside a redraw. One `Scratch` per layer, held
  * for the life of the layer.
+ *
+ * Float64, not Float32, and it is worth saying why the obvious saving is not
+ * taken. The world coordinates in `prepareLot` MUST be Float64 — at z20 the
+ * Leaflet world is 2.68e8 px wide and float32 carries about 1.7e7 of integer
+ * precision, so every building would visibly snap to a 16-pixel grid. The
+ * screen-space scratch is a different argument: screen coordinates are small,
+ * so float32 is accurate to about 1e-4 px there and nobody could see the
+ * difference. It is still float64, for two reasons. The buffers are 64 to 1024
+ * elements and live in L1 for the whole redraw, so the halved bandwidth buys
+ * nothing measurable (checked: the 1700-building redraw time did not move).
+ * And float32 puts a precision CLIFF in the middle of the module — a camera
+ * built with a zero pixel origin, which is exactly what a test or a headless
+ * caller will hand it, produces coordinates near 4e7 where float32 quantises
+ * to steps of 4. That turns an exact similarity transform into a visibly
+ * asymmetric one and costs more in confusion than the bytes are worth.
  */
 export function makeScratch(capacity = 64) {
   return {
-    gx: new Float32Array(capacity),
-    gy: new Float32Array(capacity),
-    rx: new Float32Array(capacity),
-    ry: new Float32Array(capacity),
+    gx: new Float64Array(capacity),
+    gy: new Float64Array(capacity),
+    rx: new Float64Array(capacity),
+    ry: new Float64Array(capacity),
     vis: new Uint8Array(capacity),
     cap: capacity,
     // Draw order, as indices into the prepared array. An Int32Array sorted by
@@ -379,10 +394,10 @@ function growScratch(s, need) {
   if (need <= s.cap) return;
   let cap = s.cap;
   while (cap < need) cap *= 2;
-  s.gx = new Float32Array(cap);
-  s.gy = new Float32Array(cap);
-  s.rx = new Float32Array(cap);
-  s.ry = new Float32Array(cap);
+  s.gx = new Float64Array(cap);
+  s.gy = new Float64Array(cap);
+  s.rx = new Float64Array(cap);
+  s.ry = new Float64Array(cap);
   s.vis = new Uint8Array(cap);
   s.cap = cap;
 }
@@ -531,8 +546,19 @@ export function projectBuilding(prep, cam, scratch) {
   }
   const wind = a2 > 0 ? 1 : -1;
 
-  // Below three pixels of lean a wall is invisible and costs a whole path.
-  // At z17 with 1700 buildings on screen that is most of them.
+  // Below three pixels of wall a building is a flat roof and the wall quads
+  // are invisible paths that still cost a scan conversion each.
+  //
+  // Worth being honest about how rarely this fires, because an earlier comment
+  // here claimed it saved most of the work at z17 and that is simply false.
+  // `hPx` is the building's HEIGHT in pixels, not its lean, and at z17
+  // (~0.9 m/px at mid latitudes) three pixels is 2.7 metres — shorter than a
+  // single storey. Nothing with a roof on it is below that. Over the 400
+  // midtown footprints in `prototype/sample/midtown.json` the count below the
+  // threshold at z17 is zero. It earns its place only well below z17, where
+  // the layer is switched off anyway, and as a guard against a garbage height.
+  // The real saving at z17 is the back-face cull below and the AABB cull in
+  // `orderVisible`, not this.
   const drawWalls = hPx >= 3;
   let visible = 0;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -806,6 +832,9 @@ export class Buildings3DLayer {
     paneZ = 260,
     sun = null,
     lift = true,
+    // null means "ease it with zoom" (§ cameraAltitudeFor). A number pins it,
+    // which is what the prototype's slider does while the look is being found.
+    camAlt = null,
     tintOf = null,
     onSelect = null,
     onStats = null,
@@ -817,6 +846,7 @@ export class Buildings3DLayer {
     this.paneZ = paneZ;
     this.sun = sun;
     this.lift = lift;
+    this.camAlt = camAlt;
     this.tintOf = tintOf;
     this.onSelect = onSelect;
     this.onStats = onStats;
@@ -988,6 +1018,7 @@ export class Buildings3DLayer {
       canvasOriginX: topLeft.x,
       canvasOriginY: topLeft.y,
       lift: this.lift,
+      camAlt: this.camAlt,
     });
     this.cam = cam;
 

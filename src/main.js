@@ -73,6 +73,7 @@ import { generatePlayers, placePlayers } from './game/players.js';
 import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
+import { Buildings3DLayer } from './map/buildings3d.js';
 import {
   BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker,
   IncidentLayer, pingIncident,
@@ -728,8 +729,32 @@ function bootGame(state) {
   game.incidentLayer = new IncidentLayer(game.map, {
     onSelect: (inc) => game.openIncident(inc),
   });
+  // Real buildings, standing up. The footprints and surveyed heights have been
+  // in every lot record all along (lots.js:296) and nothing had ever drawn
+  // them. Off below z17, where a rowhouse is eleven pixels tall and the flat
+  // map reads better; on above it, sitting on the aerial photography that the
+  // basemap crossfades in at the same range — so at full zoom you are looking
+  // at the real block, from the real survey, with the real ground under it.
+  // Built disabled and switched on separately, because switching on is the
+  // part that needs a real canvas in a real pane. Massing is an enhancement:
+  // a browser that cannot give us one still gets the whole game on a flat
+  // map, rather than a blank page. loadcheck's shim is the first such
+  // environment and it found this immediately.
+  game.buildings3d = new Buildings3DLayer(game.map, {
+    enabled: false,
+    minZoom: 17,
+    shadowMinZoom: 18,
+    onSelect: (lot) => game.select('lot', lot.id),
+  });
+  try {
+    game.buildings3d.setEnabled(true);
+  } catch (err) {
+    diag.record('warn', `buildings3d unavailable: ${err && err.message}`);
+    game.buildings3d = null;
+  }
   game.lotLayer.setDistricts(state.districts);
   game.lotLayer.setAll(state.lots || []);
+  game.buildings3d?.sync(state);
   game.ghost = new PlacementGhost(game.map);
   game.playerMarker = new PlayerMarker(game.map);
   syncPlayerMarker();
@@ -846,6 +871,7 @@ async function runTileSweep() {
     const fresh = await loadTiles(game.state, keys, fetchBuildings);
     if (fresh.length) {
       game.lotLayer.setAll(game.state.lots);
+      game.buildings3d?.sync(game.state);
       game.ui.renderRail();
       logEvent(game.state, `${fresh.length} more buildings surveyed.`, 'info');
     }
@@ -900,6 +926,7 @@ function startLoop() {
     if (sincePanelRender > 0.6) {
       sincePanelRender = 0;
       game.lotLayer.refresh(game.state.lots || []);
+      game.buildings3d?.sync(game.state);
       game.ui.renderTicker();
       syncDaylight();
 

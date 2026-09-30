@@ -117,16 +117,27 @@ export function depthOf(x, y, cam) {
  * single most common way isometric art goes wrong.
  */
 export const ISO_PALETTE = {
-  house:      { roof: '#6b5344', a: '#8a6f5c', b: '#5e4b3d', trim: '#3a2e25' },
-  rowhouse:   { roof: '#67504a', a: '#856a62', b: '#5a4640', trim: '#372b27' },
-  apartments: { roof: '#4f5666', a: '#6d7585', b: '#464d5b', trim: '#2b303a' },
-  commercial: { roof: '#4c5a63', a: '#697b86', b: '#42505a', trim: '#28323a' },
-  retail:     { roof: '#5b5a45', a: '#7d7b5e', b: '#4e4d3b', trim: '#303024' },
-  industrial: { roof: '#4a4f52', a: '#666d71', b: '#3f4447', trim: '#262a2c' },
-  garage:     { roof: '#464a4e', a: '#5f6469', b: '#3c4043', trim: '#24272a' },
-  parking:    { roof: '#33383d', a: '#474d53', b: '#2c3035', trim: '#1c1f22' },
-  civic:      { roof: '#55506a', a: '#726c8c', b: '#48445c', trim: '#2c2938' },
-  default:    { roof: '#4d5359', a: '#697077', b: '#42474c', trim: '#282c30' },
+  // Every entry below used to sit within about fifteen degrees of the same
+  // desaturated blue-grey. That was fine at postage-stamp size on the old
+  // isometric sheet, and it reads as "the buildings are all blue" the moment
+  // they are extruded across a whole city — especially downtown, where nearly
+  // every footprint classifies as `commercial` or `apartments` and so drew in
+  // literally two colours.
+  //
+  // These are building materials instead: warm brick, painted terrace, pale
+  // stone, weathered steel, asphalt. Still muted — the game is night-lit and a
+  // saturated city would fight the UI — but far enough apart in hue that a
+  // street reads as a street.
+  house:      { roof: '#6b4f3c', a: '#9a6f50', b: '#5f452f', trim: '#3a2a1c' },
+  rowhouse:   { roof: '#7a463c', a: '#a35f4c', b: '#663a30', trim: '#3d231c' },
+  apartments: { roof: '#5a5560', a: '#857b73', b: '#4b4750', trim: '#2c2930' },
+  commercial: { roof: '#4a5a63', a: '#7c8a8f', b: '#3f4d55', trim: '#26303a' },
+  retail:     { roof: '#6a6340', a: '#9c9160', b: '#57512f', trim: '#332f1c' },
+  industrial: { roof: '#4f4a44', a: '#7a6a58', b: '#433f39', trim: '#28241f' },
+  garage:     { roof: '#4a4c46', a: '#6e7065', b: '#3f413c', trim: '#25271f' },
+  parking:    { roof: '#35383a', a: '#4d5154', b: '#2d3032', trim: '#1c1f21' },
+  civic:      { roof: '#5b5270', a: '#877ba4', b: '#4b4460', trim: '#2e2940' },
+  default:    { roof: '#51555a', a: '#767b7f', b: '#44484c', trim: '#282c30' },
 };
 
 /** Lots you own are lit, so the map reads as a holding rather than a city. */

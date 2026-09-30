@@ -793,6 +793,71 @@ export function shade(hex, k) {
   return out;
 }
 
+
+// --- Telling one building from the next ------------------------------------
+
+/**
+ * A palette is chosen by KIND, and a city is mostly two or three kinds. Drawn
+ * straight, every commercial block downtown is the identical blue-grey as the
+ * one touching it, and the eye reads the whole thing as one blue mass rather
+ * than as buildings — which is exactly the complaint this exists to answer.
+ *
+ * Real terraces vary: same brick, different weathering, different decade of
+ * repainting. So each building deflects its own palette by a fixed amount
+ * derived from its OSM id — stable across redraws, across sessions and across
+ * machines, because it is a property of the building and not of the draw.
+ *
+ * Bucketed rather than continuous, and cached, so this costs a Map lookup per
+ * building per redraw and allocates nothing after the first sighting of each
+ * bucket. VARIANTS * kinds is about a hundred palettes, once, forever.
+ */
+const VARIANTS = 11;
+const VARIANT_CACHE = new Map();
+
+function jitterHex(hex, light, warm) {
+  const v = parseInt(hex.slice(1), 16);
+  let r = (v >> 16) & 255, g = (v >> 8) & 255, b = v & 255;
+  r = Math.round(r * light * (1 + warm));
+  g = Math.round(g * light);
+  b = Math.round(b * light * (1 - warm));
+  r = r < 0 ? 0 : (r > 255 ? 255 : r);
+  g = g < 0 ? 0 : (g > 255 ? 255 : g);
+  b = b < 0 ? 0 : (b > 255 ? 255 : b);
+  return '#' + ((1 << 24) | (r << 16) | (g << 8) | b).toString(16).slice(1);
+}
+
+/** A stable small integer for a building, from whatever identity it has. */
+export function variantOf(prep) {
+  const raw = prep && prep.lot && prep.lot.osmId != null ? prep.lot.osmId : (prep && prep.id);
+  let h = 2166136261;
+  const str = String(raw == null ? '0' : raw);
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % VARIANTS;
+}
+
+export function variedPalette(kind, variant) {
+  const key = kind + '|' + variant;
+  const hit = VARIANT_CACHE.get(key);
+  if (hit) return hit;
+  const base = paletteFor(kind);
+  // Spread across the bucket range: lightness +/-14%, and a small warm/cool
+  // push so it is not merely the same colour turned up and down.
+  const t = VARIANTS === 1 ? 0.5 : variant / (VARIANTS - 1);
+  const light = 0.86 + 0.28 * t;
+  const warm = -0.05 + 0.10 * (((variant * 7) % VARIANTS) / (VARIANTS - 1));
+  const pal = {
+    roof: jitterHex(base.roof, light, warm),
+    a: jitterHex(base.a, light, warm),
+    b: jitterHex(base.b, light, warm),
+    trim: base.trim,
+  };
+  VARIANT_CACHE.set(key, pal);
+  return pal;
+}
+
 const ALPHA_CACHE = new Map();
 function rgba(r, g, b, a) {
   const q = Math.round(a * 20);
@@ -930,7 +995,7 @@ export function drawScene(ctx, prepared, cam, scratch, {
   for (let k = 0; k < order.length; k++) {
     const prep = prepared[order[k]];
     projectBuilding(prep, cam, scratch);
-    const pal = tintOf ? tintOf(prep.lot) : paletteFor(prep.kind);
+    const pal = tintOf ? tintOf(prep.lot) : variedPalette(prep.kind, variantOf(prep));
     paintBuilding(ctx, prep, cam, scratch, pal, sunv);
   }
   return order.length;

@@ -73,7 +73,8 @@ import { generatePlayers, placePlayers } from './game/players.js';
 import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
-import { Buildings3DLayer } from './map/buildings3d.js';
+import { Buildings3DLayer, variedPalette, variantOf } from './map/buildings3d.js';
+import { paletteFor } from './ui/isoart.js';
 import {
   BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker,
   IncidentLayer, pingIncident,

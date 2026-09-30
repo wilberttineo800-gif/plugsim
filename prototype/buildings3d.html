@@ -77,8 +77,8 @@
       <span class="val" id="hourV">15:30</span>
     </div>
     <div class="row">
-      <label for="alt">Cam alt</label>
-      <input type="range" id="alt" min="1.2" max="6" step="0.1" value="0">
+      <label for="alt">Cam alt m</label>
+      <input type="range" id="alt" min="900" max="8000" step="50" value="0">
       <span class="val" id="altV">auto</span>
     </div>
     <div class="btns">
@@ -129,7 +129,7 @@ import { createMap } from '../src/map/mapView.js';
 import { classify, polygonAreaM2, heightMetresOf, levelsOf } from '../src/game/lots.js';
 import {
   Buildings3DLayer, projectWorld, pxPerMetreAt, sunFromHour, massingHeightM,
-  drawScene,
+  drawScene, orderVisible, projectBuilding,
 } from '../src/map/buildings3d.js';
 
 const $ = (id) => document.getElementById(id);
@@ -465,22 +465,44 @@ async function gestureAt(zoom) {
  * before and after. Without those flags this reports what it could not do
  * rather than guessing.
  */
-function allocProbe(n = 400) {
+function allocProbe(n = 400, work = null) {
   if (!performance.memory) return { ok: false, why: 'performance.memory unavailable' };
   const gc = window.gc;
   if (gc) { gc(); gc(); }
-  const before = performance.memory.usedJSHeapSize;
-  for (let i = 0; i < n; i++) layer.redraw();
-  const afterRaw = performance.memory.usedJSHeapSize;
+  // Sampled and summed over POSITIVE deltas only.
+  //
+  // A single before/after pair is not trustworthy here and the first version
+  // of this probe proved it: at 1700 buildings a 400-redraw loop takes two
+  // seconds, a minor GC runs in the middle of it, and the end-to-end delta
+  // comes out SMALLER than the same loop over 50 buildings that finished
+  // before the collector woke up. That produced a negative bytes-per-building
+  // slope, which is nonsense. Summing only the rises measures what was
+  // allocated regardless of what was collected along the way.
+  let total = 0;
+  let last = performance.memory.usedJSHeapSize;
+  const start = last;
+  let collections = 0;
+  for (let i = 0; i < n; i++) {
+    if (work) work(); else layer.redraw();
+    if ((i & 15) === 15) {
+      const now = performance.memory.usedJSHeapSize;
+      if (now > last) total += now - last; else collections++;
+      last = now;
+    }
+  }
+  const endRaw = performance.memory.usedJSHeapSize;
+  if (endRaw > last) total += endRaw - last;
   if (gc) { gc(); gc(); }
   const afterGc = performance.memory.usedJSHeapSize;
   return {
     ok: true,
     gcAvailable: !!gc,
     n,
-    grewBytes: afterRaw - before,
-    perRedraw: (afterRaw - before) / n,
-    retainedBytes: afterGc - before,
+    allocated: total,
+    perRedraw: total / n,
+    netBytes: endRaw - start,
+    retainedBytes: afterGc - start,
+    collections,
   };
 }
 
@@ -543,15 +565,48 @@ async function runBench(counts) {
   // redraw is a handful of Leaflet Points and one camera record, and the layer
   // redraws once per gesture, so it is irrelevant. A cost per BUILDING is the
   // thing the design forbids, because that is what turns into a GC pause.
+  // Short runs at four counts, so no collector wakes up inside any of them.
+  //
+  // `performance.memory.usedJSHeapSize` cannot be trusted over a long loop:
+  // it moves in V8's semi-space growth steps and a minor GC inside the window
+  // silently subtracts from the total. A 400-redraw probe gave three different
+  // answers on three runs. Forty redraws at each of four building counts is
+  // short enough to stay collection-free, and the SLOPE across the counts is
+  // the number that actually matters — a fixed cost per redraw is a handful of
+  // Leaflet Points once per gesture and is irrelevant; a cost per BUILDING is
+  // the thing the design forbids.
   benchOut.textContent = 'benching: allocation probe…';
-  loadWorkingSet(1700, 17);
-  const allocBig = allocProbe(400);
-  loadWorkingSet(50, 17);
-  const allocSmall = allocProbe(400);
-  const alloc = Object.assign({}, allocBig, {
-    big: allocBig, small: allocSmall,
-    perBuilding: (allocBig.perRedraw - allocSmall.perRedraw) / (1700 - 50),
-  });
+
+  // Same probe, but PROJECTION ONLY — cull, sort and project every building,
+  // and issue not one canvas call. Differencing this against the full redraw
+  // says whether the allocation is in this module's arithmetic (which we can
+  // fix) or in the Canvas2D bindings (which we cannot, short of not drawing).
+  const projectOnly = (count) => {
+    loadWorkingSet(count, 17);
+    return allocProbe(40, () => {
+      const order = orderVisible(layer.prepared, layer.cam, layer.scratch, {});
+      for (let k = 0; k < order.length; k++) {
+        projectBuilding(layer.prepared[order[k]], layer.cam, layer.scratch);
+      }
+      return order.length;
+    });
+  };
+  const projOnly = [50, 1700].map((c) => Object.assign({ buildings: c }, projectOnly(c)));
+
+  const ladder = [];
+  for (const c of [50, 400, 800, 1700]) {
+    loadWorkingSet(c, 17);
+    ladder.push(Object.assign({ buildings: c }, allocProbe(40)));
+  }
+  const clean = ladder.filter((a) => a.ok && a.collections === 0);
+  let perBuilding = null;
+  if (clean.length >= 2) {
+    const lo = clean[0], hi = clean[clean.length - 1];
+    perBuilding = (hi.perRedraw - lo.perRedraw) / (hi.buildings - lo.buildings);
+  }
+  const projSlope = (projOnly[1].perRedraw - projOnly[0].perRedraw) / (1700 - 50);
+  const alloc = { ok: ladder[0].ok, why: ladder[0].why,
+    gcAvailable: ladder[0].gcAvailable, ladder, perBuilding, projOnly, projSlope };
 
   // Put the honest sample back.
   lots = adopt(raw);
@@ -619,12 +674,21 @@ function report(rows, alloc) {
   if (!alloc.ok) {
     L.push(`  not measured: ${alloc.why}`);
   } else {
-    for (const [name, a] of [['1700 buildings', alloc.big], ['  50 buildings', alloc.small]]) {
-      L.push(`  ${name}: ${a.n} redraws grew the heap ${a.grewBytes} B `
-        + `= ${a.perRedraw.toFixed(0)} B/redraw, ${a.retainedBytes} B retained after gc`);
+    for (const a of alloc.ladder) {
+      L.push(`  ${String(a.buildings).padStart(5)} buildings: `
+        + `${a.perRedraw.toFixed(0).padStart(7)} B/redraw over ${a.n} redraws, `
+        + `${a.collections} collections, ${a.retainedBytes} B retained after gc`);
     }
-    L.push(`  slope: ${alloc.perBuilding.toFixed(3)} bytes per building per redraw `
-      + `(gc ${alloc.gcAvailable ? 'available' : 'NOT available'})`);
+    L.push(alloc.perBuilding == null
+      ? '  slope: not measurable, a collection ran inside every window'
+      : `  full redraw slope: ${alloc.perBuilding.toFixed(2)} B per building`);
+    for (const a of alloc.projOnly) {
+      L.push(`  projection only, ${String(a.buildings).padStart(5)} buildings: `
+        + `${a.perRedraw.toFixed(0).padStart(7)} B/pass, ${a.collections} collections`);
+    }
+    L.push(`  projection-only slope: ${alloc.projSlope.toFixed(2)} B per building `
+      + `-> the canvas calls account for `
+      + `${(alloc.perBuilding - alloc.projSlope).toFixed(2)} B per building`);
   }
   benchOut.textContent = L.join('\n');
   const last = rows[rows.length - 1];
@@ -670,12 +734,15 @@ $('hour').oninput = (e) => {
 
 $('alt').oninput = (e) => {
   const v = parseFloat(e.target.value);
-  if (v < 1.3) {
+  // Metres above the ground, not viewport heights — see `cameraAltitudeFor`.
+  // The slider floor is 900 m because below that the camera starts entering
+  // the taller half of the building stock.
+  if (v <= 900) {
     layer.camAlt = null;
     $('altV').textContent = 'auto';
   } else {
     layer.camAlt = v;
-    $('altV').textContent = v.toFixed(1) + 'H';
+    $('altV').textContent = Math.round(v) + 'm';
   }
   // The layer builds its camera per redraw, so overriding means patching the
   // record it just built. Kept in the prototype rather than the module: it is

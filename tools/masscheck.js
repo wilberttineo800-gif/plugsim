@@ -26,7 +26,7 @@
 import {
   projectWorld, pxPerMetreAt, mPerPixelAt,
   massingHeightM, prepareLot, prepareInto,
-  NADIR_BIAS, cameraAltitudeFor, makeCamera,
+  NADIR_BIAS, cameraAltitudeFor, makeCamera, CAM_ALT_HIGH_M, CAM_ALT_LOW_M,
   sunFromHour, sunVectors,
   makeScratch, orderVisible, projectBuilding, drawScene, shade,
   pickAt, insideRing,
@@ -306,12 +306,22 @@ section('1. NaN containment — one bad vertex blanks a whole path, silently');
     const n = projectBuilding(tall, cam, scratch);
     check('an absurd height is clamped, not divided by zero', allFinite(scratch, n),
       'hPx=' + scratch.hPx.toFixed(1) + ' of camAlt=' + cam.camAltPx.toFixed(1));
-    // m = A / (A - 0.75A) = 4 exactly, so the roof sits four times as far from
-    // the nadir as the ground does.
+    // This assertion used to demand the magnification saturate at exactly 4x.
+    // That saturation WAS the bug: it meant every building past the clamp drew
+    // with identical lean, and it came from a camera altitude measured in
+    // viewport heights, which halve in ground metres at every zoom step — so
+    // at z19 the camera sat BELOW the top of the Empire State Building and the
+    // tower was flung off the top of the screen. The test asserted the defect.
+    //
+    // The altitude is in ground metres now, floored at 900 m against the 830 m
+    // height cap, so the singularity is unreachable by construction. What is
+    // worth pinning is that: a real magnification, strictly above 1 and well
+    // clear of the blow-up.
     const gd = Math.hypot(meanOf(scratch.gx, n) - cam.nadirX, meanOf(scratch.gy, n) - cam.nadirY);
     const rd = Math.hypot(meanOf(scratch.rx, n) - cam.nadirX, meanOf(scratch.ry, n) - cam.nadirY);
-    check('and the magnification stops at exactly 4x', near(rd / gd, 4, 1e-4),
-      'got ' + (rd / gd).toFixed(6));
+    const mag = rd / gd;
+    check('the tallest possible building still leans, and never blows up',
+      mag > 1 && mag < 8, 'magnification ' + mag.toFixed(4));
   }
 
   // The whole pipeline, fed every degenerate at once: nothing throws, nothing
@@ -435,8 +445,14 @@ section('2. Projection — the scale, and the lean');
     const camOpts = { width: W, height: H, zoom: 19 };
     const cam0 = cameraOn(prep.cx, prep.cy, W / 2, 400, camOpts);
     check('the nadir is on the vertical centre line', cam0.nadirX === W / 2);
-    check('and below the bottom of the viewport',
-      cam0.nadirY === H + NADIR_BIAS * H && cam0.nadirY > H, String(cam0.nadirY));
+    // The nadir anchors to the viewport CENTRE now, not its bottom edge. The
+    // old anchor made the same city lean differently on a phone and a tablet,
+    // and changed the projection when the window was resized — the projection
+    // must not depend on the size of the thing it is projected into.
+    const tallCam = cameraOn(prep.cx, prep.cy, W / 2, 400, { width: W, height: H * 2, zoom: 19 });
+    check('and the lean does not change when the viewport does',
+      near(cam0.camAltM, tallCam.camAltM, 1e-9),
+      'camAltM ' + cam0.camAltM + ' vs ' + tallCam.camAltM);
 
     const n = projectBuilding(prep, cam0, scratch);
     const gx = meanOf(scratch.gx, n), gy = meanOf(scratch.gy, n);
@@ -496,13 +512,29 @@ section('2. Projection — the scale, and the lean');
       near(massingHeightM({ heightM: 443.2, kind: 'commercial' }), 443.2, 0.01));
   }
 
-  // The camera altitude ladder: flat at z17 where 1700 buildings are in view,
-  // tilted in at z20 where twenty are.
-  check('camera altitude eases from 3.5 viewport-heights at z17',
-    near(cameraAltitudeFor(17), 3.5, 1e-9));
-  check('to 2.0 at z20', near(cameraAltitudeFor(20), 2.0, 1e-9));
+  // The camera altitude ladder, in GROUND METRES. It used to be expressed in
+  // viewport heights, and a viewport height in ground metres halves at every
+  // zoom step — so zooming in walked the camera down into the buildings. At
+  // z19 it stood below the roof of the Empire State Building.
+  //
+  // Metres do not do that, and this is the assertion that would have caught
+  // it: at no zoom may the camera ever be lower than the tallest building the
+  // game can produce. heightMetresOf caps at 830 m; the floor is 900 m.
+  check('camera altitude is in metres and eases from 4000 m at z17',
+    near(cameraAltitudeFor(17), CAM_ALT_HIGH_M, 1e-9), cameraAltitudeFor(17) + ' m');
+  check('down to 1200 m at z20', near(cameraAltitudeFor(20), CAM_ALT_LOW_M, 1e-9),
+    cameraAltitudeFor(20) + ' m');
   check('and is clamped outside the ladder',
-    cameraAltitudeFor(12) === 3.5 && cameraAltitudeFor(22) === 2.0);
+    cameraAltitudeFor(12) === CAM_ALT_HIGH_M && cameraAltitudeFor(22) === CAM_ALT_LOW_M);
+  {
+    let lowest = Infinity, lowestZ = null;
+    for (let z = 12; z <= 22; z += 0.25) {
+      const a = cameraAltitudeFor(z);
+      if (a < lowest) { lowest = a; lowestZ = z; }
+    }
+    check('and NEVER drops to the height of the tallest building the game can make',
+      lowest > 830, 'lowest ' + lowest + ' m at z' + lowestZ + ' vs an 830 m cap');
+  }
 }
 
 
@@ -521,10 +553,17 @@ section('3. Draw order — the near building is painted LAST');
   // Nadir is at y = 800 + 0.85*800 = 1480, i.e. below the screen, so "nearer
   // the camera" means "further down the screen".
   const shortNear = prepareLot(squareLot('near-short', { heightM: 6, sideM: 40 }));
-  const tallFar = prepareLot(squareLot('far-tall', { heightM: 200, sideM: 40, lat: LAT + 0.0004 }));
+  // The separation is tuned to the CURRENT camera. It was 0.0004 degrees,
+  // chosen against the old viewport-height camera whose exaggerated lean threw
+  // the far tower's roof a long way down the screen. With the camera now
+  // pinned in ground metres the lean is gentler and honest, and at 0.0004 the
+  // two boxes missed each other by 7 px — which quietly turned the occlusion
+  // test into a test of two buildings that never overlap, the one thing it
+  // must not be. The assertion below is what catches that, so it is doing its
+  // job; the fixture just has to keep up with the projection.
+  const tallFar = prepareLot(squareLot('far-tall', { heightM: 200, sideM: 40, lat: LAT + 0.00030 }));
 
-  // Put them 30 screen pixels apart vertically with the same x, so their
-  // footprints genuinely overlap and the ordering is not a vacuous question.
+  // Same x, overlapping in y, so the ordering is not a vacuous question.
   const anchorX = shortNear.cx, anchorY = shortNear.cy;
   const cam = cameraOn(anchorX, anchorY, W / 2, 700, { width: W, height: H, zoom: 19 });
   const prepared = [tallFar, shortNear];   // deliberately in the WRONG order

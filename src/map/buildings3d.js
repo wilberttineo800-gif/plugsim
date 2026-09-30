@@ -228,21 +228,82 @@ export function prepareInto(table, lots, opts) {
  * N below, a building at the horizontal centre leans straight up and one at
  * the left edge leans up-and-left, and every building shows wall.
  *
- *   nadirBias  how far below the viewport N sits, in viewport heights
- *   camAlt     the virtual camera's altitude, in viewport heights
+ * ---------------------------------------------------------------------------
+ * BOTH OF THOSE ARE MEASURED IN GROUND METRES, AND THE FIRST VERSION OF THIS
+ * FILE MEASURED THEM IN VIEWPORT HEIGHTS. That was a real bug and it is worth
+ * writing down, because the design note it came from has it too and anybody
+ * re-deriving this from the note will reintroduce it.
  *
- * `camAlt` is the art-direction knob: larger is flatter and more top-down.
- * `cameraAltitudeFor()` eases it with zoom so the view tilts in as you
- * approach — flat at z17 where 1700 buildings are in view, volumetric at z20
- * where twenty are.
+ * A viewport height in ground metres HALVES with every zoom step. So a camera
+ * altitude of "2.4 viewport heights" is a camera that dives towards the ground
+ * as you zoom in. Measured on the real sample:
+ *
+ *     z17  camera 2242 m   Empire State roof at screen y 105   (correct)
+ *     z18  camera  961 m   roof at  -505                       (off the top)
+ *     z19  camera  400 m   roof at -2689
+ *     z20  camera  160 m   roof at -2865
+ *
+ * By z19 the virtual camera is INSIDE the Empire State Building. `m = A/(A-h)`
+ * then runs to infinity, the `h <= 0.75A` clamp catches it and pins every tall
+ * building at exactly `m = 4`, and the result is that centring on the tower at
+ * z19 shows its bare photographed rooftop with the massing flung off the top
+ * of the screen — and every building over ~120 m leaning by the identical
+ * saturated amount.
+ *
+ * So both quantities are now in metres and neither depends on the viewport:
+ *
+ *   NADIR_OFFSET_M   how far SOUTH of the viewport centre N sits, in metres
+ *   cameraAltitudeFor(zoom) -> metres above the ground
+ *
+ * Two consequences worth understanding before retuning them.
+ *
+ * FIRST, the floor on the altitude is not taste, it is a hard constraint.
+ * `heightMetresOf` caps a surveyed height at 830 m, so the camera must stay
+ * above 830 m or the singularity comes straight back. The floor is 1200 m,
+ * which leaves `m` at most 1200/370 = 3.24 and means the 0.75 clamp below
+ * never fires on real data — it is now a guard, not a mechanism.
+ *
+ * SECOND, easing the altitude with zoom is what makes the ladder work, and it
+ * has to be done in metres to be meaningful. With a camera at a FIXED altitude
+ * the lean-to-width ratio is constant at every zoom — which is correct physics
+ * (perspective is a function of where the camera is, not of the focal length;
+ * zooming a lens does not change how a building leans) and is not the look the
+ * zoom ladder wants. Dropping the camera from 4000 m to 1200 m across z17-z20
+ * is the flight, and the flight is what tilts the view in:
+ *
+ *   a 10 m rowhouse, lifted to 14 m, at the screen centre
+ *     z17   2.3 px of lean on an  11 px footprint   (flat: a textured map)
+ *     z18   6.0 px            on a  22 px footprint
+ *     z19  17.3 px            on a  44 px footprint  (a model)
+ *     z20  62.0 px            on an 88 px footprint  (a place)
+ *
+ *   the Empire State, 443 m surveyed, at z17: 82 px of lean. Drawn, on its
+ *   own footprint, on screen — which is the whole point.
  */
+
+/**
+ * How far south of the viewport centre the nadir sits, in ground metres.
+ *
+ * Large enough that N is below the bottom of the viewport at z17 on a phone
+ * (600 m x 1.09 px/m = 656 px below centre, against a 422 px half-screen), and
+ * it only moves further down as you zoom in. Raising it makes every building
+ * lean more and makes the leans more parallel; lowering it eventually puts N
+ * on screen, where the building beneath it loses its walls.
+ */
+export const NADIR_OFFSET_M = 600;
+
+/** Retired: the old viewport-relative nadir. Kept exported so that anything
+ *  still importing it links rather than failing at module load. Do not use. */
 export const NADIR_BIAS = 0.85;
 
+export const CAM_ALT_HIGH_M = 4000;   // at z17 and below
+export const CAM_ALT_LOW_M = 1200;    // at z20 and above; must exceed the 830 m cap
+
+/** The camera's altitude above the ground, in METRES, at a given zoom. */
 export function cameraAltitudeFor(zoom) {
-  // 3.5 viewport-heights at z17, 2.0 at z20, linear between, clamped outside.
   const t = (zoom - 17) / 3;
   const k = t < 0 ? 0 : (t > 1 ? 1 : t);
-  return 3.5 + (2.0 - 3.5) * k;
+  return CAM_ALT_HIGH_M + (CAM_ALT_LOW_M - CAM_ALT_HIGH_M) * k;
 }
 
 /**
@@ -260,7 +321,10 @@ export function cameraAltitudeFor(zoom) {
 export function makeCamera({
   zoom, centreLat, width, height,
   pixelOriginX = 0, pixelOriginY = 0, canvasOriginX = 0, canvasOriginY = 0,
-  nadirBias = NADIR_BIAS, camAlt = null, lift = true,
+  // Both in GROUND METRES. `camAlt` used to mean viewport heights; if you are
+  // updating a caller, 2.4 does not mean "a bit flatter" any more, it means a
+  // camera 2.4 metres off the pavement.
+  nadirOffsetM = NADIR_OFFSET_M, camAlt = null, lift = true,
 }) {
   // 2^zoom, NOT 256 * 2^zoom, and the difference is a 256x error that puts
   // every building somewhere off the coast. Leaflet has two "scales" and they
@@ -271,18 +335,35 @@ export function makeCamera({
   // the bare power of two. The headless check catches this by asserting a
   // known point lands where Leaflet would put it.
   const scale = Math.pow(2, zoom);
-  const alt = camAlt == null ? cameraAltitudeFor(zoom) : camAlt;
+  // Never let a caller put the camera inside the building stock, whatever it
+  // passes. 830 m is the cap `heightMetresOf` applies to a surveyed height, so
+  // anything at or below that is a singularity waiting for the one tower that
+  // reaches it.
+  const wanted = camAlt == null ? cameraAltitudeFor(zoom) : camAlt;
+  const camAltM = Math.max(900, wanted);
+  const pxPerMetre = pxPerMetreAt(centreLat, zoom);
   return {
     zoom,
     scale,
     offX: pixelOriginX + canvasOriginX,
     offY: pixelOriginY + canvasOriginY,
-    pxPerMetre: pxPerMetreAt(centreLat, zoom),
+    pxPerMetre,
     width,
     height,
     nadirX: width / 2,
-    nadirY: height + nadirBias * height,
-    camAltPx: alt * height,
+    // Anchored to the viewport CENTRE — which is the map centre, a real point
+    // on the ground — and pushed south by a fixed number of metres. Anchoring
+    // it to the bottom EDGE, as the first version did, ties the geometry to
+    // the window size: the same city on a tablet would lean differently from
+    // the same city on a phone, and resizing the window would change the
+    // projection rather than just showing more of it.
+    nadirY: height / 2 + nadirOffsetM * pxPerMetre,
+    camAltM,
+    nadirOffsetM,
+    // Kept for the shadow maths and for anything that wants the altitude in
+    // the same units as the screen. The magnification itself is computed in
+    // metres, where it is exactly zoom-invariant.
+    camAltPx: camAltM * pxPerMetre,
     lift,
   };
 }
@@ -600,12 +681,23 @@ export function projectBuilding(prep, cam, scratch) {
     gy[i] = w[2 * i + 1] * s - oy;
   }
 
-  const A = cam.camAltPx;
-  let hPx = prep.heightM * cam.pxPerMetre;
-  const capH = A * 0.75;
-  if (hPx > capH) hPx = capH;
-  if (!(hPx > 0)) hPx = 0;
-  const m = A / (A - hPx);
+  // The magnification, computed entirely in METRES.
+  //
+  // Doing it in metres is what makes it zoom-invariant: a 40 m block has the
+  // same `m` at z17 and at z20, and only the pixel distance from the nadir
+  // grows, so the lean scales with the building rather than exploding. Doing
+  // it in pixels — dividing a pixel height by a pixel altitude that was
+  // derived from the viewport — is the bug documented at `cameraAltitudeFor`.
+  const A = cam.camAltM;
+  let hM = prep.heightM;
+  // A guard, not a mechanism: with the 900 m floor on the camera and the 830 m
+  // cap on a surveyed height this cannot fire on real data. It is here for the
+  // caller who passes a hand-made lot with a height of 10 km.
+  const capM = A * 0.75;
+  if (hM > capM) hM = capM;
+  if (!(hM > 0)) hM = 0;
+  const m = A / (A - hM);
+  const hPx = hM * cam.pxPerMetre;
   const nx = cam.nadirX;
   const ny = cam.nadirY;
   for (let i = 0; i < n; i++) {
@@ -667,22 +759,37 @@ export function projectBuilding(prep, cam, scratch) {
  * fill. Alpha is baked into an `rgba()` string instead, and the string is
  * built once and cached, because building it is a template literal in the hot
  * loop and 8500 of those per redraw is real time.
+ *
+ * Two levels, and the second level is an array, not a string key.
+ *
+ * The obvious one-level `Map` keyed on `hex + q` looks like a cache and is not
+ * one: `hex + q` builds a fresh string on EVERY call, hit or miss, and this is
+ * called once per visible wall — 7299 times in a 1700-building redraw. A Map
+ * keyed on the hex string alone is looked up by reference, and the quantised
+ * shade indexes a plain array inside it, so a cache hit allocates nothing at
+ * all.
  */
 const SHADE_CACHE = new Map();
+const SHADE_STEPS = 24;
 
 export function shade(hex, k) {
   // Quantised to 24 steps: a shade cache with continuous keys is not a cache.
-  const q = Math.max(0, Math.min(23, Math.round(k * 23)));
-  const cacheKey = hex + q;
-  let out = SHADE_CACHE.get(cacheKey);
-  if (out) return out;
+  const q = k <= 0 ? 0 : (k >= 1 ? SHADE_STEPS - 1
+    : Math.round(k * (SHADE_STEPS - 1)));
+  let row = SHADE_CACHE.get(hex);
+  if (row === undefined) {
+    row = new Array(SHADE_STEPS).fill(null);
+    SHADE_CACHE.set(hex, row);
+  }
+  const hit = row[q];
+  if (hit !== null) return hit;
   const v = parseInt(hex.slice(1), 16);
-  const f = q / 23 * 1.45;
+  const f = q / (SHADE_STEPS - 1) * 1.45;
   const r = Math.min(255, Math.round(((v >> 16) & 255) * f));
   const g = Math.min(255, Math.round(((v >> 8) & 255) * f));
   const b = Math.min(255, Math.round((v & 255) * f));
-  out = `rgb(${r},${g},${b})`;
-  SHADE_CACHE.set(cacheKey, out);
+  const out = `rgb(${r},${g},${b})`;
+  row[q] = out;
   return out;
 }
 

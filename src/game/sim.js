@@ -708,6 +708,11 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     if (yours && talkRoll < talkOdds) {
       paySoft(state, fine);
       state.stats.stops++;
+      // Counted on this vehicle too, and on BOTH branches — a stop you talked
+      // your way out of is still a stop. Counting only the ones that cost you
+      // the load makes a van look safer the better you are at talking, which
+      // is the opposite of what the number is for.
+      c.stopsTotal = (c.stopsTotal || 0) + 1;
       state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
       state.stats.talkedDown = (state.stats.talkedDown || 0) + 1;
       d.heat = clamp(d.heat + 6, 0, HEAT.max);
@@ -730,6 +735,14 @@ function maybeGetStopped(state, c, def, dt, hooks) {
     // two share a counter, most of what looks like a courier being stopped is
     // actually a house going down, and any comparison built on it is noise.
     state.stats.seizedOnRoad = (state.stats.seizedOnRoad || 0) + carried;
+    // Per vehicle as well as per city. A global counter cannot answer "what did
+    // driving this one myself cost me" — the question the feature exists to
+    // settle — because every other vehicle on the road writes to it too. And a
+    // harness trying to infer it by watching cargo drop cannot tell a seizure
+    // from an ordinary unload that happened in the same hour, which is exactly
+    // the mistake that produced an identical figure for both arms.
+    c.seizedTotal = (c.seizedTotal || 0) + carried;
+    c.stopsTotal = (c.stopsTotal || 0) + 1;
     state.stats.stops++;
     d.heat = clamp(d.heat + 6, 0, HEAT.max);
     raise(state, 'tailed', { latlng: here, districtId: d.id, detail: def.name });

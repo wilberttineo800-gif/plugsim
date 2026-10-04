@@ -713,6 +713,8 @@ function maybeGetStopped(state, c, def, dt, hooks) {
       // the load makes a van look safer the better you are at talking, which
       // is the opposite of what the number is for.
       c.stopsTotal = (c.stopsTotal || 0) + 1;
+      c.inPersonTotal = (c.inPersonTotal || 0) + 1;
+      c.talkedTotal = (c.talkedTotal || 0) + 1;
       state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
       state.stats.talkedDown = (state.stats.talkedDown || 0) + 1;
       d.heat = clamp(d.heat + 6, 0, HEAT.max);

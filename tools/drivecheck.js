@@ -158,6 +158,7 @@ function scenario(mode, vehicle, seed) {
 
   let wounds = 0;          // FIX 5 — counted as they happen, not read at the end
   let deaths = 0;
+  let endedEarly = false;
   const seenWounds = new Set();
 
   // FIX 3, properly. Holding heat at the ceiling makes stops likely, but the
@@ -201,7 +202,10 @@ function scenario(mode, vehicle, seed) {
       if (!seenWounds.has(w)) { seenWounds.add(w); wounds++; }
     }
     if (body.deadAt != null) deaths++;
-    if (state.gameOver) break;
+    // Breaking here censors the sample: only the FAILED branch can reach
+    // gameOver, so ending early drops exactly the runs that went worst while
+    // the good ones run the full 90 days. Recorded instead of truncating.
+    if (state.gameOver) { endedEarly = true; break; }
   }
 
   return {
@@ -212,11 +216,17 @@ function scenario(mode, vehicle, seed) {
     stopsHere: target.stopsTotal || 0,
     wounds,
     deaths,
-    inPerson: state.stats.stoppedInPerson || 0,
-    talked: state.stats.talkedDown || 0,
+    // Per vehicle, like the seizure counters beside them. These two were
+    // still reading city-wide state.stats while `stopsHere` read the vehicle,
+    // so the printed "talked out of X% of in-person" divided one vehicle's
+    // stops into the whole city's talk-downs — which is how it reported 86%
+    // against a rule that clamps at 0.80 and cannot exceed it.
+    inPerson: target.inPersonTotal || 0,
+    talked: target.talkedTotal || 0,
     trips: target.tripsCompleted || 0,
     circuit: (target.routeIds || []).length,
     net: state.cash.clean + state.cash.dirty,
+    endedEarly,
     standing: state.buildings.length,
   };
 }

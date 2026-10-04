@@ -1909,8 +1909,27 @@ function collectArrears(state) {
     logEvent(state, `${gone.name} hasn't been paid and isn't coming back.`, 'bad');
     return;
   }
-  if ((state.couriers || []).length) {
-    const veh = state.couriers.pop();
+  // One vehicle always stays, exactly as one building always stays lit below.
+  //
+  // Without this the ladder ate its own escape route. Vehicles are the only
+  // thing that moves product into a district, and a district draining is the
+  // only source of street money — so the step after the last van went back was
+  // a game with no possible income, arrears that could never be cleared, and a
+  // ladder that kept climbing. The repossession that was meant to be a
+  // survivable setback was the point of no return.
+  //
+  // Measured in this project's own 1000-day playthrough: net worth pinned at
+  // $16M and cash bleeding a flat $268/day from day 361 to day 991. Sixty-three
+  // per cent of that run was spent inside a dead state the game never mentioned.
+  //
+  // It also takes the CHEAPEST vehicle rather than whichever happened to be
+  // last in the array. The docstring above promises "cheapest first" and pop()
+  // delivered most-recently-bought, which is usually the best one you own.
+  if ((state.couriers || []).length > 1) {
+    const order = state.couriers.slice().sort((a, b) =>
+      (COURIERS[a.type].price || 0) - (COURIERS[b.type].price || 0));
+    const veh = order[0];
+    state.couriers.splice(state.couriers.indexOf(veh), 1);
     logEvent(state, `The ${COURIERS[veh.type].name.toLowerCase()} went back to whoever you owe.`, 'bad');
     return;
   }
@@ -1936,6 +1955,19 @@ function collectArrears(state) {
       lot.rented = false;
       state.cash.clean += got;
       logEvent(state, `${lot.name} went for $${Math.round(got).toLocaleString()} to cover what you owe.`, 'bad');
+      return;
+    }
+    // And when there is genuinely nothing left to take, SAY SO. Every rung
+    // above this one returns early, so a player with no spare lots used to
+    // reach the bottom of this function and fall out of it in silence, every
+    // day, forever — the game had quietly ended and went on charging them for
+    // it. Said once, not daily, because a thing repeated every day is wallpaper.
+    if (!state.arrearsFloorTold) {
+      state.arrearsFloorTold = true;
+      logEvent(state,
+        'There is nothing left for them to take. What you still have, you keep — '
+        + 'but nothing starts moving again until the books are square.',
+        'bad');
     }
   }
 }

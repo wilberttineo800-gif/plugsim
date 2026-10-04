@@ -73,7 +73,7 @@ import { generatePlayers, placePlayers } from './game/players.js';
 import { attachLocal, connection } from './game/net.js';
 import * as A from './game/actions.js';
 import { createMap, DistrictLayer, OVERLAYS, fitToDistricts } from './map/mapView.js';
-import { Buildings3DLayer, variedPalette, variantOf } from './map/buildings3d.js';
+import { Buildings3DLayer, variedPalette, variantOf, sunFromHour } from './map/buildings3d.js';
 import { paletteFor } from './ui/isoart.js';
 import {
   BuildingLayer, CourierLayer, RouteLayer, LotLayer, PlacementGhost, PlayerMarker,
@@ -991,9 +991,24 @@ function wireVisibility() {
  * the clock something you feel rather than read, and a 3am run look like one.
  */
 let lastDark = -1;
+let lastSunHour = -1;
 function syncDaylight() {
   const s = game.state;
   if (!s) return;
+
+  // The sun the buildings are lit by, which until now nobody ever set.
+  // `sunFromHour` and the whole shadow pass have been in the renderer since it
+  // was written, and `setSun` had exactly one reference in the codebase: its
+  // own definition. So `sunv` was null on every frame, the shadow pass never
+  // executed once, and real buildings over real photography were being drawn
+  // flat. Stepped per game hour rather than per frame — the shadows move with
+  // the clock, and a redraw costs 4ms.
+  const hour = Math.floor((s.minutes || 0) / 60) % 24;
+  if (game.buildings3d && hour !== lastSunHour) {
+    lastSunHour = hour;
+    game.buildings3d.setSun(sunFromHour(hour));
+  }
+
   const d = darkness(s.minutes);
   // Only touch the DOM when it would actually change; this runs twice a second.
   if (Math.abs(d - lastDark) < 0.02) return;

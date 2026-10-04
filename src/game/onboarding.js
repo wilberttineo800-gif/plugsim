@@ -48,6 +48,17 @@ export const STEPS = [
     check: (s) => has(s, 'production'),
   },
   {
+    id: 'process',
+    title: 'Turn it into something sellable',
+    brief:
+      "What comes off a plant is not what anybody buys. It has to be trimmed, " +
+      "cured and bagged, and that happens somewhere else — a spare room does " +
+      "it. Skip this and your grow fills up with harvest nobody on this map " +
+      "will take off you, and you will go broke wondering why.",
+    hint: 'Buy a building over 40 m² and fit it out as a Processing Lab. A small one is a Trim Room.',
+    check: (s) => (s.buildings || []).some((b) => b.kind === 'processing'),
+  },
+  {
     id: 'depot',
     title: 'Somewhere to park',
     brief:

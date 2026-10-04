@@ -239,7 +239,21 @@ function stepProduction(state, dt) {
     // outgrowing your fleet is a real cost; it just no longer bleeds you dry
     // while the product sits there unsellable.
     if (!b.cycleStarted && b.raw[def.product] >= cap * BACKLOG_PAUSE_AT) {
-      b.stalledReason = 'Backing up — haulage can’t keep up, so the line is idling';
+      // Say which backlog this is. A grow fills up for two completely
+      // different reasons and the cure for one is the opposite of the cure for
+      // the other: if there is nowhere to PROCESS the harvest, more vans move
+      // raw weight from one shed to another and the player goes broke faster.
+      // This used to blame haulage in both cases, and the guide then told a
+      // player four weeks from bankruptcy to go and buy another van.
+      const canProcess = (state.buildings || []).some((x) =>
+        x.active !== false
+        && BUILDINGS[x.type].kind === 'processing'
+        && (BUILDINGS[x.type].handles || []).includes(BUILDINGS[x.type].product || def.product));
+      const anyProcessing = (state.buildings || []).some((x) =>
+        x.active !== false && BUILDINGS[x.type].kind === 'processing');
+      b.stalledReason = anyProcessing || canProcess
+        ? 'Backing up — haulage can’t keep up, so the line is idling'
+        : 'Full of raw harvest and nowhere to process it — this needs a lab, not another van';
       continue;
     }
 

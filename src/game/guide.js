@@ -38,9 +38,22 @@ const countOwned = (s) => (s.lots || []).filter((l) => l.owned).length;
  */
 export const TIPS = [
   {
+    id: 'noprocess',
+    title: 'That harvest is worth nothing yet',
+    when: (s) => has(s, (b) => /nowhere to process/.test(b.stalledReason || '')),
+    says: "What you've grown isn't a product yet — it's a room full of green. "
+      + "Nobody on this map buys raw weight. You want somewhere to trim and bag "
+      + "it, and until you have one, another van only moves the problem.",
+    go: 'build',
+  },
+  {
     id: 'backlog',
     title: 'Your line is backing up',
-    when: (s) => has(s, (b) => /Backing up|full/.test(b.stalledReason || '')),
+    // Narrowed so it cannot fire on the no-processing case. It matched that
+    // too, and told a player four weeks from going broke that it was "not a
+    // bad problem" and to buy more vans — the one purchase that makes it
+    // worse. The tip above handles that case and sends them to Build instead.
+    when: (s) => has(s, (b) => /Backing up/.test(b.stalledReason || '')),
     says: "You're making more than you can shift. That's not a bad problem, but "
       + "it is a problem — a full room stops working and still costs you rent. "
       + "More vans, or more blocks to sell on. Usually both.",

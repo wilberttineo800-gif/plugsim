@@ -363,6 +363,13 @@ print('=== 11. the first hour has a shape ===');
   check('two bases are not allowed', !A.setHeadquarters(st, b.id).ok);
 
   // Working all the way through leaves nobody nagging.
+  //
+  // The lab is here because the checklist now asks for one, and it always
+  // should have: a grow makes raw harvest, nobody on the map buys raw harvest,
+  // and a player who followed the seven steps literally earned $0 and went
+  // broke on day 24 while the game told them the problem was haulage and sent
+  // them to buy another van. This line is the test noticing the hole.
+  open(st, 'lab');
   open(st, 'depot');
   const v = A.buyVehicle(st, 'sedan').vehicle;
   A.assignDriver(st, v.id, A.hireDriver(st).driver.id);

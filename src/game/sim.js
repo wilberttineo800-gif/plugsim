@@ -766,6 +766,12 @@ function maybeGetStopped(state, c, def, dt, hooks) {
       // push (actions.js), which left an entire anatomy, infection and
       // bionics system hanging off one dice roll on one action.
       state.stats.stoppedInPerson = (state.stats.stoppedInPerson || 0) + 1;
+      // On the FAILED branch too. Counting a stop as "in person" only when you
+      // talked your way out of it made talked/inPerson identically 1.0 — an
+      // identity dressed as a measurement, which is exactly what the harness
+      // printed back as "100% of in-person". A stop you lost was still a stop
+      // you were there for.
+      c.inPersonTotal = (c.inPersonTotal || 0) + 1;
       // Not elective. Gating this purely on being armed made the whole risk
       // side of the feature optional — unequipping a sidearm is free and
       // instant, so a player could take the upside and decline the downside.

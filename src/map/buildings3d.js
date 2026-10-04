@@ -858,6 +858,13 @@ export function variedPalette(kind, variant) {
   return pal;
 }
 
+/**
+ * How solid a roof is. Low enough that the real aerial photograph reads
+ * through it, high enough that the building still reads as a mass and the
+ * palette still does its job of telling kinds apart.
+ */
+export const ROOF_ALPHA = 0.72;
+
 const ALPHA_CACHE = new Map();
 function rgba(r, g, b, a) {
   const q = Math.round(a * 20);
@@ -927,8 +934,19 @@ export function paintBuilding(ctx, prep, cam, scratch, pal, sunv) {
   for (let i = 1; i < n; i++) ctx.lineTo(rx[i], ry[i]);
   ctx.closePath();
   // A roof is horizontal, so its shade is the sun's altitude and nothing else.
+  //
+  // And it is drawn SEMI-TRANSPARENT while the walls stay solid, which does
+  // three jobs at once. The aerial photograph of the actual roof reads through
+  // it, so a building wears its real surface instead of a flat colour. The map
+  // stops vanishing at high zoom — a dense block is close to 100% roof seen
+  // from above, and an opaque one simply deletes the ground the player zoomed
+  // in to look at. And the contrast between a see-through top and solid sides
+  // is itself a depth cue: the sides are what tell you how tall a thing is, so
+  // the sides are the part that should be emphatic.
+  ctx.globalAlpha = ROOF_ALPHA;
   ctx.fillStyle = shade(pal.roof, sunv && sunv.up ? 0.62 + 0.38 * sunv.sinAlt : 0.5);
   ctx.fill();
+  ctx.globalAlpha = 1;
   // The trim stroke is what separates two adjacent roofs of the same colour,
   // and terraced housing is nothing but adjacent roofs of the same colour.
   if (cam.pxPerMetre > 1.4) {

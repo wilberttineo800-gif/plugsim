@@ -744,7 +744,13 @@ function bootGame(state) {
   game.buildings3d = new Buildings3DLayer(game.map, {
     enabled: false,
     minZoom: 17,
-    shadowMinZoom: 18,
+    // Shadows from the moment the buildings appear, not a zoom level later.
+    // A shadow is the only cue that says how TALL a thing is as opposed to how
+    // big its roof is — without one, a 40-storey tower and a warehouse are two
+    // flat shapes of the same colour, which is exactly what "I can't tell the
+    // depth" means. They cost about 3.6ms at 1700 buildings and the budget is
+    // 20ms, so there is no reason to withhold them for a level.
+    shadowMinZoom: 17,
     onSelect: (lot) => game.select('lot', lot.id),
   });
   try {

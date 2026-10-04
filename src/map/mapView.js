@@ -62,9 +62,13 @@ export function createMap(elementId, center, zoom = 14) {
   const map = L.map(elementId, {
     center: [center.lat, center.lng],
     zoom,
-    // OSM stops serving tiles at 19, but the game's own geometry is vector and
-    // stays sharp, so the map keeps going and the basemap is upscaled.
-    maxZoom: 21,
+    // Stops at 20, which is where Esri's World Imagery stops serving real
+    // pixels. It used to run to 21 on the reasoning that the game's own
+    // geometry is vector and stays sharp — but the thing the player is zooming
+    // in to SEE is the real building, and past 20 every one of those pixels is
+    // one photograph pixel stretched over four. Removing the graininess by not
+    // offering the zoom beats compensating for it afterwards.
+    maxZoom: 20,
     zoomControl: false,
     attributionControl: true,
     preferCanvas: true,
@@ -85,7 +89,7 @@ export function createMap(elementId, center, zoom = 14) {
 
   const base = L.tileLayer(TILE_URL, {
     attribution: TILE_ATTRIB,
-    maxZoom: 21,
+    maxZoom: 20,
     maxNativeZoom: 16, // Esri's Dark Gray Canvas stops here
     crossOrigin: true,
   }).addTo(map);
@@ -103,7 +107,7 @@ export function createMap(elementId, center, zoom = 14) {
     document.body.classList.add('basemap-needs-invert');
     L.tileLayer(FALLBACK_TILE_URL, {
       attribution: FALLBACK_ATTRIB,
-      maxZoom: 21,
+      maxZoom: 20,
       maxNativeZoom: 18,
       detectRetina: true,
       crossOrigin: true,
@@ -143,7 +147,7 @@ function attachImagery(map) {
   const imagery = L.tileLayer(IMAGERY_TILE_URL, {
     attribution: IMAGERY_ATTRIB,
     pane: 'imagery',
-    maxZoom: 21,
+    maxZoom: 20,
     maxNativeZoom: 20, // Esri's World Imagery stops here
     opacity: 0,
     crossOrigin: true,

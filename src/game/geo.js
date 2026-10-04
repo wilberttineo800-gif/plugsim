@@ -363,9 +363,23 @@ export async function fetchBuildings(south, west, north, east, cap = 2600, onRet
         body: 'data=' + encodeURIComponent(query),
       });
       const ways = (data.elements || []).filter((e) => e.geometry && e.geometry.length >= 3);
-      // An empty result is legitimate for water or parkland — only a thrown
-      // error means we should try somewhere else.
-      return ways;
+      // An empty result is legitimate for water or parkland — but it is ALSO
+      // what a mirror serving the wrong part of the world returns, and this
+      // layer cannot tell those apart from one answer.
+      //
+      // overpass.osm.ch is Switzerland-only: Zurich returns buildings, and
+      // Osaka, Manhattan, Hartford and Milan all return HTTP 200 with an empty
+      // element list in under half a second — faster than any mirror that
+      // actually works. Returning on that stopped the ladder dead, so hosts
+      // three through five were never asked and the effective fallback depth
+      // was one. That is the real mechanism behind a city coming up with no
+      // buildings in it while the screen blamed rate limiting.
+      //
+      // So an empty answer is now a reason to ask somebody else, and is only
+      // believed when it is the last word available. Genuinely empty country
+      // costs a few extra requests; the alternative costs the player the city.
+      if (ways.length || i === attempts.length - 1) return ways;
+      console.warn('[geo] empty building set from', endpoint, '- trying the next mirror');
     } catch (err) {
       lastError = err;
       // 429 is "too many requests", 504 is the gateway giving up under load.

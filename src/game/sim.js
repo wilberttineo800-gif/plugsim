@@ -1947,8 +1947,42 @@ function collectArrears(state) {
   }
   // Last resort: something gets sold to whoever will take it.
   if ((state.arrears || 0) > ARREARS.propertyAfterDays) {
-    const owned = (state.lots || []).filter((l) => l.owned && !l.buildingId);
-    const lot = owned.sort((a, b) => lotResale(b) - lotResale(a))[0];
+    // Empty lots first — they cost nothing to give up. But if every lot you
+    // own has a building on it, a DEVELOPED one goes, because this rung is the
+    // only thing in the function that puts money IN and the docstring above
+    // calls it "the thing that clears the debt".
+    //
+    // It previously filtered on `!l.buildingId` and stopped there, so a player
+    // whose property was all developed — which is every player who is doing
+    // well — reached the one rung that could save them and found it empty.
+    // Measured in the 1000-day playthrough: 18 properties, all built on, the
+    // hatch never fired once in 645 days of bankruptcy.
+    const owned = (state.lots || []).filter((l) => l.owned);
+    const empties = owned.filter((l) => !l.buildingId);
+    const pool = empties.length ? empties : owned;
+    // Dearest of the empties, but the CHEAPEST building if it has come to
+    // selling the operation — losing the biggest site you own to the bailiffs
+    // ends the game more surely than the debt does.
+    const lot = empties.length
+      ? pool.sort((a, b) => lotResale(b) - lotResale(a))[0]
+      : pool.sort((a, b) => lotResale(a) - lotResale(b))[0];
+    if (lot && lot.buildingId) {
+      const bi = (state.buildings || []).findIndex((b) => b.id === lot.buildingId);
+      if (bi >= 0) {
+        const b = state.buildings[bi];
+        state.buildings.splice(bi, 1);
+        state.routes = state.routes.filter((r) => r.fromId !== b.id && r.toId !== b.id);
+        for (const c of state.couriers || []) {
+          if (c.routeId && !(state.routes || []).some((r) => r.id === c.routeId)) {
+            c.routeId = null;
+            c.routeIds = (c.routeIds || []).filter((id) => (state.routes || []).some((r) => r.id === id));
+            c.phase = 'idle';
+          }
+        }
+        logEvent(state, `${b.name} was sold out from under you to cover what you owe.`, 'bad');
+      }
+      lot.buildingId = null;
+    }
     if (lot) {
       const got = lotResale(lot);
       lot.owned = false;

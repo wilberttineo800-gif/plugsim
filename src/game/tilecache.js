@@ -59,9 +59,17 @@ export function cachedTile(key) {
   return hit.ways;
 }
 
-/** Write a surveyed tile down, evicting the least recently used if it won't fit. */
+/**
+ * Write a surveyed tile down, evicting the least recently used if it won't fit.
+ *
+ * An EMPTY survey is never written. One Overpass mirror answers HTTP 200 with
+ * an empty element list instead of failing, and at this layer that is
+ * indistinguishable from genuinely open country — so caching it turned a dead
+ * mirror into a permanently unstartable city. Refused here as well as at the
+ * call site, because the cost of being wrong is a player's whole game.
+ */
 export function cacheTile(key, ways) {
-  if (!Array.isArray(ways)) return false;
+  if (!Array.isArray(ways) || !ways.length) return false;
   const all = readAll();
   all[key] = { ways, at: Date.now() };
 

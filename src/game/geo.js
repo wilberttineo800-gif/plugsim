@@ -300,12 +300,24 @@ export async function fetchPlaceNames(south, west, north, east, onRetry) {
 // Measured before changing it: overpass-api.de was answering 504 and
 // maps.mail.ru was aborting, which is exactly how a city comes up with three
 // buildings in it. A duplicate in a fallback list is not a fallback.
+// Measured again, one query over midtown Manhattan, all five hosts:
+//   overpass-api.de    200, 313 ways          <- the only one that works
+//   overpass.osm.ch    200, ZERO ways, 0.7s   <- answers, and lies
+//   private.coffee     timed out at 40s
+//   kumi.systems       timed out at 40s
+//   maps.mail.ru       504
+//
+// osm.ch is demoted to last, not for being slow but for being DISHONEST: a
+// 504 tells this layer to try the next host, while a 200 carrying an empty
+// element list is indistinguishable from open country and gets believed. It
+// sat second in this list, so a city's very first tile was being answered by
+// the one mirror that returns a convincing nothing.
 export const MIRRORS = [
   'https://overpass-api.de/api/interpreter',
-  'https://overpass.osm.ch/api/interpreter',
   'https://overpass.private.coffee/api/interpreter',
   'https://overpass.kumi.systems/api/interpreter',
   'https://maps.mail.ru/osm/tools/overpass/api/interpreter',
+  'https://overpass.osm.ch/api/interpreter',
 ];
 
 // Set when Overpass tells us it is overloaded, so the caller can stop asking

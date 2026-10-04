@@ -382,15 +382,28 @@ export async function loadTiles(state, keys, fetchBuildings, onProgress) {
     // one mirror and aborts from another, and produced a city containing
     // three buildings — so going back to it for geography we already hold is
     // the single most avoidable way to lose a city.
+    // Only ever trust a cached tile that actually HAS something in it.
+    //
+    // The first version of this cached empty answers too, on the reasoning
+    // that open country and water are real results. They are — but a dead
+    // Overpass mirror is indistinguishable from open country at this layer,
+    // and one of the five mirrors answers HTTP 200 with an empty element list
+    // rather than failing honestly. Caching that lie made it permanent: an
+    // empty array is truthy, so `if (kept)` served it back forever and the
+    // city became unstartable until the player cleared their browser storage,
+    // while the screen told them to try again in a minute. A 504 is honest; a
+    // 200 with nothing in it is not, and this layer cannot tell the difference.
+    //
+    // So an empty survey is never written down and never believed. The cost is
+    // re-asking about genuinely empty country; the alternative is bricking a
+    // city, which is the one failure this game cannot survive.
     const kept = cachedTile(key);
-    if (kept) {
+    if (kept && kept.length) {
       ways = kept;
     } else {
       try {
         ways = await fetchBuildings(b.south, b.west, b.north, b.east, LOTS.tileFetchCap);
-        // Cache the empty answer too: open country and water are real results,
-        // and re-asking about them forever is the behaviour worth stopping.
-        cacheTile(key, ways);
+        if (ways && ways.length) cacheTile(key, ways);
       } catch (err) {
         console.warn('[lots] tile fetch failed', key, err);
         continue; // leave it unmarked so it retries later
